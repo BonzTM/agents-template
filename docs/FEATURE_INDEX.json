@@ -1,0 +1,26 @@
+{
+  "metadata": {
+    "id": "agents-template-feature-index",
+    "version": "2026-02-22.01",
+    "description": "Canonical machine-readable feature map for rapid codebase navigation and targeted verification.",
+    "last_updated": "2026-02-22T00:00:00Z",
+    "update_expectation": "Whenever a feature is introduced, changed significantly, or removed, update or explicitly verify impacted entries in this file."
+  },
+  "sources": {
+    "frontendFeatureRoot": "frontend/features",
+    "frontendRouteRoot": "frontend/app",
+    "backendRouteRoot": "backend/src/routes",
+    "backendServiceRoot": "backend/src/services",
+    "backendTestRoot": "backend/src",
+    "frontendTestRoot": "frontend/tests"
+  },
+  "coverage": {
+    "frontend_feature_dirs": [],
+    "verification_rules": [
+      "Whenever a feature is introduced, changed significantly, or removed, update or explicitly verify impacted entries.",
+      "Every directory under frontend/features must appear in coverage.frontend_feature_dirs.",
+      "Every frontend feature directory in coverage.frontend_feature_dirs must appear in at least one features[].frontend.feature_dirs entry."
+    ]
+  },
+  "features": []
+}

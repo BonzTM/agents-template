@@ -1,0 +1,13 @@
+# Local agent state
+.agents
+.agents/
+.agents/**
+.worktrees/
+
+# Node
+node_modules/
+
+# Build artifacts
+coverage/
+dist/
+.next/

@@ -1,0 +1,36 @@
+name: PR Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  policy-as-code:
+    name: Policy as Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Enforce agent policies
+        run: node .github/scripts/enforce-agent-policies.mjs
+
+      - name: Check managed workflow drift
+        run: npm run agent:drift:check
+
+      - name: Enforce template-impact declaration
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: npm run agent:template-impact:check -- --base-ref origin/${{ github.base_ref }}
