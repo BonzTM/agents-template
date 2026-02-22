@@ -6,8 +6,8 @@ This template provides policy-as-code enforcement, startup/preflight contracts, 
 
 ## Agent Clients
 
-- `AGENTS_TEMPLATE.md` is the downstream cross-agent startup-contract source and is synced as downstream `AGENTS.md`.
-- `.claude-template/CLAUDE.md` is the downstream Claude bootstrap source and is synced as downstream `.claude/CLAUDE.md`.
+- `.agents-config/AGENTS_TEMPLATE.md` is the downstream cross-agent startup-contract source and is synced as downstream `AGENTS.md`.
+- `.agents-config/templates/claude/CLAUDE.md` is the downstream Claude bootstrap source and is synced as downstream `.claude/CLAUDE.md`.
 - `AGENTS.md` and `.claude/CLAUDE.md` are repository-local maintainer instructions for `agents-template` itself.
 
 ## One-Command Bootstrap (Recommended)
@@ -65,17 +65,21 @@ npm run bootstrap -- --mode existing --target-path ../<project-name> --project-i
 
 ## Canonical + Overrides Model
 
-- Managed workflow files are declared in `.agent-managed.json`.
-- Canonical source is declared in `.agent-managed.json` (`template.repo`, `template.ref`, `template.localPath`) and seeded from `tools/bootstrap/managed-files.template.json`.
-- Per-project overrides live in `.agent-overrides/**` and win over template defaults.
+- Managed workflow files are declared in `.agents-config/agent-managed.json`.
+- Canonical source is declared in `.agents-config/agent-managed.json` (`template.repo`, `template.ref`, `template.localPath`) and seeded from `.agents-config/tools/bootstrap/managed-files.template.json`.
+- Managed file authority defaults to template-canonical via `.agents-config/agent-managed.json.canonical_contract.default_authority = "template"`.
+- Known override surfaces are explicit: managed entries must set `allow_override: true` before `.agents-config/agent-overrides/<managed-path>` payload files are accepted.
+- Bootstrap auto-seeds allowlisted override payloads for rewritten project-specific files only when target content diverges from template source.
+- Unknown/non-allowlisted `.agents-config/agent-overrides/**` payload files fail `npm run agent:managed -- --mode check`.
+- Optional non-template ownership can be declared per entry with `authority: "project"` when a file is intentionally project-local.
 - Project-specific architecture and process details should be maintained in local docs/policy files, not hard-forked template scripts.
 
 ### Canonical Rule IDs
 
-- Canonical rule IDs/statements live in `contracts/rules/canonical-ruleset.json`.
+- Canonical rule IDs/statements live in `.agents-config/contracts/rules/canonical-ruleset.json`.
 - Drift is checked by ID + hash lineage against policy/doc sources with `npm run rules:canonical:verify`.
 - Template maintainers can regenerate canonical lineage after intentional policy/rule changes with `npm run rules:canonical:sync`.
-- Project-local rule overrides (local-only IDs) must use `.agent-overrides/rule-overrides.json` and validate against `.agent-overrides/rule-overrides.schema.json`.
+- Project-local rule overrides (local-only IDs) must use `.agents-config/agent-overrides/rule-overrides.json` and validate against `.agents-config/agent-overrides/rule-overrides.schema.json`.
 
 ## Drift Controls
 
@@ -121,6 +125,6 @@ Local mode:
 For this `agents-template` repository itself:
 
 - use `.agents -> ../agents-workfiles/agents-template` for local template-maintainer context
-- keep `.agents-template/` as the tracked scaffold used by bootstrap to seed downstream `.agents` structure
+- keep `.agents-config/templates/agents/` as the tracked scaffold used by bootstrap to seed downstream `.agents` structure
 - keep template-maintainer-only guidance in local `AGENTS.md` and local `.claude/CLAUDE.md`
 - do not target this repository when running `npm run bootstrap`

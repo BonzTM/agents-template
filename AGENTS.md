@@ -2,7 +2,7 @@
 
 This file is repository-local for maintaining `agents-template` itself.
 
-Downstream bootstrap contract source: `AGENTS_TEMPLATE.md`.
+Downstream bootstrap contract source: `.agents-config/AGENTS_TEMPLATE.md`.
 During bootstrap/sync, downstream projects receive that file as `AGENTS.md`.
 
 ## Required Startup Order (This Repository)
@@ -10,17 +10,17 @@ During bootstrap/sync, downstream projects receive that file as `AGENTS.md`.
 Read these in order before non-trivial work:
 
 1. `AGENTS.md` (this file)
-2. `docs/AGENT_RULES.md`
-3. `docs/CONTEXT_INDEX.json`
-4. `docs/AGENT_CONTEXT.md`
+2. `.agents-config/docs/AGENT_RULES.md`
+3. `.agents-config/docs/CONTEXT_INDEX.json`
+4. `.agents-config/docs/AGENT_CONTEXT.md`
 5. `.agents/EXECUTION_QUEUE.json` (when present)
 6. `.agents/CONTINUITY.md`
 7. Run `npm run agent:preflight`
 
 Read downstream template sources only when intentionally changing downstream contract content:
 
-- `AGENTS_TEMPLATE.md`
-- `.claude-template/CLAUDE.md`
+- `.agents-config/AGENTS_TEMPLATE.md`
+- `.agents-config/templates/claude/CLAUDE.md`
 
 ## Local vs Downstream Contract
 
@@ -28,15 +28,15 @@ Read downstream template sources only when intentionally changing downstream con
   - `AGENTS.md`
   - `.claude/CLAUDE.md`
 - Downstream template sources live in:
-  - `AGENTS_TEMPLATE.md` -> downstream `AGENTS.md`
-  - `.claude-template/CLAUDE.md` -> downstream `.claude/CLAUDE.md`
+  - `.agents-config/AGENTS_TEMPLATE.md` -> downstream `AGENTS.md`
+  - `.agents-config/templates/claude/CLAUDE.md` -> downstream `.claude/CLAUDE.md`
 - Do not place template-maintainer-only instructions in downstream template sources.
 
 ## Repository-Local Rules
 
 - Do not bootstrap this `agents-template` repository as a target project.
 - Keep `.agents` pointed at external workfiles (`../agents-workfiles/agents-template`) for local runtime state.
-- Keep `.agents-template/` as tracked downstream scaffold content only.
+- Keep `.agents-config/templates/agents/` as tracked downstream scaffold content only.
 - Keep local runtime `.agents/**` state untracked.
 
 ## Maintainer Commands

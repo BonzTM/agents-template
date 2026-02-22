@@ -4,10 +4,10 @@ Before proceeding any further, follow startup order in repository-root `AGENTS.m
 
 For downstream contract changes, edit downstream template sources (not local-only files):
 
-- `AGENTS_TEMPLATE.md`
-- `.claude-template/CLAUDE.md`
+- `.agents-config/AGENTS_TEMPLATE.md`
+- `.agents-config/templates/claude/CLAUDE.md`
 
 After every context compaction, treat it as a fresh startup and re-run:
 
 - `npm run agent:preflight`
-- `node .github/scripts/enforce-agent-policies.mjs`
+- `node .agents-config/scripts/enforce-agent-policies.mjs`

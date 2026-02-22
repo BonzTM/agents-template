@@ -24,10 +24,10 @@ jobs:
         run: npm ci
 
       - name: Enforce agent policies
-        run: node .github/scripts/enforce-agent-policies.mjs
+        run: node .agents-config/scripts/enforce-agent-policies.mjs
 
       - name: Check managed workflow drift
-        run: npm run agent:drift:check
+        run: npm run agent:managed -- --mode check
 
       - name: Enforce template-impact declaration
         if: github.event_name == 'pull_request'

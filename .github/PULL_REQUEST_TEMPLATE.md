@@ -27,8 +27,8 @@ Rules:
 
 ## Verification
 
-- [ ] `node .github/scripts/enforce-agent-policies.mjs`
-- [ ] `npm run agent:drift:check`
+- [ ] `node .agents-config/scripts/enforce-agent-policies.mjs`
+- [ ] `npm run agent:managed -- --mode check`
 - [ ] `npm run agent:preflight`
 - [ ] Additional targeted checks (list below)
 
