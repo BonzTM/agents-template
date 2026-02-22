@@ -22,7 +22,9 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_post_compaction_rebootstrap`: Treat compaction recovery as full startup and run preflight.
 - `rule_repo_index_preflight_gate`: Require preflight index readiness checks (always re-index, then strict verify) before implementation starts.
 - `rule_context_index_drift_guard`: Keep `docs/CONTEXT_INDEX.json` synchronized with policy/documentation contracts and fail checks on drift.
-- `rule_canonical_agents_root`: Treat `../agents-workfiles/<project-id>` (via local `.agents` symlink) as the single canonical local agent-context root.
+- `rule_canonical_ruleset_contract_required`: Maintain canonical rule IDs/statements in `contracts/rules/canonical-ruleset.json` with hash lineage tied to policy and rules docs.
+- `rule_local_rule_overrides_contract_required`: Allow local-only override IDs only through `.agent-overrides/rule-overrides.json`, validated against `.agent-overrides/rule-overrides.schema.json`.
+- `rule_canonical_agents_root`: Treat `.agents` as the canonical project-local agent-context path; bootstrap defaults to external workfiles mode where `.agents` symlinks to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`), and local `.agents` mode is explicit via `--agents-mode local`.
 - `rule_worktree_root_required`: Keep all non-primary Git worktrees under `.worktrees`.
 - `rule_agents_semantic_merge_required`: `.agents/**` is shared multi-session state; every `.agents/**` edit must be semantically merged against latest on-disk state.
 - `rule_tdd_default`: Prefer true TDD and document deviations when strict TDD is impractical.
@@ -37,6 +39,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_release_notes_template_required`: Enforce canonical release-notes template + generator workflow, section order, and plain-English non-jargon summaries through policy checks.
 - `rule_release_notes_changelog_source_required`: Treat `CHANGELOG.md` as release-notes source of truth and rotate `Unreleased` during `release:prepare`.
 - `orch_single_orchestrator_authority`: Enforce exactly one orchestrator context owner per session; subagents do not orchestrate.
+- `orch_operator_subagent_default`: Default to operator/subagent delegation for non-trivial work; direct single-agent execution is only for trivial tasks.
 - `orch_concise_subagent_briefs`: Enforce concise subagent payload/addendum shape with explicit verbosity budgets.
 - `orch_spec_refined_plan_verbosity`: Enforce concise spec outline/refined spec/implementation-plan verbosity ladder.
 
@@ -151,8 +154,9 @@ At task start, explicitly determine:
 ### CLI Worktree Parallelism (Required)
 
 - When operating in an agent CLI (for example Codex CLI or Claude Code CLI), prefer Git worktrees for non-trivial parallelizable tasks instead of stacking unrelated edits in one working tree.
-- Prefer parallel agents/subagents for independent task slices when available.
-- Canonical shared `.agents` root is `../agents-workfiles/<project-id>` (via local `.agents` symlink) (git-ignored local context).
+- For non-trivial work, prefer operator/subagent execution and parallel agents/subagents for independent task slices when available.
+- Bootstrap defaults to external workfiles mode: `.agents` is a symlink to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`).
+- Local `.agents` directory mode is allowed only when bootstrap is explicitly set to `--agents-mode local`.
 - Treat `.agents/**` as shared multi-writer state; reconcile concurrent edits using semantic merges instead of blind overwrite.
 - `.agents/**` may be concurrently modified by other agent sessions; every `.agents/**` edit must be semantically merged against latest on-disk state before write.
 - All non-primary Git worktrees must live under `.worktrees`.
@@ -167,6 +171,7 @@ At task start, explicitly determine:
   - `orch_scope_tightness`
   - `orch_machine_payload_authoritative`
   - `orch_delegate_substantive_work`
+  - `orch_operator_subagent_default`
   - `orch_human_nuance_addendum`
   - `orch_atomic_task_delegation`
   - `orch_dual_channel_result_envelope`
@@ -184,6 +189,7 @@ Machine vs human guidance split for orchestration:
 - Machine-readable payload/config drives execution and validation.
 - Human-readable addendum captures nuance, rationale, and caveats not encoded in schema fields.
 - One orchestrator agent owns cross-task coordination/context in a session; subagents execute delegated atomic tasks and do not recursively orchestrate.
+- Operator/subagent delegation is the default for non-trivial work; direct single-agent execution is only for trivial tasks.
 - Subagent payload brevity is mandatory: one concrete objective, bounded context input, bounded completion summary.
 - Spec outline, refined spec, and detailed implementation plan sections must follow policy-defined verbosity budgets.
 - Model routing defaults are role/risk specific:
@@ -201,8 +207,10 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Enforcement runner: `.github/scripts/enforce-agent-policies.mjs`
 - Local command: `node .github/scripts/enforce-agent-policies.mjs`
 - Session preflight command: `npm run agent:preflight`
-- Managed workflow sync command: `npm run agent:sync`
-- Managed workflow drift command: `npm run agent:drift:check`
+- Canonical ruleset verify command: `npm run rules:canonical:verify`
+- Canonical ruleset sync command: `npm run rules:canonical:sync`
+- Managed workflow command (check): `npm run agent:managed -- --mode check`
+- Managed workflow command (fix + recheck): `npm run agent:managed -- --fix --recheck`
 - Template-impact declaration gate: `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Logging compliance command: `npm run logging:compliance:verify`
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (runs before frontend lint/docker build checks)
@@ -210,7 +218,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 
 When policy expectations change, update all relevant governance artifacts in the same change set:
 
-1. `AGENTS.md` (bootstrap contract)
+1. `AGENTS_TEMPLATE.md` (bootstrap contract)
 2. `docs/AGENT_RULES.md` (human-readable rules contract)
 3. `docs/AGENT_CONTEXT.md` (human-readable context contract, when impacted)
 4. `docs/CONTEXT_INDEX.json` (machine-readable context map)
@@ -226,7 +234,7 @@ When policy expectations change, update all relevant governance artifacts in the
 
 ### Persistent Rules
 
-- If the user adds or changes a process rule, update `AGENTS.md` and `docs/AGENT_RULES.md` in the same change set and enforce it via policy-as-code (`.github/policies/agent-governance.json` and `.github/scripts/enforce-agent-policies.mjs`).
+- If the user adds or changes a process rule, update `AGENTS_TEMPLATE.md` and `docs/AGENT_RULES.md` in the same change set and enforce it via policy-as-code (`.github/policies/agent-governance.json` and `.github/scripts/enforce-agent-policies.mjs`).
 - Work exhaustively with zero guesswork: if a required fact is unknown, explicitly look it up/verify it before proceeding.
 - Do not trim or skip relevant context; preserve complete context for correctness-critical work unless the user explicitly asks to narrow scope.
 - Record material findings/decisions in persistent context artifacts (`.agents/CONTINUITY.md`, `.agents/EXECUTION_QUEUE.json`, and plan files) to survive context compaction.
@@ -288,7 +296,7 @@ When policy expectations change, update all relevant governance artifacts in the
 
 - Treat every context-compaction recovery as a fresh startup sequence before doing new implementation work.
 - Complete this checklist in order:
-  1. Re-read `AGENTS.md`, `docs/AGENT_RULES.md`, `docs/CONTEXT_INDEX.json`, and `docs/AGENT_CONTEXT.md`.
+  1. Re-read `AGENTS_TEMPLATE.md`, `docs/AGENT_RULES.md`, `docs/CONTEXT_INDEX.json`, and `docs/AGENT_CONTEXT.md`.
   2. Confirm branch + workspace state (`git rev-parse --abbrev-ref HEAD`, `git status --short`).
   3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/CONTINUITY.md`; both are required startup artifacts.
   4. Run `npm run agent:preflight` to regenerate `.agents/SESSION_BRIEF.json`.
@@ -321,7 +329,8 @@ When policy expectations change, update all relevant governance artifacts in the
 ### Session Artifact Contracts (Required)
 
 - Workspace layout contract:
-  - Canonical shared `.agents` root is `../agents-workfiles/<project-id>` (via local `.agents` symlink) (git-ignored local context).
+  - Bootstrap defaults to external workfiles mode: `.agents` is a symlink to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`).
+  - Local `.agents` directory mode is allowed only when bootstrap is explicitly set to `--agents-mode local`.
   - If running from a worktree, `.agents` in that worktree must be a symlink to the canonical root.
   - Keep all non-primary worktrees under `.worktrees`.
 - Keep canonical machine-readable execution queue in `.agents/EXECUTION_QUEUE.json`:
@@ -358,7 +367,7 @@ When policy expectations change, update all relevant governance artifacts in the
   - When feasible, run `npm run index:verify` before final handoff.
   - If verify reports drift, run `npm run index:build` and re-run verify in the same session.
 - CONTEXT_INDEX drift guard:
-  - Keep `docs/CONTEXT_INDEX.json` synchronized with `AGENTS.md`, policy contracts, and command map entries.
+  - Keep `docs/CONTEXT_INDEX.json` synchronized with `AGENTS_TEMPLATE.md`, policy contracts, and command map entries.
   - Policy checks must fail if `docs/CONTEXT_INDEX.json` paths/headings/commands drift from canonical contracts.
 - Idempotency contract:
   - `id` and `idempotency_key` must be stable and unique per item.

@@ -751,7 +751,11 @@ function normalizePlanReferenceCandidate(rawValue) {
   return candidate;
 }
 
-function scanStalePlanReferences(repoRoot, scanRoots) {
+function scanStalePlanReferences(
+  repoRoot,
+  scanRoots,
+  resolvePath = (value) => path.resolve(repoRoot, value),
+) {
   const summary = {
     scanned_files: 0,
     references_checked: 0,
@@ -761,7 +765,7 @@ function scanStalePlanReferences(repoRoot, scanRoots) {
   const pattern = /\.agents\/plans\/(?:current|deferred|archived)\/[^\s`"'()<>{}\[\]]+/g;
 
   for (const scanRoot of scanRoots) {
-    const rootAbs = path.resolve(repoRoot, scanRoot);
+    const rootAbs = resolvePath(scanRoot);
     const markdownFiles = listMarkdownFilesForPath(rootAbs);
     for (const fileAbs of markdownFiles) {
       const fileRef = path.relative(repoRoot, fileAbs).replace(/\\/g, "/");
@@ -784,7 +788,7 @@ function scanStalePlanReferences(repoRoot, scanRoots) {
           }
 
           summary.references_checked += 1;
-          const targetAbs = path.resolve(repoRoot, targetRef);
+          const targetAbs = resolvePath(targetRef);
           if (fs.existsSync(targetAbs)) {
             continue;
           }
@@ -863,6 +867,16 @@ function main() {
   const canonicalAgentsRoot =
     toNonEmptyString(workspaceLayout.canonicalAgentsRoot) ??
     path.resolve(canonicalRepoRoot, ".agents");
+  const resolveArtifactPath = (targetPath) => {
+    const normalized = toNonEmptyString(targetPath) ?? "";
+    if (normalized === ".agents") {
+      return path.resolve(canonicalAgentsRoot);
+    }
+    if (normalized.startsWith(".agents/")) {
+      return path.resolve(canonicalAgentsRoot, normalized.slice(".agents/".length));
+    }
+    return path.resolve(repoRoot, normalized);
+  };
   const worktreesRoot =
     toNonEmptyString(workspaceLayout.worktreesRoot) ??
     path.resolve(canonicalRepoRoot, ".worktrees");
@@ -888,11 +902,11 @@ function main() {
 
   const plansRoot = sessionArtifacts.plansRoot ?? ".agents/plans";
   ensureDir(path.resolve(canonicalAgentsRoot));
-  ensureDir(path.resolve(repoRoot, plansRoot));
+  ensureDir(resolveArtifactPath(plansRoot));
 
   const planRoots = normalizeArray(sessionArtifacts.planRoots);
   for (const planRoot of planRoots) {
-    ensureDir(path.resolve(repoRoot, planRoot));
+    ensureDir(resolveArtifactPath(planRoot));
   }
 
   const planQueueSyncEnabled = sessionArtifacts.planQueueSyncEnabled !== false;
@@ -1043,7 +1057,7 @@ function main() {
         ? sessionArtifacts.maxScopedItemsPerRead
         : 25,
   };
-  ensureDir(path.resolve(repoRoot, archiveRoot));
+  ensureDir(resolveArtifactPath(archiveRoot));
 
   const repositoryIndexReadiness = runRepositoryIndexReadiness({
     enabled: repositoryIndexPreflightEnabled,
@@ -1084,7 +1098,7 @@ function main() {
   });
 
   const executionQueueResult = ensureJsonTemplate(
-    path.resolve(repoRoot, executionQueuePath),
+    resolveArtifactPath(executionQueuePath),
     executionQueueTemplate,
   );
   const executionQueue = executionQueueResult.data ?? executionQueueTemplate();
@@ -1097,7 +1111,7 @@ function main() {
   });
 
   const archiveIndexResult = ensureJsonTemplate(
-    path.resolve(repoRoot, archiveIndexPath),
+    resolveArtifactPath(archiveIndexPath),
     archiveIndexTemplate,
   );
   const archiveIndex = archiveIndexResult.data ?? archiveIndexTemplate();
@@ -1150,7 +1164,7 @@ function main() {
     const normalizedFeatureId = toNonEmptyString(featureId) ?? "unassigned";
     const shardName = `${toArchiveFeatureShardName(normalizedFeatureId)}.${archiveFormat}`;
     const archiveRef = `${archiveRoot}/${shardName}`;
-    const archiveRefAbs = path.resolve(repoRoot, archiveRef);
+    const archiveRefAbs = resolveArtifactPath(archiveRef);
     const archivedAt = now;
 
     const shardRecord = {
@@ -1314,7 +1328,7 @@ function main() {
     }
 
     for (const rootPath of planQueueSyncRoots) {
-      const rootAbs = path.resolve(repoRoot, rootPath);
+      const rootAbs = resolveArtifactPath(rootPath);
       const requestedRootState = toNonEmptyString(planQueueSyncStateByRoot[rootPath]) ?? "pending";
       const defaultRootState = allowedQueueStates.includes(requestedRootState)
         ? requestedRootState
@@ -1324,7 +1338,7 @@ function main() {
 
       for (const featureDir of featureDirs) {
         const planRef = `${rootPath}/${featureDir}/${planQueueSyncPlanFileName}`;
-        const planAbs = path.resolve(repoRoot, planRef);
+        const planAbs = resolveArtifactPath(planRef);
         if (!fs.existsSync(planAbs)) {
           planQueueSyncSummary.missing_plan_files.push(planRef);
           continue;
@@ -1418,14 +1432,14 @@ function main() {
   };
 
   if (archivedPlanSyncEnabled) {
-    const archivedRootAbs = path.resolve(repoRoot, archivedPlanRoot);
+    const archivedRootAbs = resolveArtifactPath(archivedPlanRoot);
     const archivedFeatureDirs = listFeaturePlanDirectories(archivedRootAbs);
     archivedPlanSyncSummary.discovered_feature_dirs = archivedFeatureDirs.length;
 
     for (const featureDir of archivedFeatureDirs) {
       const featureDirectoryRef = `${archivedPlanRoot}/${featureDir}`;
       const planRef = `${featureDirectoryRef}/${archivedPlanFileName}`;
-      const planAbs = path.resolve(repoRoot, planRef);
+      const planAbs = resolveArtifactPath(planRef);
       if (!fs.existsSync(planAbs)) {
         archivedPlanSyncSummary.missing_plan_files.push(planRef);
         continue;
@@ -1434,14 +1448,14 @@ function main() {
       archivedPlanSyncSummary.synced_feature_ids.push(featureDir);
 
       const canonicalHandoffRef = `${featureDirectoryRef}/${archivedPlanCanonicalHandoffFileName}`;
-      const canonicalHandoffAbs = path.resolve(repoRoot, canonicalHandoffRef);
+      const canonicalHandoffAbs = resolveArtifactPath(canonicalHandoffRef);
       let handoffRef = null;
       if (fs.existsSync(canonicalHandoffAbs)) {
         handoffRef = canonicalHandoffRef;
       } else {
         for (const legacyHandoffFileName of archivedPlanLegacyHandoffFileNames) {
           const legacyHandoffRef = `${featureDirectoryRef}/${legacyHandoffFileName}`;
-          const legacyHandoffAbs = path.resolve(repoRoot, legacyHandoffRef);
+          const legacyHandoffAbs = resolveArtifactPath(legacyHandoffRef);
           if (fs.existsSync(legacyHandoffAbs)) {
             handoffRef = legacyHandoffRef;
             break;
@@ -1452,7 +1466,7 @@ function main() {
 
       const archiveKey = `${archivedPlanArchiveKeyPrefix}${featureDir}`;
       const archiveRef = `${archiveRoot}/${toArchiveFeatureShardName(featureDir)}.${archiveFormat}`;
-      const archiveRefAbs = path.resolve(repoRoot, archiveRef);
+      const archiveRefAbs = resolveArtifactPath(archiveRef);
 
       const shardEntries = readJsonLinesFile(archiveRefAbs);
       const hasShardRecord = shardEntries.some(
@@ -1473,7 +1487,7 @@ function main() {
             feature_directory: featureDirectoryRef,
             plan_ref: planRef,
             handoff_ref: handoffRef,
-            prompt_history_ref: fs.existsSync(path.resolve(repoRoot, promptHistoryRef))
+            prompt_history_ref: fs.existsSync(resolveArtifactPath(promptHistoryRef))
               ? promptHistoryRef
               : null,
           },
@@ -1547,6 +1561,7 @@ function main() {
     const staleScanResult = scanStalePlanReferences(
       repoRoot,
       stalePlanReferenceScanRoots,
+      resolveArtifactPath,
     );
     stalePlanReferenceSummary.scanned_files = staleScanResult.scanned_files;
     stalePlanReferenceSummary.references_checked = staleScanResult.references_checked;
@@ -1987,7 +2002,7 @@ function main() {
     );
 
     for (const rootPath of planQueueSyncRoots) {
-      const rootAbs = path.resolve(repoRoot, rootPath);
+      const rootAbs = resolveArtifactPath(rootPath);
       const requestedRootState = toNonEmptyString(planQueueSyncStateByRoot[rootPath]) ?? "pending";
       const defaultRootState = allowedQueueStates.includes(requestedRootState)
         ? requestedRootState
@@ -1997,7 +2012,7 @@ function main() {
 
       for (const featureDir of featureDirs) {
         const planRef = `${rootPath}/${featureDir}/${planQueueSyncPlanFileName}`;
-        const planAbs = path.resolve(repoRoot, planRef);
+        const planAbs = resolveArtifactPath(planRef);
 
         if (!fs.existsSync(planAbs)) {
           if (!planQueueSyncSummary.missing_plan_files.includes(planRef)) {
@@ -2066,12 +2081,12 @@ function main() {
   if (queueMutated) {
     executionQueue.updated_at = now;
     executionQueue.last_updated = now;
-    writeJson(path.resolve(repoRoot, executionQueuePath), executionQueue);
+    writeJson(resolveArtifactPath(executionQueuePath), executionQueue);
   }
 
   if (archiveIndexMutated) {
     archiveIndex.last_updated = now;
-    writeJson(path.resolve(repoRoot, archiveIndexPath), archiveIndex);
+    writeJson(resolveArtifactPath(archiveIndexPath), archiveIndex);
   }
 
   try {
@@ -2138,7 +2153,7 @@ function main() {
     },
     next_actions: ["Preflight in progress"],
   };
-  writeJson(path.resolve(repoRoot, sessionBriefJsonPath), bootstrapSessionBrief);
+  writeJson(resolveArtifactPath(sessionBriefJsonPath), bootstrapSessionBrief);
 
   const policyCheckCommand = `node ${documentationModel.enforcementScript ?? ".github/scripts/enforce-agent-policies.mjs"}`;
 
@@ -2167,7 +2182,7 @@ function main() {
   const queueItems = normalizeArray(executionQueue.items);
   const queueSummary = summarizeQueue(queueItems);
   const existingRetiredArtifacts = retiredArtifacts.filter((artifactPath) =>
-    fs.existsSync(path.resolve(repoRoot, artifactPath)),
+    fs.existsSync(resolveArtifactPath(artifactPath)),
   );
 
   const nextActions = [];
@@ -2471,7 +2486,7 @@ function main() {
     next_actions: nextActions,
   };
 
-  writeJson(path.resolve(repoRoot, sessionBriefJsonPath), sessionBrief);
+  writeJson(resolveArtifactPath(sessionBriefJsonPath), sessionBrief);
 
   if (
     stalePlanReferenceCheckEnabled &&
@@ -2512,7 +2527,15 @@ function main() {
     process.exit(1);
   }
 
-  console.log(`Preflight complete. Wrote ${sessionBriefJsonPath}.`);
+  const sessionBriefResolvedPath = resolveArtifactPath(sessionBriefJsonPath);
+  const defaultSessionBriefPath = path.resolve(repoRoot, sessionBriefJsonPath);
+  if (sessionBriefResolvedPath === defaultSessionBriefPath) {
+    console.log(`Preflight complete. Wrote ${sessionBriefJsonPath}.`);
+  } else {
+    console.log(
+      `Preflight complete. Wrote ${sessionBriefJsonPath} (resolved: ${sessionBriefResolvedPath}).`,
+    );
+  }
 }
 
 main();

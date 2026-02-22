@@ -4,10 +4,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { verifyCanonicalRuleset } from "../../tools/rules/verify-canonical-ruleset.mjs";
 
 const configPath = process.argv[2] ?? ".github/policies/agent-governance.json";
 const failures = [];
 const warnings = [];
+let agentsAwareReadResolver = (value) => value;
 
 function addFailure(message) {
   failures.push(message);
@@ -113,17 +115,27 @@ function readJson(filePath) {
 }
 
 function readFileIfPresent(filePath, optional = false) {
-  if (!fs.existsSync(filePath)) {
+  const requestedPath = toNonEmptyString(filePath) ?? String(filePath ?? "");
+  const resolvedPath = agentsAwareReadResolver(requestedPath);
+  const preferredPath =
+    fs.existsSync(requestedPath) ||
+    !resolvedPath ||
+    resolvedPath === requestedPath ||
+    !fs.existsSync(resolvedPath)
+      ? requestedPath
+      : resolvedPath;
+
+  if (!fs.existsSync(preferredPath)) {
     if (optional) {
-      addWarning(`Optional file not present: ${filePath}`);
+      addWarning(`Optional file not present: ${requestedPath}`);
       return null;
     }
 
-    addFailure(`Required file missing: ${filePath}`);
+    addFailure(`Required file missing: ${requestedPath}`);
     return null;
   }
 
-  return fs.readFileSync(filePath, "utf8");
+  return fs.readFileSync(preferredPath, "utf8");
 }
 
 function readJsonIfPresent(filePath, optional = false) {
@@ -399,8 +411,14 @@ function checkDocumentationModelContract(config) {
     return;
   }
 
+  const bootstrapFile = toNonEmptyString(contract.bootstrapFile);
+  if (!bootstrapFile) {
+    addFailure(`${contractPath}.bootstrapFile must be a non-empty string.`);
+  } else if (!bootstrapFile.endsWith(".md")) {
+    addFailure(`${contractPath}.bootstrapFile must reference a markdown file.`);
+  }
+
   const requiredStrings = {
-    bootstrapFile: "AGENTS.md",
     humanRulesFile: "docs/AGENT_RULES.md",
     humanContextFile: "docs/AGENT_CONTEXT.md",
     contextIndexFile: "docs/CONTEXT_INDEX.json",
@@ -423,16 +441,18 @@ function checkDocumentationModelContract(config) {
     }
   }
 
+  const expectedStartupReadOrder = [
+    bootstrapFile ?? "AGENTS.md",
+    "docs/AGENT_RULES.md",
+    "docs/CONTEXT_INDEX.json",
+    "docs/AGENT_CONTEXT.md",
+    ".agents/EXECUTION_QUEUE.json",
+    ".agents/CONTINUITY.md",
+  ];
+
   checkExactOrderedArray({
     value: contract.startupReadOrder,
-    expected: [
-      "AGENTS.md",
-      "docs/AGENT_RULES.md",
-      "docs/CONTEXT_INDEX.json",
-      "docs/AGENT_CONTEXT.md",
-      ".agents/EXECUTION_QUEUE.json",
-      ".agents/CONTINUITY.md",
-    ],
+    expected: expectedStartupReadOrder,
     pathName: `${contractPath}.startupReadOrder`,
   });
 
@@ -533,6 +553,10 @@ function isNonEmptyString(value) {
 
 function toNonEmptyString(value) {
   return isNonEmptyString(value) ? value.trim() : null;
+}
+
+function toPosixPath(value) {
+  return String(value).split(path.sep).join("/");
 }
 
 function getActiveProfiles(config) {
@@ -774,6 +798,7 @@ function checkWorkspaceLayoutContract(config, runtimeRepoRoot) {
   const worktreesRootResolved = path.resolve(worktreesRoot);
   const runtimeRepoRootResolved = path.resolve(runtimeRepoRoot);
   const localAgentsPath = toNonEmptyString(contract.localAgentsPath) ?? ".agents";
+  const normalizedLocalAgentsPath = localAgentsPath.replace(/\\/g, "/");
 
   if (worktreesRootResolved !== path.resolve(canonicalRepoRootResolved, ".worktrees")) {
     addFailure(
@@ -838,7 +863,12 @@ function checkWorkspaceLayoutContract(config, runtimeRepoRoot) {
 
   const gitignoreContent = readFileIfPresent(".gitignore");
   if (gitignoreContent !== null) {
-    for (const snippet of [".agents/**", ".worktrees/"]) {
+    for (const snippet of [
+      normalizedLocalAgentsPath,
+      `${normalizedLocalAgentsPath}/`,
+      `${normalizedLocalAgentsPath}/**`,
+      ".worktrees/",
+    ]) {
       if (!gitignoreContent.includes(snippet)) {
         addFailure(`.gitignore must include ${snippet} for local-context hygiene.`);
       }
@@ -926,6 +956,9 @@ function checkContextIndexContract(config) {
       contextFile:
         toNonEmptyString(documentationModel.humanContextFile) ??
         "docs/AGENT_CONTEXT.md",
+      canonicalRulesFile:
+        toNonEmptyString(config?.contracts?.canonicalRules?.file) ??
+        "contracts/rules/canonical-ruleset.json",
       policyFile:
         toNonEmptyString(documentationModel.machinePolicyFile) ??
         ".github/policies/agent-governance.json",
@@ -959,16 +992,18 @@ function checkContextIndexContract(config) {
     }
   }
 
+  const expectedStartupReadOrder = [
+    toNonEmptyString(documentationModel.bootstrapFile) ?? "AGENTS.md",
+    "docs/AGENT_RULES.md",
+    "docs/CONTEXT_INDEX.json",
+    "docs/AGENT_CONTEXT.md",
+    ".agents/EXECUTION_QUEUE.json",
+    ".agents/CONTINUITY.md",
+  ];
+
   checkExactOrderedArray({
     value: contract.requiredStartupReadOrder,
-    expected: [
-      "AGENTS.md",
-      "docs/AGENT_RULES.md",
-      "docs/CONTEXT_INDEX.json",
-      "docs/AGENT_CONTEXT.md",
-      ".agents/EXECUTION_QUEUE.json",
-      ".agents/CONTINUITY.md",
-    ],
+    expected: expectedStartupReadOrder,
     pathName: `${contractPath}.requiredStartupReadOrder`,
   });
 
@@ -2891,6 +2926,9 @@ function checkSessionArtifactsContract(config) {
     return;
   }
 
+  const resolveContractPath = (targetPath) =>
+    agentsAwareReadResolver(toNonEmptyString(targetPath) ?? String(targetPath ?? ""));
+
   const requiredStrings = {
     executionQueueFile: ".agents/EXECUTION_QUEUE.json",
     sessionBriefJsonFile: ".agents/SESSION_BRIEF.json",
@@ -3160,6 +3198,7 @@ function checkSessionArtifactsContract(config) {
   }
 
   const archivedPlanRoot = toNonEmptyString(contract.archivedPlanRoot) ?? ".agents/plans/archived";
+  const archivedPlanRootResolved = resolveContractPath(archivedPlanRoot);
   const archivedPlanFileName = toNonEmptyString(contract.archivedPlanFileName) ?? "PLAN.md";
   const archivedPlanCanonicalHandoffFileName =
     toNonEmptyString(contract.archivedPlanCanonicalHandoffFileName) ?? "HANDOFF.md";
@@ -3395,13 +3434,15 @@ function checkSessionArtifactsContract(config) {
     "open_questions",
   ];
 
-  const archivedPlanDirectories = listFeaturePlanDirectories(archivedPlanRoot);
+  const archivedPlanDirectories = listFeaturePlanDirectories(archivedPlanRootResolved);
   const archivedPlanExpectations = [];
   for (const featureDir of archivedPlanDirectories) {
     const featureDirPath = `${archivedPlanRoot}/${featureDir}`;
+    const featureDirResolved = path.resolve(archivedPlanRootResolved, featureDir);
     const canonicalPlanRef = `${featureDirPath}/${archivedPlanFileName}`;
+    const canonicalPlanDiskPath = path.resolve(featureDirResolved, archivedPlanFileName);
     const canonicalHandoffRef = `${featureDirPath}/${archivedPlanCanonicalHandoffFileName}`;
-    const canonicalPlanExists = fs.existsSync(canonicalPlanRef);
+    const canonicalPlanExists = fs.existsSync(canonicalPlanDiskPath);
     if (!canonicalPlanExists) {
       addFailure(
         `${canonicalPlanRef} is required for archived plan directory ${featureDirPath}.`,
@@ -3409,9 +3450,11 @@ function checkSessionArtifactsContract(config) {
     }
 
     const hasLegacyHandoff = archivedPlanLegacyHandoffFileNames.some((legacyFileName) =>
-      fs.existsSync(`${featureDirPath}/${legacyFileName}`),
+      fs.existsSync(path.resolve(featureDirResolved, legacyFileName)),
     );
-    const hasCanonicalHandoff = fs.existsSync(canonicalHandoffRef);
+    const hasCanonicalHandoff = fs.existsSync(
+      path.resolve(featureDirResolved, archivedPlanCanonicalHandoffFileName),
+    );
     if (hasLegacyHandoff && !hasCanonicalHandoff) {
       addWarning(
         `${featureDirPath} contains legacy handoff naming but is missing canonical ${archivedPlanCanonicalHandoffFileName}.`,
@@ -3428,7 +3471,10 @@ function checkSessionArtifactsContract(config) {
   }
 
   if (contract.stalePlanReferenceCheckEnabled === true) {
-    const staleReferenceFindings = scanStalePlanReferences(stalePlanReferenceScanRoots);
+    const staleReferenceFindings = scanStalePlanReferences(
+      stalePlanReferenceScanRoots,
+      resolveContractPath,
+    );
     if (staleReferenceFindings.length > 0) {
       const sample = staleReferenceFindings
         .slice(0, 10)
@@ -3962,18 +4008,19 @@ function checkSessionArtifactsContract(config) {
         }
 
         for (const rootPath of planQueueSyncRoots) {
-          if (!fs.existsSync(rootPath)) {
+          const rootPathResolved = resolveContractPath(rootPath);
+          if (!fs.existsSync(rootPathResolved)) {
             addFailure(
               `${rootPath} must exist when ${contractPath}.planQueueSyncEnabled is true.`,
             );
             continue;
           }
           const expectedState = toNonEmptyString(planQueueSyncStateByRoot?.[rootPath]);
-          const featureDirs = listFeaturePlanDirectories(rootPath);
+          const featureDirs = listFeaturePlanDirectories(rootPathResolved);
 
           for (const featureDir of featureDirs) {
             const planRef = `${rootPath}/${featureDir}/${contract.planQueueSyncPlanFileName}`;
-            const planAbs = path.resolve(planRef);
+            const planAbs = resolveContractPath(planRef);
             if (!fs.existsSync(planAbs)) {
               addFailure(`${planRef} is required for plan directory ${rootPath}/${featureDir}.`);
               continue;
@@ -4003,8 +4050,9 @@ function checkSessionArtifactsContract(config) {
     }
   }
 
-  if (fs.existsSync(contract.archiveRoot)) {
-    const archiveRootStats = fs.statSync(contract.archiveRoot);
+  const archiveRootResolved = resolveContractPath(contract.archiveRoot);
+  if (fs.existsSync(archiveRootResolved)) {
+    const archiveRootStats = fs.statSync(archiveRootResolved);
     if (!archiveRootStats.isDirectory()) {
       addFailure(`${contract.archiveRoot} must be a directory when present.`);
     }
@@ -4101,7 +4149,8 @@ function checkSessionArtifactsContract(config) {
           }
         }
 
-        if (!fs.existsSync(archiveRef)) {
+        const archiveRefResolved = resolveContractPath(archiveRef);
+        if (!fs.existsSync(archiveRefResolved)) {
           addFailure(
             `${contract.archiveIndexFile}.items[${index}].archive_ref points to missing file ${archiveRef}.`,
           );
@@ -4109,7 +4158,7 @@ function checkSessionArtifactsContract(config) {
         }
 
         if (!archiveShardCache.has(archiveRef)) {
-          archiveShardCache.set(archiveRef, readJsonLinesFile(archiveRef));
+          archiveShardCache.set(archiveRef, readJsonLinesFile(archiveRefResolved));
         }
         const shardEntries = archiveShardCache.get(archiveRef);
         if (!Array.isArray(shardEntries)) {
@@ -4295,6 +4344,170 @@ function checkSessionArtifactsContract(config) {
   }
 
   readFileIfPresent(contract.continuityFile, false);
+}
+
+function checkCanonicalRulesContract(config, repoRoot, activeConfigPath) {
+  const contractPath = "contracts.canonicalRules";
+  const contract = config?.contracts?.canonicalRules;
+  if (!contract || typeof contract !== "object") {
+    addFailure(`${contractPath} is required and must be an object.`);
+    return;
+  }
+  if (!isContractEnabled(config, contract)) {
+    return;
+  }
+
+  const canonicalFile = toNonEmptyString(contract.file);
+  const overrideSchemaFile = toNonEmptyString(contract.overrideSchemaFile);
+  const overrideFile =
+    toNonEmptyString(contract.optionalOverrideFile) ??
+    ".agent-overrides/rule-overrides.json";
+  const verifyScript = toNonEmptyString(contract.verifyScript);
+
+  if (canonicalFile !== "contracts/rules/canonical-ruleset.json") {
+    addFailure(`${contractPath}.file must equal "contracts/rules/canonical-ruleset.json".`);
+  }
+  if (overrideSchemaFile !== ".agent-overrides/rule-overrides.schema.json") {
+    addFailure(
+      `${contractPath}.overrideSchemaFile must equal ".agent-overrides/rule-overrides.schema.json".`,
+    );
+  }
+  if (verifyScript !== "tools/rules/verify-canonical-ruleset.mjs") {
+    addFailure(
+      `${contractPath}.verifyScript must equal "tools/rules/verify-canonical-ruleset.mjs".`,
+    );
+  }
+
+  const verifyNpmName = toNonEmptyString(contract.npmVerifyScriptName);
+  const verifyNpmCommand = toNonEmptyString(contract.npmVerifyScriptCommand);
+  const syncNpmName = toNonEmptyString(contract.npmSyncScriptName);
+  const syncNpmCommand = toNonEmptyString(contract.npmSyncScriptCommand);
+
+  if (verifyNpmName !== "rules:canonical:verify") {
+    addFailure(`${contractPath}.npmVerifyScriptName must equal "rules:canonical:verify".`);
+  }
+  if (verifyNpmCommand !== "node tools/rules/verify-canonical-ruleset.mjs --check") {
+    addFailure(
+      `${contractPath}.npmVerifyScriptCommand must equal "node tools/rules/verify-canonical-ruleset.mjs --check".`,
+    );
+  }
+  if (syncNpmName !== "rules:canonical:sync") {
+    addFailure(`${contractPath}.npmSyncScriptName must equal "rules:canonical:sync".`);
+  }
+  if (syncNpmCommand !== "node tools/rules/verify-canonical-ruleset.mjs --write") {
+    addFailure(
+      `${contractPath}.npmSyncScriptCommand must equal "node tools/rules/verify-canonical-ruleset.mjs --write".`,
+    );
+  }
+
+  const packageJson = readJsonIfPresent("package.json", true);
+  if (!packageJson || typeof packageJson !== "object") {
+    addFailure("package.json must exist for canonical-rules script checks.");
+  } else {
+    const scripts = packageJson.scripts;
+    if (!scripts || typeof scripts !== "object") {
+      addFailure("package.json.scripts must be an object.");
+    } else {
+      if (verifyNpmName && scripts[verifyNpmName] !== verifyNpmCommand) {
+        addFailure(
+          `package.json scripts.${verifyNpmName} must equal ${JSON.stringify(verifyNpmCommand)}.`,
+        );
+      }
+      if (syncNpmName && scripts[syncNpmName] !== syncNpmCommand) {
+        addFailure(
+          `package.json scripts.${syncNpmName} must equal ${JSON.stringify(syncNpmCommand)}.`,
+        );
+      }
+    }
+  }
+
+  const contextIndexPath =
+    toNonEmptyString(config?.contracts?.contextIndex?.indexFile) ??
+    "docs/CONTEXT_INDEX.json";
+  const contextIndex = readJsonIfPresent(contextIndexPath);
+  if (contextIndex && typeof contextIndex === "object") {
+    const sectionName =
+      toNonEmptyString(contract.contextIndexSection) ?? "canonicalRules";
+    const section = contextIndex[sectionName];
+    if (!section || typeof section !== "object") {
+      addFailure(`${contextIndexPath}.${sectionName} must be an object.`);
+    } else {
+      if (section.file !== canonicalFile) {
+        addFailure(
+          `${contextIndexPath}.${sectionName}.file must equal ${JSON.stringify(canonicalFile)}.`,
+        );
+      }
+      if (section.overrideSchemaFile !== overrideSchemaFile) {
+        addFailure(
+          `${contextIndexPath}.${sectionName}.overrideSchemaFile must equal ${JSON.stringify(overrideSchemaFile)}.`,
+        );
+      }
+      if (section.optionalOverrideFile !== overrideFile) {
+        addFailure(
+          `${contextIndexPath}.${sectionName}.optionalOverrideFile must equal ${JSON.stringify(overrideFile)}.`,
+        );
+      }
+      if (
+        section.verifyCommandKey !==
+        toNonEmptyString(contract.contextIndexVerifyCommandKey)
+      ) {
+        addFailure(
+          `${contextIndexPath}.${sectionName}.verifyCommandKey must equal contracts.canonicalRules.contextIndexVerifyCommandKey.`,
+        );
+      }
+      if (
+        section.syncCommandKey !==
+        toNonEmptyString(contract.contextIndexSyncCommandKey)
+      ) {
+        addFailure(
+          `${contextIndexPath}.${sectionName}.syncCommandKey must equal contracts.canonicalRules.contextIndexSyncCommandKey.`,
+        );
+      }
+    }
+
+    if (!contextIndex.commands || typeof contextIndex.commands !== "object") {
+      addFailure(`${contextIndexPath}.commands must be an object.`);
+    } else {
+      const verifyCommandKey =
+        toNonEmptyString(contract.contextIndexVerifyCommandKey) ??
+        "canonicalRulesVerify";
+      const syncCommandKey =
+        toNonEmptyString(contract.contextIndexSyncCommandKey) ??
+        "canonicalRulesSync";
+      if (contextIndex.commands[verifyCommandKey] !== "npm run rules:canonical:verify") {
+        addFailure(
+          `${contextIndexPath}.commands.${verifyCommandKey} must equal "npm run rules:canonical:verify".`,
+        );
+      }
+      if (contextIndex.commands[syncCommandKey] !== "npm run rules:canonical:sync") {
+        addFailure(
+          `${contextIndexPath}.commands.${syncCommandKey} must equal "npm run rules:canonical:sync".`,
+        );
+      }
+    }
+  }
+
+  const policyPathRelative = toPosixPath(
+    path.relative(repoRoot, path.resolve(repoRoot, activeConfigPath)),
+  );
+  const rulesFile =
+    toNonEmptyString(config?.contracts?.ruleCatalog?.file) ?? "docs/AGENT_RULES.md";
+  const verifyResult = verifyCanonicalRuleset({
+    repoRoot,
+    policyFile: policyPathRelative || ".github/policies/agent-governance.json",
+    rulesFile,
+    canonicalFile: canonicalFile ?? "contracts/rules/canonical-ruleset.json",
+    overridesSchemaFile:
+      overrideSchemaFile ?? ".agent-overrides/rule-overrides.schema.json",
+    overridesFile: overrideFile,
+    mode: "check",
+  });
+  for (const warning of verifyResult.warnings) {
+    addWarning(`[${contractPath}] ${warning}`);
+  }
+  for (const error of verifyResult.errors) {
+    addFailure(`[${contractPath}] ${error}`);
+  }
 }
 
 function checkRuleCatalogContract(config) {
@@ -4548,6 +4761,7 @@ function checkOrchestratorSubagentContracts(config) {
     "orch_scope_tightness",
     "orch_machine_payload_authoritative",
     "orch_delegate_substantive_work",
+    "orch_operator_subagent_default",
     "orch_human_nuance_addendum",
     "orch_atomic_task_delegation",
     "orch_dual_channel_result_envelope",
@@ -4597,12 +4811,14 @@ function checkOrchestratorSubagentContracts(config) {
     }
   }
 
-  const agentsContent = readFileIfPresent("AGENTS.md");
+  const bootstrapFilePath =
+    toNonEmptyString(config?.contracts?.documentationModel?.bootstrapFile) ?? "AGENTS.md";
+  const agentsContent = readFileIfPresent(bootstrapFilePath);
   if (agentsContent !== null) {
     for (const requiredRuleId of requiredRuleIds) {
       const idSnippet = `\`${requiredRuleId}\``;
       if (!agentsContent.includes(idSnippet)) {
-        addFailure(`AGENTS.md must reference contract id ${idSnippet}.`);
+        addFailure(`${bootstrapFilePath} must reference contract id ${idSnippet}.`);
       }
     }
   }
@@ -4687,6 +4903,15 @@ function runPolicyChecks(activeConfigPath = configPath) {
 
   const absoluteConfigPath = path.resolve(repoRoot, activeConfigPath);
   const config = readJson(absoluteConfigPath);
+  const canonicalAgentsRoot =
+    toNonEmptyString(config?.contracts?.workspaceLayout?.canonicalAgentsRoot) ??
+    path.resolve(repoRoot, ".agents");
+  agentsAwareReadResolver = (targetPath) =>
+    resolveAgentsAwarePath({
+      repoRoot,
+      canonicalAgentsRoot,
+      targetPath,
+    });
   const { files: trackedFiles, reliable: trackedFilesReliable } = listTrackedFiles();
 
   checkPolicyMetadata(config);
@@ -4701,6 +4926,7 @@ function runPolicyChecks(activeConfigPath = configPath) {
   checkJSDocCoverageContract(config);
   checkLoggingStandardsContract(config);
   checkSessionArtifactsContract(config);
+  checkCanonicalRulesContract(config, repoRoot, activeConfigPath);
   checkRuleCatalogContract(config);
   checkOrchestratorSubagentContracts(config);
   checkPolicyRuleQuality(config);

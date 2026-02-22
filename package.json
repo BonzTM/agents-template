@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "policy:check": "node .github/scripts/enforce-agent-policies.mjs",
-    "agent:sync": "node tools/bootstrap/agent-managed-files.mjs sync",
-    "agent:drift:check": "node tools/bootstrap/agent-managed-files.mjs check",
+    "rules:canonical:verify": "node tools/rules/verify-canonical-ruleset.mjs --check",
+    "rules:canonical:sync": "node tools/rules/verify-canonical-ruleset.mjs --write",
+    "agent:managed": "node tools/bootstrap/agent-managed-files.mjs",
     "agent:template-impact:check": "node tools/bootstrap/check-template-impact.mjs",
     "agent:preflight": "node .github/scripts/agent-session-preflight.mjs",
     "agent:payload:stub": "node .github/scripts/generate-subagent-payload-stub.mjs",
@@ -31,7 +32,7 @@
     "release:notes": "node .github/scripts/generate-release-notes.mjs",
     "release:prepare": "node .github/scripts/release-version-sync.mjs --write",
     "release:verify": "node .github/scripts/release-version-sync.mjs --check",
-    "bootstrap:project": "node tools/bootstrap/bootstrap-project.mjs"
+    "bootstrap": "node tools/bootstrap/bootstrap.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

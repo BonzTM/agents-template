@@ -43,22 +43,27 @@ function normalizeStringArray(value) {
 
 function parseArgs(argv) {
   const args = {
-    mode: "",
+    mode: "check",
     manifestPath: DEFAULT_MANIFEST_PATH,
     preferRemote: false,
     profilesOverride: [],
+    fix: false,
+    recheck: false,
+    ci: false,
   };
 
   if (argv.length === 0) {
-    fail("Usage: node tools/bootstrap/agent-managed-files.mjs <sync|check> [--manifest <path>] [--prefer-remote] [--profiles <comma-list>]");
+    return args;
   }
 
-  args.mode = argv[0];
-  if (!["sync", "check"].includes(args.mode)) {
-    fail(`Unknown mode: ${args.mode}. Use sync or check.`);
+  let startIndex = 0;
+  const first = argv[0];
+  if (first === "sync" || first === "check") {
+    args.mode = first;
+    startIndex = 1;
   }
 
-  for (let i = 1; i < argv.length; i += 1) {
+  for (let i = startIndex; i < argv.length; i += 1) {
     const token = argv[i];
     if (!token.startsWith("--")) {
       fail(`Unexpected positional argument: ${token}`);
@@ -67,6 +72,18 @@ function parseArgs(argv) {
     const key = token.slice(2);
     if (key === "prefer-remote") {
       args.preferRemote = true;
+      continue;
+    }
+    if (key === "fix") {
+      args.fix = true;
+      continue;
+    }
+    if (key === "recheck") {
+      args.recheck = true;
+      continue;
+    }
+    if (key === "ci") {
+      args.ci = true;
       continue;
     }
 
@@ -80,6 +97,10 @@ function parseArgs(argv) {
       args.manifestPath = value;
       continue;
     }
+    if (key === "mode") {
+      args.mode = value.trim();
+      continue;
+    }
 
     if (key === "profiles") {
       args.profilesOverride = value
@@ -90,6 +111,18 @@ function parseArgs(argv) {
     }
 
     fail(`Unknown option: --${key}`);
+  }
+
+  if (!["sync", "check"].includes(args.mode)) {
+    fail(`Unknown mode: ${args.mode}. Use --mode sync or --mode check.`);
+  }
+
+  if (args.ci && args.fix) {
+    fail("Cannot combine --ci with --fix.");
+  }
+
+  if (args.recheck && !args.fix && args.mode === "check") {
+    fail("--recheck requires --fix in check mode.");
   }
 
   return args;
@@ -242,13 +275,15 @@ async function resolveExpectedContent({
   repoRoot,
   source,
   overrideRoot,
-  relativePath,
+  targetRelativePath,
+  templateRelativePath,
   remoteCache,
 }) {
-  const normalized = normalizePath(relativePath);
+  const normalizedTarget = normalizePath(targetRelativePath);
+  const normalizedTemplate = normalizePath(templateRelativePath);
 
   if (overrideRoot) {
-    const overridePath = path.resolve(repoRoot, overrideRoot, normalized);
+    const overridePath = path.resolve(repoRoot, overrideRoot, normalizedTarget);
     if (fs.existsSync(overridePath)) {
       return {
         content: fs.readFileSync(overridePath, "utf8"),
@@ -259,14 +294,14 @@ async function resolveExpectedContent({
 
   const templateContent = await getTemplateFileContent({
     source,
-    relativePath: normalized,
+    relativePath: normalizedTemplate,
     remoteCache,
   });
 
   const sourceLabel =
     !source.preferRemote && source.localAvailable
-      ? `template-local:${normalizePath(path.relative(repoRoot, path.resolve(source.localRoot ?? repoRoot, normalized)))}`
-      : `template-remote:${source.repoSlug}@${source.ref}/${normalized}`;
+      ? `template-local:${normalizePath(path.relative(repoRoot, path.resolve(source.localRoot ?? repoRoot, normalizedTemplate)))}`
+      : `template-remote:${source.repoSlug}@${source.ref}/${normalizedTemplate}`;
 
   return {
     content: templateContent,
@@ -301,64 +336,114 @@ async function run() {
     return;
   }
 
-  let updatedCount = 0;
   let unchangedCount = 0;
   const mismatches = [];
 
   for (const entry of activeEntries) {
-    const relativePath = toNonEmptyString(entry?.path);
-    if (!relativePath) {
+    const targetRelativePath = toNonEmptyString(entry?.path);
+    if (!targetRelativePath) {
       fail("Each managed_files entry must include a non-empty path.");
     }
+    const templateRelativePath = toNonEmptyString(entry?.source_path) ?? targetRelativePath;
 
     const expected = await resolveExpectedContent({
       repoRoot,
       source,
       overrideRoot,
-      relativePath,
+      targetRelativePath,
+      templateRelativePath,
       remoteCache,
     });
 
-    const targetPath = path.resolve(repoRoot, relativePath);
+    const targetPath = path.resolve(repoRoot, targetRelativePath);
     const targetExists = fs.existsSync(targetPath);
     const actualContent = targetExists ? fs.readFileSync(targetPath, "utf8") : null;
-
-    if (args.mode === "check") {
-      if (actualContent !== expected.content) {
-        mismatches.push({
-          path: normalizePath(relativePath),
-          expectedSource: expected.sourceLabel,
-          reason: targetExists ? "content differs" : "missing target file",
-        });
-      }
-      continue;
-    }
 
     if (actualContent === expected.content) {
       unchangedCount += 1;
       continue;
     }
 
-    ensureDir(path.dirname(targetPath));
-    fs.writeFileSync(targetPath, expected.content, "utf8");
-    updatedCount += 1;
-    console.log(`synced ${normalizePath(relativePath)} <- ${expected.sourceLabel}`);
+    mismatches.push({
+      path: normalizePath(targetRelativePath),
+      targetPath,
+      expectedContent: expected.content,
+      expectedSource: expected.sourceLabel,
+      reason: targetExists ? "content differs" : "missing target file",
+    });
   }
 
-  if (args.mode === "check") {
-    if (mismatches.length > 0) {
-      console.error("Managed file drift detected:");
-      for (const mismatch of mismatches) {
-        console.error(`- ${mismatch.path}: ${mismatch.reason} (expected from ${mismatch.expectedSource})`);
-      }
-      fail("Run: npm run agent:sync");
+  const printMismatches = () => {
+    console.error("Managed file drift detected:");
+    for (const mismatch of mismatches) {
+      console.error(
+        `- ${mismatch.path}: ${mismatch.reason} (expected from ${mismatch.expectedSource})`,
+      );
     }
+  };
 
+  const runSync = () => {
+    let updatedCount = 0;
+    for (const mismatch of mismatches) {
+      ensureDir(path.dirname(mismatch.targetPath));
+      fs.writeFileSync(mismatch.targetPath, mismatch.expectedContent, "utf8");
+      updatedCount += 1;
+      console.log(`synced ${mismatch.path} <- ${mismatch.expectedSource}`);
+    }
+    console.log(`Managed file sync complete. Updated: ${updatedCount}, unchanged: ${unchangedCount}.`);
+    return updatedCount;
+  };
+
+  if (args.mode === "sync") {
+    runSync();
+    if (!args.recheck) {
+      return;
+    }
+    const verifyArgs = ["check", "--manifest", args.manifestPath];
+    if (args.preferRemote) {
+      verifyArgs.push("--prefer-remote");
+    }
+    if (args.profilesOverride.length > 0) {
+      verifyArgs.push("--profiles", args.profilesOverride.join(","));
+    }
+    const verifyResult = spawnSync("node", [process.argv[1], ...verifyArgs], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+    if (verifyResult.status !== 0) {
+      fail("Managed file recheck failed after sync.");
+    }
+    return;
+  }
+
+  if (mismatches.length === 0) {
     console.log(`Managed file drift check passed (${activeEntries.length} files).`);
     return;
   }
 
-  console.log(`Managed file sync complete. Updated: ${updatedCount}, unchanged: ${unchangedCount}.`);
+  printMismatches();
+  if (args.ci || !args.fix) {
+    fail("Run: npm run agent:managed -- --fix --recheck");
+  }
+
+  runSync();
+
+  if (args.recheck) {
+    const verifyArgs = ["check", "--manifest", args.manifestPath];
+    if (args.preferRemote) {
+      verifyArgs.push("--prefer-remote");
+    }
+    if (args.profilesOverride.length > 0) {
+      verifyArgs.push("--profiles", args.profilesOverride.join(","));
+    }
+    const verifyResult = spawnSync("node", [process.argv[1], ...verifyArgs], {
+      cwd: repoRoot,
+      stdio: "inherit",
+    });
+    if (verifyResult.status !== 0) {
+      fail("Managed file recheck failed after sync.");
+    }
+  }
 }
 
 run().catch((error) => {

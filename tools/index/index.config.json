@@ -12,8 +12,10 @@
     "worktreeHashLength": 10
   },
   "includeRoots": [
-    "AGENTS.md",
+    "AGENTS_TEMPLATE.md",
     "README.md",
+    "contracts",
+    ".agent-overrides",
     "docs",
     "backend/src",
     "backend/prisma",
@@ -91,7 +93,9 @@
     ".github/scripts/": 0.89,
     ".github/policies/": 0.9,
     "docs/": 0.86,
+    "contracts/": 0.84,
+    ".agent-overrides/": 0.8,
     "README.md": 0.75,
-    "AGENTS.md": 0.84
+    "AGENTS_TEMPLATE.md": 0.84
   }
 }

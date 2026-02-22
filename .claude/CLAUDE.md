@@ -1,22 +1,13 @@
-# CLAUDE.md - Claude Code Bootstrap
+# CLAUDE.md - agents-template Local Maintainer Bootstrap
 
-Before proceeding any further, follow the startup sequence defined in `AGENTS.md` at the repository root.
+Before proceeding any further, follow startup order in repository-root `AGENTS.md`.
 
-After every context compaction, treat it as a fresh startup and re-run the full sequence above before resuming work.
+For downstream contract changes, edit downstream template sources (not local-only files):
 
-## Orchestrator/Subagent Contract Quick Reference
+- `AGENTS_TEMPLATE.md`
+- `.claude-template/CLAUDE.md`
 
-Canonical enforceable source: `.github/policies/agent-governance.json` at `contracts.orchestratorSubagent`.
-
-- Use single-orchestrator topology: one orchestrator owns cross-task coordination/context; subagents execute delegated atomic tasks only.
-- Keep delegated tasks single-objective with explicit `atomic_scope` boundaries.
-- Use machine-readable payloads as authority with concise human nuance addenda.
-- Return dual-channel results: machine-readable envelope plus concise human summary.
-- Follow default CLI routing unless user-overridden: Codex agents via `codex` CLI, Claude agents via `claude` CLI.
-- Respect policy verbosity budgets for subagent briefs/spec/refined-spec/plan sections.
-- Ensure completed queue-item evidence includes explicit verification entries prefixed `verify:`.
-
-Before non-trivial implementation or closeout, run:
+After every context compaction, treat it as a fresh startup and re-run:
 
 - `npm run agent:preflight`
 - `node .github/scripts/enforce-agent-policies.mjs`

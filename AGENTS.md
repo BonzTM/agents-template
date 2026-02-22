@@ -1,150 +1,55 @@
-# AGENTS.md - Repository Agent Bootstrap
+# AGENTS.md - agents-template Local Maintainer Contract
 
-Bootstrap contract for AI coding agents in this repository.
+This file is repository-local for maintaining `agents-template` itself.
 
-## Required Startup Order
+Downstream bootstrap contract source: `AGENTS_TEMPLATE.md`.
+During bootstrap/sync, downstream projects receive that file as `AGENTS.md`.
+
+## Required Startup Order (This Repository)
 
 Read these in order before non-trivial work:
 
-1. `AGENTS.md`
+1. `AGENTS.md` (this file)
 2. `docs/AGENT_RULES.md`
 3. `docs/CONTEXT_INDEX.json`
 4. `docs/AGENT_CONTEXT.md`
 5. `.agents/EXECUTION_QUEUE.json` (when present)
 6. `.agents/CONTINUITY.md`
-7. Run `npm run agent:preflight` to refresh `.agents/SESSION_BRIEF.json` and enforce repository-index readiness
+7. Run `npm run agent:preflight`
 
-## Canonical Sources and Precedence
+Read downstream template sources only when intentionally changing downstream contract content:
 
-- Machine-readable canonical policy: `.github/policies/agent-governance.json`
-- Enforcement runner: `.github/scripts/enforce-agent-policies.mjs`
-- Session preflight generator: `.github/scripts/agent-session-preflight.mjs`
-- Release notes source of truth: `CHANGELOG.md`
-- Release notes template artifact: `docs/RELEASE_NOTES_TEMPLATE.md`
-- Release notes generator: `.github/scripts/generate-release-notes.mjs`
-- Feature index artifact: `docs/FEATURE_INDEX.json`
-- Test matrix artifact: `docs/TEST_MATRIX.md`
-- Route map artifact: `docs/ROUTE_MAP.md`
-- JSDoc coverage artifact: `docs/JSDOC_COVERAGE.md`
-- Logging standards source of truth: `docs/LOGGING_STANDARDS.md`
-- Runtime logging rule: everything in project runtime code should be logged appropriately through shared logging helpers.
-- Domain start-here readmes: `backend/src/routes/README.md`, `backend/src/services/README.md`, `frontend/features/*/README.md`
-- Human-readable rules contract: `docs/AGENT_RULES.md`
-- Human-readable project context: `docs/AGENT_CONTEXT.md`
-- Context map index: `docs/CONTEXT_INDEX.json`
+- `AGENTS_TEMPLATE.md`
+- `.claude-template/CLAUDE.md`
 
-Conflict resolution order:
+## Local vs Downstream Contract
 
-1. Latest explicit user instruction.
-2. Machine-readable policy contracts/checks.
-3. Human-readable rules contract.
-4. Human-readable context contract.
-
-## Session Context Artifacts
-
-Canonical local artifact roots are under `.agents/`:
-
-- Canonical execution queue: `.agents/EXECUTION_QUEUE.json`
-- Feature-sharded cold archive: `.agents/archives/<feature_id>.jsonl`
-- Archive index for historical lookup: `.agents/EXECUTION_ARCHIVE_INDEX.json`
-- Generated startup brief: `.agents/SESSION_BRIEF.json`
-- Continuity ledger: `.agents/CONTINUITY.md`
-- Plan roots: `.agents/plans/current/`, `.agents/plans/deferred/`, `.agents/plans/archived/`
-- Shared queue authority for orchestrator and subagents: `.agents/EXECUTION_QUEUE.json` (single source of truth)
-- Canonical shared `.agents` root is `../agents-workfiles/<project-id>` (via local `.agents` symlink) (git-ignored local context).
-- Treat `.agents/**` as shared multi-writer state and apply semantic merges (preserve concurrent entries; never clobber with blind overwrite).
-- `.agents/**` may be concurrently modified by other agent sessions; every edit under `.agents/**` must be semantically merged against latest on-disk state before write.
-- All additional Git worktrees must be created under `.worktrees`.
-- In non-primary worktrees, `.agents` must be a symlink to the canonical shared root.
-
-Queue-first execution rule:
-
-- Before implementation/investigation execution starts, all planned work must exist as atomic entries in `.agents/EXECUTION_QUEUE.json`.
-- `.agents/EXECUTION_QUEUE.json` is authoritative for task state/order; `PLAN.md` provides human detail and references queue item IDs.
-- `npm run agent:preflight` auto-syncs `.agents/plans/current/*/PLAN.md` and `.agents/plans/deferred/*/PLAN.md` into queue items.
-- Policy enforcement requires each current/deferred plan directory to have a corresponding queue item via `plan_ref`.
-- `npm run agent:preflight` also backfills `.agents/plans/archived/*/PLAN.md` into `.agents/EXECUTION_ARCHIVE_INDEX.json` + feature shard archives idempotently.
-- Queue state model is explicit and idempotent: top-level and per-item `state` use `active`/`deferred`/`pending`/`complete`, and items keep stable `id` + `idempotency_key`.
-- When a task or feature becomes `complete`, move it from hot queue into feature shard archive.
-- Do not read archive shards during normal startup; read archive on-demand for historical lookup only.
-- In multi-agent sessions, read only queue fields/items relevant to the current feature/item scope (selector examples: `id`, `plan_ref`, `owner`, `depends_on`) instead of loading the entire queue.
-- Preflight performs a stale `.agents/plans/**` reference scan and fails when unresolved links are detected.
-- Session brief contract is machine-validated and required via `.agents/SESSION_BRIEF.json`; missing/stale freshness beyond policy threshold fails policy checks until refreshed.
-- Preflight queue-quality gate blocks archival/closeout when required queue metadata is missing (`deferred_reason`, execution/completion timestamps, outputs/evidence/resolution summary).
-- Completion evidence for `complete` items must include explicit verification trace entries prefixed `verify:`.
-- Preflight includes repository index readiness gating: always re-index namespaced index and strict-verify before implementation work starts.
-
-Simplified plan architecture:
-
-- required per active feature: `PLAN.md`
-- Optional when needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
-- Legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files are valid historical formats.
-
-## Orchestrator/Subagent Contract Pointer
-
-Canonical enforceable source for orchestrator/subagent behavior:
-`contracts.orchestratorSubagent` in `.github/policies/agent-governance.json`
-
-Policy-canonical rule IDs:
-
-- `orch_hybrid_instruction_contract`
-- `orch_scope_tightness`
-- `orch_machine_payload_authoritative`
-- `orch_delegate_substantive_work`
-- `orch_human_nuance_addendum`
-- `orch_atomic_task_delegation`
-- `orch_dual_channel_result_envelope`
-- `orch_orchestrator_coordination_only`
-- `orch_default_cli_routing`
-- `orch_unconfirmed_unknowns`
-- `orch_atomic_single_objective_scope`
-- `orch_single_orchestrator_authority`
-- `orch_concise_subagent_briefs`
-- `orch_spec_refined_plan_verbosity`
-- `orch_codex_model_default`
-
-Single-orchestrator topology is required: one orchestrator agent owns cross-task coordination/context and subagents execute delegated atomic tasks only.
-Subagent handoff brevity and spec/refined-spec/plan verbosity budgets are defined in `contracts.orchestratorSubagent.verbosityBudgets`.
-Default model routing is policy-defined by role/risk:
-- orchestrator: `gpt-5.3-codex` with `xhigh` reasoning effort
-- subagents: `gpt-5.3-codex` with `high` reasoning effort
-- low-risk fast loops only: `gpt-5.3-codex-spark` with explicit verification commands
-Default CLI routing is policy-defined in `contracts.orchestratorSubagent.defaultCliRouting`:
-- Codex agents: `codex`
-- Claude agents: `claude`
-
-## Policy-as-Code Enforcement
-
-- Local: `node .github/scripts/enforce-agent-policies.mjs`
-- Session preflight: `npm run agent:preflight`
-- Managed workflow sync: `npm run agent:sync`
-- Managed workflow drift check: `npm run agent:drift:check`
-- Template-impact declaration gate (PR metadata): `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
-- Release prep (changelog rotation): `npm run release:prepare -- --version <X.Y.Z>`
-- Release notes generator: `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`
-- Release workflow rule: `release:prepare` must promote `## [Unreleased]` into `## [<version>] - <date>` and recreate a fresh empty `## [Unreleased]` scaffold (`Added`, `Changed`, `Fixed`).
-- Release notes source rule: `release:notes` must read items from the corresponding `CHANGELOG.md` version section (plain-English changelog bullets are canonical).
-- Release notes content rule: summarize changes in plain English and avoid raw commit-jargon wording.
-- Route map generator: `npm run route-map:generate`
-- Domain readmes generator: `npm run domain-readmes:generate`
-- JSDoc coverage verify: `npm run jsdoc-coverage:verify`
-- Logging compliance verify: `npm run logging:compliance:verify`
-- Logging policy requirement: runtime code paths should not ship without appropriate scoped logging coverage.
-- CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code`
-- CI template gate: meaningful workflow-path changes must carry `Template-Impact` declaration (`yes` with `Template-Ref`, or `none` with `Template-Impact-Reason`).
-- If process expectations change, update all of:
+- Local-only maintainer instructions live in:
   - `AGENTS.md`
-  - `docs/AGENT_RULES.md`
-  - `docs/AGENT_CONTEXT.md`
-  - `docs/CONTEXT_INDEX.json`
-  - `docs/FEATURE_INDEX.json`
-  - `docs/TEST_MATRIX.md`
-  - `docs/ROUTE_MAP.md`
-  - `docs/JSDOC_COVERAGE.md`
-  - `docs/LOGGING_STANDARDS.md`
-  - `backend/src/routes/README.md`
-  - `backend/src/services/README.md`
-  - `frontend/features/README.md`
-  - `.github/policies/agent-governance.json`
-  - `.github/scripts/enforce-agent-policies.mjs`
-  - `.github/scripts/verify-logging-compliance.mjs`
+  - `.claude/CLAUDE.md`
+- Downstream template sources live in:
+  - `AGENTS_TEMPLATE.md` -> downstream `AGENTS.md`
+  - `.claude-template/CLAUDE.md` -> downstream `.claude/CLAUDE.md`
+- Do not place template-maintainer-only instructions in downstream template sources.
+
+## Repository-Local Rules
+
+- Do not bootstrap this `agents-template` repository as a target project.
+- Keep `.agents` pointed at external workfiles (`../agents-workfiles/agents-template`) for local runtime state.
+- Keep `.agents-template/` as tracked downstream scaffold content only.
+- Keep local runtime `.agents/**` state untracked.
+
+## Maintainer Commands
+
+- New sibling project:
+  - `npm run bootstrap -- --project-name <project-name>`
+- Existing project:
+  - `npm run bootstrap -- --mode existing --target-path ../<project-name> --project-id <project-id>`
+- Managed workflow:
+  - `npm run agent:managed -- --mode check`
+  - `npm run agent:managed -- --fix --recheck`
+- Governance checks:
+  - `npm run policy:check`
+  - `npm run rules:canonical:verify`
+  - `npm run rules:canonical:sync`
+  - `npm run agent:preflight`

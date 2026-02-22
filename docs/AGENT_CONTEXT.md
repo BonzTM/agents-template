@@ -75,6 +75,7 @@ For this repository, documentation updates are part of done for behavior-changin
 - Run `npm run release:prepare -- --version <X.Y.Z>` before release publication.
 - Generate release notes with `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`.
 - Keep `docs/FEATURE_INDEX.json`, `docs/TEST_MATRIX.md`, `docs/ROUTE_MAP.md`, `docs/JSDOC_COVERAGE.md`, and `docs/LOGGING_STANDARDS.md` current.
+- Keep `contracts/rules/canonical-ruleset.json` and `.agent-overrides/rule-overrides.schema.json` synchronized with policy/rules updates (`npm run rules:canonical:verify`).
 - Keep per-domain start-here docs current in `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/README.md`.
 - Maintain canonical continuity in `.agents/CONTINUITY.md` and queue state in `.agents/EXECUTION_QUEUE.json`.
 

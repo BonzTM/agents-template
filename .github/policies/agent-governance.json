@@ -1,12 +1,12 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-02-22.02",
+    "version": "2026-02-22.05",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
     "documentationModel": {
-      "bootstrapFile": "AGENTS.md",
+      "bootstrapFile": "AGENTS_TEMPLATE.md",
       "humanRulesFile": "docs/AGENT_RULES.md",
       "humanContextFile": "docs/AGENT_CONTEXT.md",
       "contextIndexFile": "docs/CONTEXT_INDEX.json",
@@ -15,7 +15,7 @@
       "sessionPreflightScript": ".github/scripts/agent-session-preflight.mjs",
       "sessionPreflightCommand": "npm run agent:preflight",
       "startupReadOrder": [
-        "AGENTS.md",
+        "AGENTS_TEMPLATE.md",
         "docs/AGENT_RULES.md",
         "docs/CONTEXT_INDEX.json",
         "docs/AGENT_CONTEXT.md",
@@ -37,13 +37,14 @@
         "primaryContracts",
         "sessionArtifacts",
         "ruleCatalog",
+        "canonicalRules",
         "orchestratorSubagent",
         "rulesSections",
         "contextSections",
         "commands"
       ],
       "requiredStartupReadOrder": [
-        "AGENTS.md",
+        "AGENTS_TEMPLATE.md",
         "docs/AGENT_RULES.md",
         "docs/CONTEXT_INDEX.json",
         "docs/AGENT_CONTEXT.md",
@@ -79,8 +80,9 @@
         "routesReadmeFile",
         "servicesReadmeFile",
         "frontendFeaturesReadmeFile",
-        "agentSync",
-        "agentDriftCheck",
+        "canonicalRulesVerify",
+        "canonicalRulesSync",
+        "agentManaged",
         "templateImpactCheck"
       ]
     },
@@ -411,7 +413,7 @@
     },
     "workspaceLayout": {
       "canonicalRepoRoot": ".",
-      "canonicalAgentsRoot": "../agents-workfiles/project-template",
+      "canonicalAgentsRoot": "../agents-workfiles/agents-template",
       "worktreesRoot": ".worktrees",
       "enforceWorktreeRoot": true,
       "requireSemanticMergeForAgents": true,
@@ -419,6 +421,23 @@
       "requireWorktreeAgentsSymlink": true,
       "localAgentsPath": ".agents",
       "requireLocalAgentsSymlink": true
+    },
+    "canonicalRules": {
+      "file": "contracts/rules/canonical-ruleset.json",
+      "overrideSchemaFile": ".agent-overrides/rule-overrides.schema.json",
+      "optionalOverrideFile": ".agent-overrides/rule-overrides.json",
+      "verifyScript": "tools/rules/verify-canonical-ruleset.mjs",
+      "npmVerifyScriptName": "rules:canonical:verify",
+      "npmVerifyScriptCommand": "node tools/rules/verify-canonical-ruleset.mjs --check",
+      "npmSyncScriptName": "rules:canonical:sync",
+      "npmSyncScriptCommand": "node tools/rules/verify-canonical-ruleset.mjs --write",
+      "contextIndexSection": "canonicalRules",
+      "contextIndexVerifyCommandKey": "canonicalRulesVerify",
+      "contextIndexSyncCommandKey": "canonicalRulesSync",
+      "profiles": [
+        "base"
+      ],
+      "enabled": true
     },
     "ruleCatalog": {
       "file": "docs/AGENT_RULES.md",
@@ -437,6 +456,8 @@
         "rule_post_compaction_rebootstrap",
         "rule_repo_index_preflight_gate",
         "rule_context_index_drift_guard",
+        "rule_canonical_ruleset_contract_required",
+        "rule_local_rule_overrides_contract_required",
         "rule_canonical_agents_root",
         "rule_worktree_root_required",
         "rule_agents_semantic_merge_required",
@@ -452,6 +473,7 @@
         "orch_scope_tightness",
         "orch_machine_payload_authoritative",
         "orch_delegate_substantive_work",
+        "orch_operator_subagent_default",
         "orch_human_nuance_addendum",
         "orch_atomic_task_delegation",
         "orch_dual_channel_result_envelope",
@@ -543,6 +565,10 @@
         {
           "id": "orch_delegate_substantive_work",
           "statement": "Preserve orchestrator context by delegating substantive implementation/investigation tasks whenever delegation is available."
+        },
+        {
+          "id": "orch_operator_subagent_default",
+          "statement": "Default to operator/subagent delegation for non-trivial work; direct single-agent execution is allowed only for trivial tasks."
         },
         {
           "id": "orch_human_nuance_addendum",
@@ -685,14 +711,7 @@
       ],
       "chartDir": "charts/project",
       "releaseImageSections": [
-        "aio",
-        "backend",
-        "backendWorker",
-        "frontend",
-        "tidalSidecar",
-        "ytmusicStreamer",
-        "audioAnalyzer",
-        "audioAnalyzerClap"
+        "app"
       ]
     },
     "profiles": {
@@ -709,7 +728,7 @@
   "checks": {
     "requiredTextSnippets": [
       {
-        "file": "AGENTS.md",
+        "file": "AGENTS_TEMPLATE.md",
         "snippets": [
           "## Required Startup Order",
           "docs/AGENT_RULES.md",
@@ -719,10 +738,13 @@
           "npm run agent:preflight",
           "## Canonical Sources and Precedence",
           "Machine-readable canonical policy: `.github/policies/agent-governance.json`",
+          "Canonical rule catalog: `contracts/rules/canonical-ruleset.json`",
+          "Local rule override schema: `.agent-overrides/rule-overrides.schema.json`",
           "## Session Context Artifacts",
           "Shared queue authority for orchestrator and subagents: `.agents/EXECUTION_QUEUE.json` (single source of truth)",
           "## Orchestrator/Subagent Contract Pointer",
           "## Policy-as-Code Enforcement",
+          "npm run rules:canonical:verify",
           "docs/FEATURE_INDEX.json",
           "docs/TEST_MATRIX.md",
           "docs/ROUTE_MAP.md",
@@ -736,6 +758,7 @@
           "## Rule ID Catalog (Machine Cross-Reference)",
           "`rule_context_index_usage`",
           "`rule_execution_queue_required`",
+          "`rule_canonical_ruleset_contract_required`",
           "`rule_canonical_agents_root`",
           "`rule_worktree_root_required`",
           "`rule_logging_contract_required`",
@@ -782,6 +805,9 @@
       },
       {
         "file": "docs/README.md",
+        "profiles": [
+          "node-web"
+        ],
         "snippets": [
           "[`FEATURE_INDEX.json`](FEATURE_INDEX.json)",
           "[`TEST_MATRIX.md`](TEST_MATRIX.md)",
@@ -816,6 +842,8 @@
           "\"agent:queue:start\"",
           "\"agent:queue:complete\"",
           "\"agent:queue:close-feature\"",
+          "\"rules:canonical:verify\"",
+          "\"rules:canonical:sync\"",
           "\"feature-index:verify\"",
           "\"release:prepare\"",
           "\"release:verify\"",
@@ -833,7 +861,7 @@
     ],
     "requiredMarkdownSections": [
       {
-        "file": "AGENTS.md",
+        "file": "AGENTS_TEMPLATE.md",
         "sections": [
           "## Required Startup Order",
           "## Canonical Sources and Precedence",
@@ -893,6 +921,9 @@
       },
       {
         "file": "docs/TEST_MATRIX.md",
+        "profiles": [
+          "node-web"
+        ],
         "sections": [
           "# Test Matrix",
           "## Usage Rule",
@@ -904,6 +935,9 @@
       },
       {
         "file": "docs/JSDOC_COVERAGE.md",
+        "profiles": [
+          "node-web"
+        ],
         "sections": [
           "# JSDoc Coverage Baseline",
           "## Coverage Summary",
@@ -923,6 +957,9 @@
       },
       {
         "file": "docs/ROUTE_MAP.md",
+        "profiles": [
+          "node-web"
+        ],
         "sections": [
           "# Route Map",
           "## Backend API Endpoint Map",
@@ -932,6 +969,9 @@
       },
       {
         "file": "backend/src/routes/README.md",
+        "profiles": [
+          "node-web"
+        ],
         "sections": [
           "# Backend Routes",
           "## Start Here",
@@ -941,6 +981,9 @@
       },
       {
         "file": "backend/src/services/README.md",
+        "profiles": [
+          "node-web"
+        ],
         "sections": [
           "# Backend Services",
           "## Start Here",
@@ -950,6 +993,9 @@
       },
       {
         "file": "frontend/features/README.md",
+        "profiles": [
+          "node-web"
+        ],
         "sections": [
           "# Frontend Features",
           "## Start Here",
@@ -962,7 +1008,7 @@
       {
         "file": "docs/AGENT_RULES.md",
         "sequence": [
-          "1. Re-read `AGENTS.md`, `docs/AGENT_RULES.md`, `docs/CONTEXT_INDEX.json`, and `docs/AGENT_CONTEXT.md`.",
+          "1. Re-read `AGENTS_TEMPLATE.md`, `docs/AGENT_RULES.md`, `docs/CONTEXT_INDEX.json`, and `docs/AGENT_CONTEXT.md`.",
           "2. Confirm branch + workspace state (`git rev-parse --abbrev-ref HEAD`, `git status --short`).",
           "3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/CONTINUITY.md`; both are required startup artifacts.",
           "4. Run `npm run agent:preflight` to regenerate `.agents/SESSION_BRIEF.json`.",

@@ -14,23 +14,12 @@ import {
 
 const POLICY_PATH = ".github/policies/agent-governance.json";
 const DEFAULT_RELEASE_IMAGE_SECTIONS = [
-  "aio",
-  "backend",
-  "backendWorker",
-  "frontend",
-  "tidalSidecar",
-  "ytmusicStreamer",
-  "audioAnalyzer",
-  "audioAnalyzerClap",
+  "app",
 ];
 const DEFAULT_PACKAGE_TARGETS = [
   {
-    label: "frontend",
-    dir: "frontend",
-  },
-  {
-    label: "backend",
-    dir: "backend",
+    label: "root",
+    dir: ".",
   },
 ];
 

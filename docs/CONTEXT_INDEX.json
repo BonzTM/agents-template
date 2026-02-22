@@ -1,11 +1,11 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-22.02",
+    "version": "2026-02-22.05",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
-    "AGENTS.md",
+    "AGENTS_TEMPLATE.md",
     "docs/AGENT_RULES.md",
     "docs/CONTEXT_INDEX.json",
     "docs/AGENT_CONTEXT.md",
@@ -13,9 +13,10 @@
     ".agents/CONTINUITY.md"
   ],
   "primaryContracts": {
-    "bootstrapFile": "AGENTS.md",
+    "bootstrapFile": "AGENTS_TEMPLATE.md",
     "rulesFile": "docs/AGENT_RULES.md",
     "contextFile": "docs/AGENT_CONTEXT.md",
+    "canonicalRulesFile": "contracts/rules/canonical-ruleset.json",
     "policyFile": ".github/policies/agent-governance.json",
     "enforcerFile": ".github/scripts/enforce-agent-policies.mjs",
     "preflightFile": ".github/scripts/agent-session-preflight.mjs"
@@ -104,7 +105,7 @@
     },
     "workspaceLayout": {
       "canonicalRepoRoot": ".",
-      "canonicalAgentsRoot": "../agents-workfiles/project-template",
+      "canonicalAgentsRoot": "../agents-workfiles/agents-template",
       "worktreesRoot": ".worktrees",
       "semanticMergeRequired": true,
       "semanticMergeOnAgentsEditRequired": true,
@@ -146,10 +147,18 @@
     "file": "docs/AGENT_RULES.md",
     "section": "## Rule ID Catalog (Machine Cross-Reference)"
   },
+  "canonicalRules": {
+    "file": "contracts/rules/canonical-ruleset.json",
+    "overrideSchemaFile": ".agent-overrides/rule-overrides.schema.json",
+    "optionalOverrideFile": ".agent-overrides/rule-overrides.json",
+    "verifyCommandKey": "canonicalRulesVerify",
+    "syncCommandKey": "canonicalRulesSync"
+  },
   "orchestratorSubagent": {
     "policyPath": "contracts.orchestratorSubagent",
     "singleOrchestratorOnly": true,
     "allowSubagentDelegation": false,
+    "defaultPattern": "operator_subagent_unless_trivial",
     "modelRouting": {
       "orchestrator": "gpt-5.3-codex",
       "subagent": "gpt-5.3-codex",
@@ -305,8 +314,9 @@
     "routesReadmeFile": "cat backend/src/routes/README.md",
     "servicesReadmeFile": "cat backend/src/services/README.md",
     "frontendFeaturesReadmeFile": "cat frontend/features/README.md",
-    "agentSync": "npm run agent:sync",
-    "agentDriftCheck": "npm run agent:drift:check",
+    "canonicalRulesVerify": "npm run rules:canonical:verify",
+    "canonicalRulesSync": "npm run rules:canonical:sync",
+    "agentManaged": "npm run agent:managed -- --mode check",
     "templateImpactCheck": "npm run agent:template-impact:check -- --base-ref origin/<base-branch>"
   },
   "profiles": {
