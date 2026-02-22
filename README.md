@@ -7,6 +7,7 @@ This template provides policy-as-code enforcement, startup/preflight contracts, 
 ## Agent Clients
 
 - `.agents-config/AGENTS_TEMPLATE.md` is the downstream cross-agent startup-contract source and is synced as downstream `AGENTS.md`.
+- Downstream projects can place project-local contract adjustments in `AGENTS.override.md` (read immediately after `AGENTS.md`).
 - `.agents-config/templates/claude/CLAUDE.md` is the downstream Claude bootstrap source and is synced as downstream `.claude/CLAUDE.md`.
 - `AGENTS.md` and `.claude/CLAUDE.md` are repository-local maintainer instructions for `agents-template` itself.
 
@@ -68,7 +69,8 @@ npm run bootstrap -- --mode existing --target-path ../<project-name> --project-i
 - Managed workflow files are declared in `.agents-config/agent-managed.json`.
 - Canonical source is declared in `.agents-config/agent-managed.json` (`template.repo`, `template.ref`, `template.localPath`) and seeded from `.agents-config/tools/bootstrap/managed-files.template.json`.
 - Managed file authority defaults to template-canonical via `.agents-config/agent-managed.json.canonical_contract.default_authority = "template"`.
-- Known override surfaces are explicit: managed entries must set `allow_override: true` before `.agents-config/agent-overrides/<managed-path>` payload files are accepted.
+- Known override surfaces are explicit: managed entries must set `allow_override: true` before override payload files are accepted.
+- Override payloads default to `.agents-config/agent-overrides/<managed-path>` and can be remapped per entry via `override_path` (for example `AGENTS.override.md`).
 - Bootstrap auto-seeds allowlisted override payloads for rewritten project-specific files only when target content diverges from template source.
 - Unknown/non-allowlisted `.agents-config/agent-overrides/**` payload files fail `npm run agent:managed -- --mode check`.
 - Optional non-template ownership can be declared per entry with `authority: "project"` when a file is intentionally project-local.

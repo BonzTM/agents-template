@@ -164,6 +164,48 @@ function normalizeRelativePath(input) {
   return normalizePath(input).replace(/^\.\//, "");
 }
 
+function resolveOverrideRepoRelativePath({
+  entry,
+  targetRelativePath,
+  overrideRoot,
+}) {
+  const explicitOverridePath = toNonEmptyString(entry?.override_path);
+  if (explicitOverridePath) {
+    if (path.isAbsolute(explicitOverridePath)) {
+      fail(
+        `Managed entry ${JSON.stringify(entry?.path ?? "<unknown>")} uses absolute override_path; use a repo-relative path.`,
+      );
+    }
+    return normalizeRelativePath(explicitOverridePath);
+  }
+
+  const normalizedOverrideRoot = toNonEmptyString(overrideRoot)
+    ? normalizeRelativePath(overrideRoot)
+    : "";
+  if (!normalizedOverrideRoot) {
+    return null;
+  }
+
+  return normalizeRelativePath(
+    path.posix.join(normalizedOverrideRoot, normalizeRelativePath(targetRelativePath)),
+  );
+}
+
+function toPathRelativeToRoot({ repoRelativePath, rootRelativePath }) {
+  const normalizedRepoPath = normalizeRelativePath(repoRelativePath);
+  const normalizedRoot = normalizeRelativePath(rootRelativePath);
+  if (!normalizedRoot) {
+    return normalizedRepoPath;
+  }
+  if (normalizedRepoPath === normalizedRoot) {
+    return "";
+  }
+  if (!normalizedRepoPath.startsWith(`${normalizedRoot}/`)) {
+    return null;
+  }
+  return normalizedRepoPath.slice(normalizedRoot.length + 1);
+}
+
 function listRelativeFilesRecursively(rootPath) {
   if (!fs.existsSync(rootPath)) {
     return [];
@@ -375,17 +417,15 @@ async function getTemplateFileContent({
 async function resolveExpectedContent({
   repoRoot,
   source,
-  overrideRoot,
   allowOverride,
-  targetRelativePath,
+  overrideRepoRelativePath,
   templateRelativePath,
   remoteCache,
 }) {
-  const normalizedTarget = normalizePath(targetRelativePath);
   const normalizedTemplate = normalizePath(templateRelativePath);
 
-  if (overrideRoot && allowOverride) {
-    const overridePath = path.resolve(repoRoot, overrideRoot, normalizedTarget);
+  if (allowOverride && overrideRepoRelativePath) {
+    const overridePath = path.resolve(repoRoot, overrideRepoRelativePath);
     if (fs.existsSync(overridePath)) {
       return {
         content: fs.readFileSync(overridePath, "utf8"),
@@ -439,16 +479,31 @@ async function run() {
   }
 
   const canonicalContract = resolveCanonicalContract(manifest);
-  const knownManagedPaths = new Set();
+  const knownOverrideRootRelativePaths = new Set();
   for (const entry of managedFiles) {
     const candidatePath = toNonEmptyString(entry?.path);
     if (!candidatePath) {
       continue;
     }
-    knownManagedPaths.add(normalizeRelativePath(candidatePath));
+    const overrideRepoRelativePath = resolveOverrideRepoRelativePath({
+      entry,
+      targetRelativePath: candidatePath,
+      overrideRoot,
+    });
+    if (overrideRepoRelativePath === null) {
+      continue;
+    }
+    const overrideRootRelativePath = toPathRelativeToRoot({
+      repoRelativePath: overrideRepoRelativePath,
+      rootRelativePath: overrideRoot,
+    });
+    if (overrideRootRelativePath !== null) {
+      knownOverrideRootRelativePaths.add(overrideRootRelativePath);
+    }
   }
 
   const activeEntriesByPath = new Map();
+  const activeEntriesByOverrideRootRelativePath = new Map();
   const activeEntries = [];
   for (const entry of activeEntriesRaw) {
     const targetRelativePath = toNonEmptyString(entry?.path);
@@ -464,11 +519,32 @@ async function run() {
     const templateRelativePath = toNonEmptyString(entry?.source_path) ?? targetRelativePath;
     const authority = resolveEntryAuthority(entry, canonicalContract);
     const allowOverride = entry?.allow_override === true;
+    const explicitOverridePath = toNonEmptyString(entry?.override_path);
     if (allowOverride && authority !== "template") {
       fail(
         `Managed entry ${normalizedTargetPath} cannot set allow_override=true when authority=${authority}.`,
       );
     }
+    if (!allowOverride && explicitOverridePath) {
+      fail(
+        `Managed entry ${normalizedTargetPath} sets override_path but does not set allow_override=true.`,
+      );
+    }
+
+    const overrideRepoRelativePath = allowOverride
+      ? resolveOverrideRepoRelativePath({
+          entry,
+          targetRelativePath: targetRelativePath,
+          overrideRoot,
+        })
+      : null;
+    const overrideRootRelativePath =
+      overrideRepoRelativePath === null
+        ? null
+        : toPathRelativeToRoot({
+            repoRelativePath: overrideRepoRelativePath,
+            rootRelativePath: overrideRoot,
+          });
 
     const resolvedEntry = {
       targetRelativePath,
@@ -476,9 +552,19 @@ async function run() {
       templateRelativePath,
       authority,
       allowOverride,
+      overrideRepoRelativePath,
+      overrideRootRelativePath,
     };
 
     activeEntriesByPath.set(normalizedTargetPath, resolvedEntry);
+    if (overrideRootRelativePath !== null) {
+      if (activeEntriesByOverrideRootRelativePath.has(overrideRootRelativePath)) {
+        fail(
+          `Duplicate override path under ${overrideRoot}: ${overrideRootRelativePath}`,
+        );
+      }
+      activeEntriesByOverrideRootRelativePath.set(overrideRootRelativePath, resolvedEntry);
+    }
     activeEntries.push(resolvedEntry);
   }
 
@@ -491,7 +577,7 @@ async function run() {
         continue;
       }
 
-      if (!knownManagedPaths.has(overrideRelativePath)) {
+      if (!knownOverrideRootRelativePaths.has(overrideRelativePath)) {
         overrideViolations.push({
           path: overrideRelativePath,
           reason: "no managed_files entry maps to this override path",
@@ -499,7 +585,7 @@ async function run() {
         continue;
       }
 
-      const activeEntry = activeEntriesByPath.get(overrideRelativePath);
+      const activeEntry = activeEntriesByOverrideRootRelativePath.get(overrideRelativePath);
       if (!activeEntry) {
         continue;
       }
@@ -546,9 +632,8 @@ async function run() {
       const expected = await resolveExpectedContent({
         repoRoot,
         source,
-        overrideRoot,
         allowOverride: false,
-        targetRelativePath: entry.targetRelativePath,
+        overrideRepoRelativePath: null,
         templateRelativePath: entry.templateRelativePath,
         remoteCache,
       });
@@ -566,9 +651,8 @@ async function run() {
     const expected = await resolveExpectedContent({
       repoRoot,
       source,
-      overrideRoot,
       allowOverride: entry.allowOverride,
-      targetRelativePath: entry.targetRelativePath,
+      overrideRepoRelativePath: entry.overrideRepoRelativePath,
       templateRelativePath: entry.templateRelativePath,
       remoteCache,
     });

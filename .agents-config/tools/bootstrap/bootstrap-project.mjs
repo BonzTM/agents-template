@@ -86,6 +86,33 @@ function toPosixPath(filePath) {
   return filePath.split(path.sep).join("/");
 }
 
+function normalizeRelativePath(filePath) {
+  return toPosixPath(filePath).replace(/^\.\//, "");
+}
+
+function resolveManagedOverrideRepoPath({ entry, targetRelativePath, overrideRoot }) {
+  const explicitOverridePath = toNonEmptyString(entry?.override_path);
+  if (explicitOverridePath) {
+    if (path.isAbsolute(explicitOverridePath)) {
+      fail(
+        `Managed entry ${JSON.stringify(entry?.path ?? "<unknown>")} uses absolute override_path; use a repo-relative path.`,
+      );
+    }
+    return normalizeRelativePath(explicitOverridePath);
+  }
+
+  const normalizedOverrideRoot = toNonEmptyString(overrideRoot)
+    ? normalizeRelativePath(overrideRoot)
+    : "";
+  if (!normalizedOverrideRoot) {
+    return null;
+  }
+
+  return normalizeRelativePath(
+    path.posix.join(normalizedOverrideRoot, normalizeRelativePath(targetRelativePath)),
+  );
+}
+
 function validateProjectId(projectId) {
   if (!projectId) {
     fail("Missing required --project-id <id>.");
@@ -636,7 +663,15 @@ function syncAllowlistedManagedOverrides({
       }
     }
 
-    const overridePath = path.resolve(repoRoot, overrideRoot, targetRelativePath);
+    const overrideRelativePath = resolveManagedOverrideRepoPath({
+      entry,
+      targetRelativePath,
+      overrideRoot,
+    });
+    if (!overrideRelativePath) {
+      continue;
+    }
+    const overridePath = path.resolve(repoRoot, overrideRelativePath);
 
     if (!shouldWriteOverride) {
       if (fs.existsSync(overridePath) && fs.statSync(overridePath).isFile()) {
@@ -649,7 +684,9 @@ function syncAllowlistedManagedOverrides({
     fs.writeFileSync(overridePath, targetContent, "utf8");
   }
 
-  ensureDir(overrideRootAbs);
+  if (toNonEmptyString(overrideRoot)) {
+    ensureDir(overrideRootAbs);
+  }
 }
 
 function runPreflight(repoRoot) {
