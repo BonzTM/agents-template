@@ -2,18 +2,26 @@
 
 Bootstrap contract for AI coding agents in this repository.
 
+## Local AGENTS Mode Picker
+
+Local repository naming is the definitive mode selector:
+
+- Replacement mode: if `AGENTS.replace.md` exists, treat it as the authoritative local AGENTS contract and ignore `AGENTS.override.md`.
+- Additive mode (default): if `AGENTS.replace.md` is absent, use canonical `AGENTS.md` plus optional additive deltas in `AGENTS.override.md`.
+
 ## Required Startup Order
 
 Read these in order before non-trivial work:
 
 1. `AGENTS.md`
-2. `AGENTS.override.md` (when present; repo-local overrides to this contract)
-3. `.agents-config/docs/AGENT_RULES.md`
-4. `.agents-config/docs/CONTEXT_INDEX.json`
-5. `.agents-config/docs/AGENT_CONTEXT.md`
-6. `.agents/EXECUTION_QUEUE.json` (when present)
-7. `.agents/CONTINUITY.md`
-8. Run `npm run agent:preflight` to refresh `.agents/SESSION_BRIEF.json` and enforce repository-index readiness
+2. `AGENTS.replace.md` (when present; replacement mode, then skip step 3)
+3. `AGENTS.override.md` (when present and `AGENTS.replace.md` is absent; additive-only local deltas)
+4. `.agents-config/docs/AGENT_RULES.md`
+5. `.agents-config/docs/CONTEXT_INDEX.json`
+6. `.agents-config/docs/AGENT_CONTEXT.md`
+7. `.agents/EXECUTION_QUEUE.json` (when present)
+8. `.agents/CONTINUITY.md`
+9. Run `npm run agent:preflight` to refresh `.agents/SESSION_BRIEF.json` and enforce repository-index readiness
 
 ## Canonical Sources and Precedence
 
@@ -25,6 +33,7 @@ Read these in order before non-trivial work:
 - Optional local rule overrides file: `.agents-config/agent-overrides/rule-overrides.json`
 - Managed workflow manifest: `.agents-config/agent-managed.json`
 - Managed workflow template seed: `.agents-config/tools/bootstrap/managed-files.template.json`
+- Optional local AGENTS replacement file: `AGENTS.replace.md`
 - Optional local AGENTS override file: `AGENTS.override.md`
 - Release notes source of truth: `CHANGELOG.md`
 - Release notes template artifact: `.agents-config/docs/RELEASE_NOTES_TEMPLATE.md`
@@ -43,10 +52,11 @@ Read these in order before non-trivial work:
 Conflict resolution order:
 
 1. Latest explicit user instruction.
-2. `AGENTS.override.md` (when present).
-3. Machine-readable policy contracts/checks.
-4. Human-readable rules contract.
-5. Human-readable context contract.
+2. `AGENTS.replace.md` (when present).
+3. `AGENTS.override.md` (when present and `AGENTS.replace.md` is absent).
+4. Machine-readable policy contracts/checks.
+5. Human-readable rules contract.
+6. Human-readable context contract.
 
 ## Session Context Artifacts
 
@@ -133,7 +143,8 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Managed workflow check: `npm run agent:managed -- --mode check`
 - Managed workflow fix/recheck: `npm run agent:managed -- --fix --recheck`
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
-- `AGENTS.md` is template-managed; local project-specific adjustments should go in `AGENTS.override.md` (do not hand-edit canonical `AGENTS.md`).
+- `AGENTS.md` is template-managed. Do not hand-edit canonical `AGENTS.md`.
+- Use `AGENTS.replace.md` for full replacement mode, or `AGENTS.override.md` for additive mode.
 - Bootstrap seeds allowlisted override payloads when rewritten local content diverges from template source.
 - Managed override gate: unknown/non-allowlisted `.agents-config/agent-overrides/**` payload files fail managed checks.
 - Template-impact declaration gate (PR metadata): `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`

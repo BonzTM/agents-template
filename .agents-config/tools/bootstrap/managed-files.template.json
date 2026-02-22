@@ -72,9 +72,7 @@
       "source_path": ".agents-config/AGENTS_TEMPLATE.md",
       "profiles": [
         "base"
-      ],
-      "allow_override": true,
-      "override_path": "AGENTS.override.md"
+      ]
     },
     {
       "path": ".agents-config/docs/AGENT_RULES.md",
