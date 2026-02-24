@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-02-24.08",
+    "version": "2026-02-24.09",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
@@ -269,6 +269,10 @@
         "purpose_goals",
         "non_goals"
       ],
+      "planMachineStatusesRequiringNonEmptyPreSpecNonGoals": [
+        "ready",
+        "deferred"
+      ],
       "planMachineStatusesRequiringNarrativeContent": [
         "in_progress",
         "complete"
@@ -292,6 +296,14 @@
         "completion_summary"
       ],
       "planMachineNarrativeStepOptionalFields": [],
+      "planMachineImplementationStepDeliverableDenyPatterns": [
+        "^\\s*(todo|tbd|placeholder|n\\/?a|none|unknown)\\s*$",
+        "^\\s*(step|task|item|deliverable)\\s*\\d+\\s*$",
+        "^\\s*<[^>]+>\\s*$"
+      ],
+      "planMachineStepStatusesRequiringNonEmptyCompletionSummary": [
+        "complete"
+      ],
       "planMachineImplementationCompletionSummaryRequiredFields": [
         "delivered",
         "files_functions_hooks_touched",
@@ -332,6 +344,15 @@
         ".agents/plans/archived": [
           "complete",
           "archived"
+        ]
+      },
+      "planMachineStatusCoherence": {
+        "requireInProgressPlanStatusWhenAnyStepInProgress": true,
+        "statusesRequiringAllImplementationStepsComplete": [
+          "complete"
+        ],
+        "statusesForbiddingInProgressImplementationSteps": [
+          "deferred"
         ]
       },
       "archivedPlanSyncEnabled": true,
@@ -550,6 +571,11 @@
         "rule_queue_scoped_context_read",
         "rule_queue_archive_on_complete",
         "rule_plan_machine_contract_required",
+        "rule_plan_step_reference_required",
+        "rule_plan_non_goals_status_gate",
+        "rule_plan_placeholder_deliverables_forbidden",
+        "rule_plan_complete_step_summary_required",
+        "rule_plan_status_coherence_required",
         "rule_scope_tight_no_overbroad_refactor",
         "rule_hybrid_machine_human_contract",
         "rule_policy_sync_required",

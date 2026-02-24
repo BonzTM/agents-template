@@ -576,6 +576,26 @@ function normalizeStringArray(value) {
   return normalized;
 }
 
+function compileRegexPatternList(value) {
+  const compiled = [];
+  for (const pattern of normalizeStringArray(value)) {
+    try {
+      compiled.push(new RegExp(pattern, "i"));
+    } catch (_error) {
+      // Ignore invalid patterns in preflight normalization; policy checks enforce validity.
+    }
+  }
+  return compiled;
+}
+
+function matchesAnyRegexPattern(value, regexes) {
+  const text = toNonEmptyString(value);
+  if (!text || !Array.isArray(regexes) || regexes.length === 0) {
+    return false;
+  }
+  return regexes.some((regex) => regex.test(text));
+}
+
 function ensureUniqueValue(baseValue, usedValues, fallbackPrefix, fallbackIndex) {
   const normalizedBase =
     toNonEmptyString(baseValue) ?? `${fallbackPrefix}-${fallbackIndex + 1}`;
@@ -809,6 +829,10 @@ function normalizeImplementationPlanSteps(
   value,
   {
     allowedStepStatuses = ["pending", "in_progress", "complete", "blocked"],
+    fallbackReference = null,
+    fallbackSummary = null,
+    implementationStepDeliverableDenyPatterns = [],
+    stepStatusesRequiringNonEmptyCompletionSummary = ["complete"],
     completionSummaryRequiredFields = [
       "delivered",
       "files_functions_hooks_touched",
@@ -820,34 +844,114 @@ function normalizeImplementationPlanSteps(
     return [];
   }
 
+  const fallbackReferenceText = toNonEmptyString(fallbackReference);
+  const fallbackSummaryText = normalizeNarrativeText(fallbackSummary) ?? "";
+  const deliverableDenyRegexes = compileRegexPatternList(
+    implementationStepDeliverableDenyPatterns,
+  );
+  const completeStepStatuses = new Set(
+    normalizeStringArray(stepStatusesRequiringNonEmptyCompletionSummary),
+  );
+  const normalizeDeliverableCandidate = (candidate) => {
+    const text = normalizeNarrativeText(candidate);
+    if (!text) {
+      return null;
+    }
+    return text.length > 160 ? `${text.slice(0, 157)}...` : text;
+  };
+
   const normalized = [];
   for (const [index, entry] of value.entries()) {
     const entryObject = isPlainObject(entry) ? entry : {};
-    const fallbackDeliverable =
-      toNonEmptyString(entryObject.deliverable) ??
-      toNonEmptyString(entryObject.title) ??
-      toNonEmptyString(entryObject.name) ??
-      toNonEmptyString(entryObject.summary) ??
-      toNonEmptyString(entryObject.id) ??
-      toNonEmptyString(entry) ??
-      `Step ${index + 1}`;
+    const stepNotes = normalizeNarrativeText(entryObject.notes);
+    const fallbackSummaryDeliverable = fallbackSummaryText
+      ? `Implement: ${fallbackSummaryText.split(/\n+/)[0]?.trim() ?? fallbackSummaryText}`
+      : null;
+    const deliverableCandidates = [
+      entryObject.deliverable,
+      entryObject.title,
+      entryObject.name,
+      entryObject.summary,
+      stepNotes,
+      entryObject.id,
+      entry,
+      fallbackSummaryDeliverable,
+      `Step ${index + 1}`,
+    ]
+      .map((candidate) => normalizeDeliverableCandidate(candidate))
+      .filter(Boolean);
+    let fallbackDeliverable = deliverableCandidates[0] ?? `Step ${index + 1}`;
+    if (matchesAnyRegexPattern(fallbackDeliverable, deliverableDenyRegexes)) {
+      const nonPlaceholderCandidate = deliverableCandidates.find(
+        (candidate) => !matchesAnyRegexPattern(candidate, deliverableDenyRegexes),
+      );
+      if (nonPlaceholderCandidate) {
+        fallbackDeliverable = nonPlaceholderCandidate;
+      }
+    }
     const status = normalizePlanNarrativeStepStatus(
       entryObject.status,
       allowedStepStatuses,
     );
     const references = normalizeStringArray(
-      entryObject.references ?? entryObject.refs ?? entryObject.reference,
+      entryObject.references ??
+        entryObject.refs ??
+        entryObject.reference ??
+        entryObject.files ??
+        entryObject.file ??
+        entryObject.path ??
+        entryObject.paths ??
+        entryObject.links ??
+        entryObject.link ??
+        entryObject.url,
     );
+    const completionSummaryObject = isPlainObject(entryObject.completion_summary)
+      ? entryObject.completion_summary
+      : {};
+    if (references.length === 0) {
+      const fallbackSummaryReferences = normalizeStringArray(
+        completionSummaryObject.files_functions_hooks_touched ??
+          completionSummaryObject.files_functions_hooks ??
+          completionSummaryObject.files_touched,
+      );
+      references.push(...fallbackSummaryReferences);
+    }
+    if (references.length === 0 && fallbackReferenceText) {
+      references.push(fallbackReferenceText);
+    }
     const completionSummary = normalizeImplementationCompletionSummary(
       entryObject.completion_summary,
-      normalizeNarrativeText(entryObject.notes),
+      stepNotes,
       completionSummaryRequiredFields,
     );
+    if (completeStepStatuses.has(status)) {
+      if (
+        Array.isArray(completionSummary.delivered) &&
+        completionSummary.delivered.length === 0 &&
+        fallbackDeliverable
+      ) {
+        completionSummary.delivered.push(fallbackDeliverable);
+      }
+      if (
+        Array.isArray(completionSummary.files_functions_hooks_touched) &&
+        completionSummary.files_functions_hooks_touched.length === 0 &&
+        references.length > 0
+      ) {
+        completionSummary.files_functions_hooks_touched.push(...references);
+      }
+      if (
+        Array.isArray(completionSummary.verification_testing) &&
+        completionSummary.verification_testing.length === 0 &&
+        stepNotes
+      ) {
+        completionSummary.verification_testing.push(stepNotes);
+      }
+    }
 
     normalized.push({
       status,
       deliverable: fallbackDeliverable,
-      references,
+      references: [...new Set(references)],
       completion_summary: completionSummary,
     });
   }
@@ -890,6 +994,9 @@ function normalizeImplementationNarrativeSection(
   {
     allowedStepStatuses = ["pending", "in_progress", "complete", "blocked"],
     stepsFieldName = "steps",
+    fallbackReference = null,
+    implementationStepDeliverableDenyPatterns = [],
+    stepStatusesRequiringNonEmptyCompletionSummary = ["complete"],
     completionSummaryRequiredFields = [
       "delivered",
       "files_functions_hooks_touched",
@@ -919,6 +1026,10 @@ function normalizeImplementationNarrativeSection(
     Array.isArray(value[normalizedStepsFieldName]) ? value[normalizedStepsFieldName] : value.steps,
     {
       allowedStepStatuses,
+      fallbackReference,
+      fallbackSummary: summary,
+      implementationStepDeliverableDenyPatterns,
+      stepStatusesRequiringNonEmptyCompletionSummary,
       completionSummaryRequiredFields,
     },
   );
@@ -1120,6 +1231,8 @@ function buildPlanMachineTemplate({
   refinedSpecListFieldName,
   implementationStepsFieldName,
   allowedNarrativeStepStatuses,
+  implementationStepDeliverableDenyPatterns,
+  stepStatusesRequiringNonEmptyCompletionSummary,
   implementationCompletionSummaryRequiredFields,
   allowedStatusByRoot,
 }) {
@@ -1166,6 +1279,13 @@ function buildPlanMachineTemplate({
         {
           allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
           stepsFieldName: normalizedImplementationStepsFieldName,
+          fallbackReference: planRef,
+          implementationStepDeliverableDenyPatterns: normalizeStringArray(
+            implementationStepDeliverableDenyPatterns,
+          ),
+          stepStatusesRequiringNonEmptyCompletionSummary: normalizeStringArray(
+            stepStatusesRequiringNonEmptyCompletionSummary,
+          ),
           completionSummaryRequiredFields: normalizeStringArray(
             implementationCompletionSummaryRequiredFields,
           ),
@@ -1248,6 +1368,8 @@ function normalizePlanMachineDocument({
   refinedSpecListFieldName,
   implementationStepsFieldName,
   allowedNarrativeStepStatuses,
+  implementationStepDeliverableDenyPatterns,
+  stepStatusesRequiringNonEmptyCompletionSummary,
   implementationCompletionSummaryRequiredFields,
   allowedPlanningStageStates,
   allowedSubagentRequirements,
@@ -1277,6 +1399,8 @@ function normalizePlanMachineDocument({
     refinedSpecListFieldName: normalizedRefinedSpecListFieldName,
     implementationStepsFieldName: normalizedImplementationStepsFieldName,
     allowedNarrativeStepStatuses,
+    implementationStepDeliverableDenyPatterns,
+    stepStatusesRequiringNonEmptyCompletionSummary,
     implementationCompletionSummaryRequiredFields,
     allowedStatusByRoot,
   });
@@ -1356,6 +1480,13 @@ function normalizePlanMachineDocument({
         {
           allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
           stepsFieldName: normalizedImplementationStepsFieldName,
+          fallbackReference: planRef,
+          implementationStepDeliverableDenyPatterns: normalizeStringArray(
+            implementationStepDeliverableDenyPatterns,
+          ),
+          stepStatusesRequiringNonEmptyCompletionSummary: normalizeStringArray(
+            stepStatusesRequiringNonEmptyCompletionSummary,
+          ),
           completionSummaryRequiredFields: normalizeStringArray(
             implementationCompletionSummaryRequiredFields,
           ),
@@ -1726,6 +1857,12 @@ function main() {
       "non_goals",
     ],
   );
+  const planMachineStatusesRequiringNonEmptyPreSpecNonGoals = normalizeStringArray(
+    sessionArtifacts.planMachineStatusesRequiringNonEmptyPreSpecNonGoals ?? [
+      "ready",
+      "deferred",
+    ],
+  );
   const planMachineStatusesRequiringNarrativeContent = normalizeStringArray(
     sessionArtifacts.planMachineStatusesRequiringNarrativeContent ?? [
       "in_progress",
@@ -1775,6 +1912,18 @@ function main() {
   const planMachineNarrativeStepOptionalFields = normalizeStringArray(
     sessionArtifacts.planMachineNarrativeStepOptionalFields ?? [],
   );
+  const planMachineImplementationStepDeliverableDenyPatterns = normalizeStringArray(
+    sessionArtifacts.planMachineImplementationStepDeliverableDenyPatterns ?? [
+      "^\\s*(todo|tbd|placeholder|n\\/?a|none|unknown)\\s*$",
+      "^\\s*(step|task|item|deliverable)\\s*\\d+\\s*$",
+      "^\\s*<[^>]+>\\s*$",
+    ],
+  );
+  const planMachineStepStatusesRequiringNonEmptyCompletionSummary = normalizeStringArray(
+    sessionArtifacts.planMachineStepStatusesRequiringNonEmptyCompletionSummary ?? [
+      "complete",
+    ],
+  );
   const planMachineImplementationCompletionSummaryRequiredFields = normalizeStringArray(
     sessionArtifacts.planMachineImplementationCompletionSummaryRequiredFields ?? [
       "delivered",
@@ -1811,6 +1960,25 @@ function main() {
       "complete",
     ],
   );
+  const rawPlanMachineStatusCoherence =
+    sessionArtifacts.planMachineStatusCoherence &&
+    typeof sessionArtifacts.planMachineStatusCoherence === "object"
+      ? sessionArtifacts.planMachineStatusCoherence
+      : {};
+  const planMachineStatusCoherence = {
+    requireInProgressPlanStatusWhenAnyStepInProgress:
+      rawPlanMachineStatusCoherence.requireInProgressPlanStatusWhenAnyStepInProgress !== false,
+    statusesRequiringAllImplementationStepsComplete: normalizeStringArray(
+      rawPlanMachineStatusCoherence.statusesRequiringAllImplementationStepsComplete ?? [
+        "complete",
+      ],
+    ),
+    statusesForbiddingInProgressImplementationSteps: normalizeStringArray(
+      rawPlanMachineStatusCoherence.statusesForbiddingInProgressImplementationSteps ?? [
+        "deferred",
+      ],
+    ),
+  };
   const rawPlanMachineAllowedStatusByRoot =
     sessionArtifacts.planMachineAllowedStatusByRoot &&
     typeof sessionArtifacts.planMachineAllowedStatusByRoot === "object"
@@ -2200,6 +2368,8 @@ function main() {
     roots: planMachineRoots,
     required_narrative_fields: planMachineRequiredNarrativeFields,
     pre_spec_outline_required_fields: planMachinePreSpecOutlineRequiredFields,
+    statuses_requiring_non_empty_pre_spec_non_goals:
+      planMachineStatusesRequiringNonEmptyPreSpecNonGoals,
     statuses_requiring_narrative_content: planMachineStatusesRequiringNarrativeContent,
     narrative_min_length: planMachineNarrativeMinLength,
     pre_spec_outline_min_length: planMachinePreSpecOutlineMinLength,
@@ -2210,8 +2380,13 @@ function main() {
     allowed_narrative_step_statuses: planMachineAllowedNarrativeStepStatuses,
     narrative_step_required_fields: planMachineNarrativeStepRequiredFields,
     narrative_step_optional_fields: planMachineNarrativeStepOptionalFields,
+    implementation_step_deliverable_deny_patterns:
+      planMachineImplementationStepDeliverableDenyPatterns,
+    step_statuses_requiring_non_empty_completion_summary:
+      planMachineStepStatusesRequiringNonEmptyCompletionSummary,
     implementation_completion_summary_required_fields:
       planMachineImplementationCompletionSummaryRequiredFields,
+    status_coherence: planMachineStatusCoherence,
     created_machine_files: [],
     normalized_machine_files: [],
     migrated_from_legacy_plan_md_refs: [],
@@ -2294,6 +2469,8 @@ function main() {
               implementationStepsFieldName: planMachineImplementationStepsFieldName,
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
@@ -2343,6 +2520,8 @@ function main() {
               implementationStepsFieldName: planMachineImplementationStepsFieldName,
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
@@ -2379,6 +2558,8 @@ function main() {
                 implementationStepsFieldName: planMachineImplementationStepsFieldName,
                 implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+                implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+                stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
                 allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
@@ -2561,6 +2742,8 @@ function main() {
             implementationStepsFieldName: planMachineImplementationStepsFieldName,
             implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+            implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+            stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
             allowedStatusByRoot: planMachineAllowedStatusByRoot,
@@ -2601,6 +2784,8 @@ function main() {
             implementationStepsFieldName: planMachineImplementationStepsFieldName,
             implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+            implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+            stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
             allowedStatusByRoot: planMachineAllowedStatusByRoot,
@@ -2636,6 +2821,8 @@ function main() {
               implementationStepsFieldName: planMachineImplementationStepsFieldName,
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
@@ -3275,6 +3462,8 @@ function main() {
               implementationStepsFieldName: planMachineImplementationStepsFieldName,
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
@@ -3329,6 +3518,8 @@ function main() {
               implementationStepsFieldName: planMachineImplementationStepsFieldName,
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
@@ -3370,6 +3561,8 @@ function main() {
                 implementationStepsFieldName: planMachineImplementationStepsFieldName,
                 implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+                implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+                stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
                 allowedPlanningStageStates: planMachineAllowedPlanningStageStates,

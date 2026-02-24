@@ -1,17 +1,17 @@
 {
   "metadata": {
     "id": "canonical-ruleset",
-    "version": "2026-02-24.08",
+    "version": "2026-02-24.09",
     "description": "Canonical governance rule catalog used for policy and drift checks.",
     "generated_from": [
       ".agents-config/policies/agent-governance.json",
       ".agents-config/docs/AGENT_RULES.md"
     ],
     "lineage": {
-      "policy_required_ids_sha256": "e15dbde56df0b1223550666f90dde1d2583657404e0f3b645936fa098842226d",
+      "policy_required_ids_sha256": "d500972825993e32998b5bfbff2efdf0848a5d8a8fbd14d35471aaeeb1f1bc81",
       "policy_orchestrator_rules_sha256": "2ed533f4959dde7409cf7030d0b6d5853d160632f172488a2a04810ac21fef99",
-      "rules_doc_catalog_sha256": "b2389981d2d47be3cfacb6a9c1883ee1c580b7583cefea89fb19d6fe9f87087f",
-      "canonical_rules_sha256": "c9e373d421c233e3982b60a829a48d0c3ebf3d054c51ab4c968792ec41a7e30c"
+      "rules_doc_catalog_sha256": "8fc23673bea4896fed5182478bdfc4900f402c91ef7ff0d5e13183fb8094a701",
+      "canonical_rules_sha256": "17e42b1f97f0032b4755a5b95963ea8fe85e9367fb920d4bf058ec91163eb0a6"
     }
   },
   "rules": [
@@ -74,6 +74,46 @@
     {
       "id": "rule_plan_machine_contract_required",
       "statement": "Maintain machine-readable plan lifecycle + authoritative narrative context (including enforced pre-spec purpose/non-goals fields) in `PLAN.json` for each active/deferred/archived feature plan directory.",
+      "category": "governance",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_plan_step_reference_required",
+      "statement": "Require at least one concrete reference in every `PLAN.json` implementation step.",
+      "category": "governance",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_plan_non_goals_status_gate",
+      "statement": "Require non-empty `narrative.pre_spec_outline.non_goals` for policy-configured plan statuses (default: `ready`, `deferred`).",
+      "category": "governance",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_plan_placeholder_deliverables_forbidden",
+      "statement": "Forbid placeholder implementation-step deliverables using policy deny patterns.",
+      "category": "governance",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_plan_complete_step_summary_required",
+      "statement": "For complete implementation steps, require non-empty completion-summary arrays for delivered work, touched files/functions/hooks, and verification/testing.",
+      "category": "governance",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_plan_status_coherence_required",
+      "statement": "Enforce policy-driven coherence between top-level plan status and implementation-step statuses.",
       "category": "governance",
       "severity": "error",
       "overrideable": false,

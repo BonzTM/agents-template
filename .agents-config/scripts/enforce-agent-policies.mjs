@@ -593,6 +593,26 @@ function normalizeStringArray(value) {
   return out;
 }
 
+function compileRegexPatternList(patterns, fieldPath) {
+  const compiled = [];
+  for (const pattern of patterns) {
+    try {
+      compiled.push(new RegExp(pattern, "i"));
+    } catch (error) {
+      addFailure(`${fieldPath} contains invalid regex pattern "${pattern}": ${error.message}`);
+    }
+  }
+  return compiled;
+}
+
+function matchesAnyRegexPattern(value, regexes) {
+  const text = toNonEmptyString(value);
+  if (!text || !Array.isArray(regexes) || regexes.length === 0) {
+    return false;
+  }
+  return regexes.some((regex) => regex.test(text));
+}
+
 function profileScopeIsActive(activeProfiles, requiredProfiles) {
   const required = normalizeStringArray(requiredProfiles);
   if (required.length === 0) {
@@ -801,6 +821,7 @@ function validatePlanMachineDocument({
   requiredPlanningStages,
   requiredNarrativeFields,
   preSpecOutlineRequiredFields,
+  statusesRequiringNonEmptyPreSpecNonGoals,
   statusesRequiringNarrativeContent,
   narrativeMinLength,
   preSpecOutlineMinLength,
@@ -811,7 +832,10 @@ function validatePlanMachineDocument({
   allowedNarrativeStepStatuses,
   narrativeStepRequiredFields,
   narrativeStepOptionalFields,
+  implementationStepDeliverableDenyPatternRegexes,
+  stepStatusesRequiringNonEmptyCompletionSummary,
   implementationCompletionSummaryRequiredFields,
+  statusCoherence,
   allowedPlanningStageStates,
   allowedSubagentRequirements,
   requiredSubagentFields,
@@ -888,8 +912,16 @@ function validatePlanMachineDocument({
     const completionSummaryRequiredFieldSet = new Set(
       implementationCompletionSummaryRequiredFields,
     );
+    const stepStatusesRequiringNonEmptyCompletionSummarySet = new Set(
+      normalizeStringArray(stepStatusesRequiringNonEmptyCompletionSummary),
+    );
+    const implementationStepStatusSummary = {
+      hasAny: false,
+      hasInProgress: false,
+      allComplete: true,
+    };
 
-    const validateCompletionSummary = (completionSummary, stepPath) => {
+    const validateCompletionSummary = (completionSummary, stepPath, stepStatus) => {
       if (!isPlainObject(completionSummary)) {
         addFailure(`${stepPath}.completion_summary must be an object.`);
         return;
@@ -900,6 +932,21 @@ function validatePlanMachineDocument({
         if (!Array.isArray(fieldValue)) {
           addFailure(`${stepPath}.completion_summary.${fieldName} must be an array.`);
           continue;
+        }
+        const normalizedValues = fieldValue.filter((entry) => isNonEmptyString(entry));
+        if (normalizedValues.length !== fieldValue.length) {
+          addFailure(
+            `${stepPath}.completion_summary.${fieldName} must contain non-empty string values.`,
+          );
+        }
+        if (
+          stepStatus &&
+          stepStatusesRequiringNonEmptyCompletionSummarySet.has(stepStatus) &&
+          normalizedValues.length === 0
+        ) {
+          addFailure(
+            `${stepPath}.completion_summary.${fieldName} must be non-empty when status is ${stepStatus}.`,
+          );
         }
       }
     };
@@ -972,6 +1019,15 @@ function validatePlanMachineDocument({
         }
 
         const stepPath = `${planMachineRef}.narrative.${fieldName}.${implementationStepsField}[${stepIndex}]`;
+        const stepStatus = toNonEmptyString(step.status);
+        implementationStepStatusSummary.hasAny = true;
+        if (stepStatus === "in_progress") {
+          implementationStepStatusSummary.hasInProgress = true;
+        }
+        if (stepStatus !== "complete") {
+          implementationStepStatusSummary.allComplete = false;
+        }
+
         for (const stepField of requiredStepFieldSet) {
           if (stepField === "references") {
             if (!Array.isArray(step.references)) {
@@ -982,20 +1038,32 @@ function validatePlanMachineDocument({
             if (invalidReference !== undefined) {
               addFailure(`${stepPath}.references must contain non-empty string values.`);
             }
+            if (step.references.length === 0) {
+              addFailure(`${stepPath}.references must include at least one entry.`);
+            }
             continue;
           }
           if (stepField === "completion_summary") {
-            validateCompletionSummary(step.completion_summary, stepPath);
+            validateCompletionSummary(step.completion_summary, stepPath, stepStatus);
             continue;
           }
           if (!isNonEmptyString(step[stepField])) {
             addFailure(
               `${stepPath}.${stepField} must be a non-empty string.`,
             );
+            continue;
+          }
+          if (
+            stepField === "deliverable" &&
+            matchesAnyRegexPattern(
+              step[stepField],
+              implementationStepDeliverableDenyPatternRegexes,
+            )
+          ) {
+            addFailure(`${stepPath}.deliverable must not match placeholder deny patterns.`);
           }
         }
 
-        const stepStatus = toNonEmptyString(step.status);
         if (requiredStepFieldSet.has("status") || "status" in step) {
           if (!stepStatus || !allowedNarrativeStepStatuses.includes(stepStatus)) {
             addFailure(
@@ -1012,10 +1080,13 @@ function validatePlanMachineDocument({
             if (invalidReference !== undefined) {
               addFailure(`${stepPath}.references must contain non-empty string values.`);
             }
+            if (step.references.length === 0) {
+              addFailure(`${stepPath}.references must include at least one entry when present.`);
+            }
           }
         }
         if ("completion_summary" in step && !requiredStepFieldSet.has("completion_summary")) {
-          validateCompletionSummary(step.completion_summary, stepPath);
+          validateCompletionSummary(step.completion_summary, stepPath, stepStatus);
         }
 
         for (const optionalField of optionalStepFieldSet) {
@@ -1025,20 +1096,66 @@ function validatePlanMachineDocument({
           if (optionalField === "references") {
             if (!Array.isArray(step.references)) {
               addFailure(`${stepPath}.references must be an array when present.`);
+            } else if (step.references.length === 0) {
+              addFailure(`${stepPath}.references must include at least one entry when present.`);
             }
             continue;
           }
           if (optionalField === "completion_summary") {
-            validateCompletionSummary(step.completion_summary, stepPath);
+            validateCompletionSummary(step.completion_summary, stepPath, stepStatus);
             continue;
           }
           if (!isNonEmptyString(step[optionalField])) {
             addFailure(
               `${stepPath}.${optionalField} must be a non-empty string when present.`,
             );
+            continue;
+          }
+          if (
+            optionalField === "deliverable" &&
+            matchesAnyRegexPattern(
+              step[optionalField],
+              implementationStepDeliverableDenyPatternRegexes,
+            )
+          ) {
+            addFailure(`${stepPath}.deliverable must not match placeholder deny patterns.`);
           }
         }
       }
+    }
+
+    const statusCoherenceContract = isPlainObject(statusCoherence) ? statusCoherence : {};
+    if (
+      statusCoherenceContract.requireInProgressPlanStatusWhenAnyStepInProgress === true &&
+      implementationStepStatusSummary.hasInProgress &&
+      status !== "in_progress"
+    ) {
+      addFailure(
+        `${planMachineRef}.status must be in_progress when any implementation step is in_progress.`,
+      );
+    }
+    const statusesRequiringAllComplete = normalizeStringArray(
+      statusCoherenceContract.statusesRequiringAllImplementationStepsComplete,
+    );
+    if (
+      statusesRequiringAllComplete.includes(status) &&
+      implementationStepStatusSummary.hasAny &&
+      !implementationStepStatusSummary.allComplete
+    ) {
+      addFailure(
+        `${planMachineRef}.status ${status} requires all implementation steps to be complete.`,
+      );
+    }
+    const statusesForbiddingInProgressSteps = normalizeStringArray(
+      statusCoherenceContract.statusesForbiddingInProgressImplementationSteps,
+    );
+    if (
+      statusesForbiddingInProgressSteps.includes(status) &&
+      implementationStepStatusSummary.hasInProgress
+    ) {
+      addFailure(
+        `${planMachineRef}.status ${status} forbids implementation steps with status in_progress.`,
+      );
     }
 
     if (!("pre_spec_outline" in narrative)) {
@@ -1054,6 +1171,22 @@ function validatePlanMachineDocument({
           );
         }
       }
+    }
+  }
+
+  if (
+    isPlainObject(narrative) &&
+    normalizeStringArray(statusesRequiringNonEmptyPreSpecNonGoals).includes(status)
+  ) {
+    const nonGoalsValue =
+      isPlainObject(narrative.pre_spec_outline) &&
+      typeof narrative.pre_spec_outline.non_goals === "string"
+        ? narrative.pre_spec_outline.non_goals.trim()
+        : "";
+    if (!nonGoalsValue) {
+      addFailure(
+        `${planMachineRef}.narrative.pre_spec_outline.non_goals must be non-empty when status is ${status}.`,
+      );
     }
   }
 
@@ -1580,6 +1713,7 @@ function checkContextIndexContract(config) {
         "requiredPlanningStages",
         "requiredNarrativeFields",
         "preSpecOutlineRequiredFields",
+        "statusesRequiringNonEmptyPreSpecNonGoals",
         "statusesRequiringNarrativeContent",
         "narrativeMinLength",
         "preSpecOutlineMinLength",
@@ -1590,12 +1724,15 @@ function checkContextIndexContract(config) {
         "allowedNarrativeStepStatuses",
         "narrativeStepRequiredFields",
         "narrativeStepOptionalFields",
+        "implementationStepDeliverableDenyPatterns",
+        "stepStatusesRequiringNonEmptyCompletionSummary",
         "implementationCompletionSummaryRequiredFields",
         "allowedPlanningStageStates",
         "allowedSubagentRequirements",
         "requiredSubagentFields",
         "statusesRequiringLastExecutor",
         "allowedStatusByRoot",
+        "statusCoherence",
       ]) {
         if (!(fieldName in planMachineContract)) {
           addFailure(
@@ -1652,6 +1789,13 @@ function checkContextIndexContract(config) {
           sessionArtifactsContract.planMachinePreSpecOutlineRequiredFields,
         ),
         pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.preSpecOutlineRequiredFields`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.statusesRequiringNonEmptyPreSpecNonGoals,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineStatusesRequiringNonEmptyPreSpecNonGoals,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.statusesRequiringNonEmptyPreSpecNonGoals`,
       });
       checkExactOrderedArray({
         value: planMachineContract.statusesRequiringNarrativeContent,
@@ -1748,6 +1892,20 @@ function checkContextIndexContract(config) {
         pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.narrativeStepOptionalFields`,
       });
       checkExactOrderedArray({
+        value: planMachineContract.implementationStepDeliverableDenyPatterns,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineImplementationStepDeliverableDenyPatterns,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.implementationStepDeliverableDenyPatterns`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.stepStatusesRequiringNonEmptyCompletionSummary,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineStepStatusesRequiringNonEmptyCompletionSummary,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.stepStatusesRequiringNonEmptyCompletionSummary`,
+      });
+      checkExactOrderedArray({
         value: planMachineContract.implementationCompletionSummaryRequiredFields,
         expected: normalizeStringArray(
           sessionArtifactsContract.planMachineImplementationCompletionSummaryRequiredFields,
@@ -1800,6 +1958,39 @@ function checkContextIndexContract(config) {
           pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.allowedStatusByRoot.${rootPath}`,
         });
       }
+
+      const expectedStatusCoherence =
+        sessionArtifactsContract.planMachineStatusCoherence &&
+        typeof sessionArtifactsContract.planMachineStatusCoherence === "object"
+          ? sessionArtifactsContract.planMachineStatusCoherence
+          : {};
+      const actualStatusCoherence =
+        planMachineContract.statusCoherence &&
+        typeof planMachineContract.statusCoherence === "object"
+          ? planMachineContract.statusCoherence
+          : {};
+      if (
+        actualStatusCoherence.requireInProgressPlanStatusWhenAnyStepInProgress !==
+        expectedStatusCoherence.requireInProgressPlanStatusWhenAnyStepInProgress
+      ) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.statusCoherence.requireInProgressPlanStatusWhenAnyStepInProgress must equal contracts.sessionArtifacts.planMachineStatusCoherence.requireInProgressPlanStatusWhenAnyStepInProgress.`,
+        );
+      }
+      checkExactOrderedArray({
+        value: actualStatusCoherence.statusesRequiringAllImplementationStepsComplete,
+        expected: normalizeStringArray(
+          expectedStatusCoherence.statusesRequiringAllImplementationStepsComplete,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.statusCoherence.statusesRequiringAllImplementationStepsComplete`,
+      });
+      checkExactOrderedArray({
+        value: actualStatusCoherence.statusesForbiddingInProgressImplementationSteps,
+        expected: normalizeStringArray(
+          expectedStatusCoherence.statusesForbiddingInProgressImplementationSteps,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.statusCoherence.statusesForbiddingInProgressImplementationSteps`,
+      });
     } else {
       addFailure(
         `${contract.indexFile}.sessionArtifacts.planMachineContract must be an object.`,
@@ -3807,6 +3998,10 @@ function checkSessionArtifactsContract(config) {
     contract.planMachinePreSpecOutlineRequiredFields,
     `${contractPath}.planMachinePreSpecOutlineRequiredFields`,
   );
+  const planMachineStatusesRequiringNonEmptyPreSpecNonGoals = validateStringArray(
+    contract.planMachineStatusesRequiringNonEmptyPreSpecNonGoals,
+    `${contractPath}.planMachineStatusesRequiringNonEmptyPreSpecNonGoals`,
+  );
   const planMachineStatusesRequiringNarrativeContent = validateStringArray(
     contract.planMachineStatusesRequiringNarrativeContent,
     `${contractPath}.planMachineStatusesRequiringNarrativeContent`,
@@ -3879,6 +4074,23 @@ function checkSessionArtifactsContract(config) {
     contract.planMachineNarrativeStepOptionalFields,
     `${contractPath}.planMachineNarrativeStepOptionalFields`,
   );
+  const planMachineImplementationStepDeliverableDenyPatterns = validateStringArray(
+    contract.planMachineImplementationStepDeliverableDenyPatterns,
+    `${contractPath}.planMachineImplementationStepDeliverableDenyPatterns`,
+  );
+  const planMachineImplementationStepDeliverableDenyPatternRegexes = compileRegexPatternList(
+    planMachineImplementationStepDeliverableDenyPatterns,
+    `${contractPath}.planMachineImplementationStepDeliverableDenyPatterns`,
+  );
+  if (planMachineImplementationStepDeliverableDenyPatternRegexes.length === 0) {
+    addFailure(
+      `${contractPath}.planMachineImplementationStepDeliverableDenyPatterns must compile to at least one valid regex.`,
+    );
+  }
+  const planMachineStepStatusesRequiringNonEmptyCompletionSummary = validateStringArray(
+    contract.planMachineStepStatusesRequiringNonEmptyCompletionSummary,
+    `${contractPath}.planMachineStepStatusesRequiringNonEmptyCompletionSummary`,
+  );
   const planMachineImplementationCompletionSummaryRequiredFields = validateStringArray(
     contract.planMachineImplementationCompletionSummaryRequiredFields,
     `${contractPath}.planMachineImplementationCompletionSummaryRequiredFields`,
@@ -3898,6 +4110,31 @@ function checkSessionArtifactsContract(config) {
   const planMachineStatusesRequiringLastExecutor = validateStringArray(
     contract.planMachineStatusesRequiringLastExecutor,
     `${contractPath}.planMachineStatusesRequiringLastExecutor`,
+  );
+  const planMachineStatusCoherence = isPlainObject(contract.planMachineStatusCoherence)
+    ? contract.planMachineStatusCoherence
+    : null;
+  if (!planMachineStatusCoherence) {
+    addFailure(`${contractPath}.planMachineStatusCoherence must be an object.`);
+  }
+  const planMachineStatusCoherenceRequireInProgress =
+    planMachineStatusCoherence?.requireInProgressPlanStatusWhenAnyStepInProgress;
+  if (typeof planMachineStatusCoherenceRequireInProgress !== "boolean") {
+    addFailure(
+      `${contractPath}.planMachineStatusCoherence.requireInProgressPlanStatusWhenAnyStepInProgress must be a boolean.`,
+    );
+  } else if (planMachineStatusCoherenceRequireInProgress !== true) {
+    addFailure(
+      `${contractPath}.planMachineStatusCoherence.requireInProgressPlanStatusWhenAnyStepInProgress must be true.`,
+    );
+  }
+  const planMachineStatusCoherenceStatusesRequiringAllComplete = validateStringArray(
+    planMachineStatusCoherence?.statusesRequiringAllImplementationStepsComplete,
+    `${contractPath}.planMachineStatusCoherence.statusesRequiringAllImplementationStepsComplete`,
+  );
+  const planMachineStatusCoherenceStatusesForbiddingInProgress = validateStringArray(
+    planMachineStatusCoherence?.statusesForbiddingInProgressImplementationSteps,
+    `${contractPath}.planMachineStatusCoherence.statusesForbiddingInProgressImplementationSteps`,
   );
   const planMachineAllowedStatusByRoot = normalizePlanMachineAllowedStatusByRoot({
     rawAllowedStatusByRoot: contract.planMachineAllowedStatusByRoot,
@@ -3948,6 +4185,12 @@ function checkSessionArtifactsContract(config) {
     contractPath,
   });
   checkRequiredFieldList({
+    fieldName: "planMachineStatusesRequiringNonEmptyPreSpecNonGoals",
+    actualFields: contract.planMachineStatusesRequiringNonEmptyPreSpecNonGoals,
+    requiredFields: ["ready", "deferred"],
+    contractPath,
+  });
+  checkRequiredFieldList({
     fieldName: "planMachineStatusesRequiringNarrativeContent",
     actualFields: contract.planMachineStatusesRequiringNarrativeContent,
     requiredFields: ["in_progress", "complete"],
@@ -3969,6 +4212,17 @@ function checkSessionArtifactsContract(config) {
     fieldName: "planMachineNarrativeStepOptionalFields",
     actualFields: contract.planMachineNarrativeStepOptionalFields,
     requiredFields: [],
+    contractPath,
+  });
+  if (planMachineImplementationStepDeliverableDenyPatterns.length === 0) {
+    addFailure(
+      `${contractPath}.planMachineImplementationStepDeliverableDenyPatterns must contain at least one regex pattern.`,
+    );
+  }
+  checkRequiredFieldList({
+    fieldName: "planMachineStepStatusesRequiringNonEmptyCompletionSummary",
+    actualFields: contract.planMachineStepStatusesRequiringNonEmptyCompletionSummary,
+    requiredFields: ["complete"],
     contractPath,
   });
   checkRequiredFieldList({
@@ -4003,6 +4257,18 @@ function checkSessionArtifactsContract(config) {
     fieldName: "planMachineStatusesRequiringLastExecutor",
     actualFields: contract.planMachineStatusesRequiringLastExecutor,
     requiredFields: ["in_progress", "complete"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineStatusCoherence.statusesRequiringAllImplementationStepsComplete",
+    actualFields: planMachineStatusCoherence?.statusesRequiringAllImplementationStepsComplete,
+    requiredFields: ["complete"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineStatusCoherence.statusesForbiddingInProgressImplementationSteps",
+    actualFields: planMachineStatusCoherence?.statusesForbiddingInProgressImplementationSteps,
+    requiredFields: ["deferred"],
     contractPath,
   });
 
@@ -4216,10 +4482,39 @@ function checkSessionArtifactsContract(config) {
       );
     }
   }
+  for (const status of planMachineStatusesRequiringNonEmptyPreSpecNonGoals) {
+    if (!allPlanMachineAllowedStatuses.has(status)) {
+      addFailure(
+        `${contractPath}.planMachineStatusesRequiringNonEmptyPreSpecNonGoals contains unknown status ${status}.`,
+      );
+    }
+  }
   for (const status of planMachineStatusesRequiringLastExecutor) {
     if (!allPlanMachineAllowedStatuses.has(status)) {
       addFailure(
         `${contractPath}.planMachineStatusesRequiringLastExecutor contains unknown status ${status}.`,
+      );
+    }
+  }
+  for (const status of planMachineStatusCoherenceStatusesRequiringAllComplete) {
+    if (!allPlanMachineAllowedStatuses.has(status)) {
+      addFailure(
+        `${contractPath}.planMachineStatusCoherence.statusesRequiringAllImplementationStepsComplete contains unknown status ${status}.`,
+      );
+    }
+  }
+  for (const status of planMachineStatusCoherenceStatusesForbiddingInProgress) {
+    if (!allPlanMachineAllowedStatuses.has(status)) {
+      addFailure(
+        `${contractPath}.planMachineStatusCoherence.statusesForbiddingInProgressImplementationSteps contains unknown status ${status}.`,
+      );
+    }
+  }
+  const allowedNarrativeStepStatusSet = new Set(planMachineAllowedNarrativeStepStatuses);
+  for (const stepStatus of planMachineStepStatusesRequiringNonEmptyCompletionSummary) {
+    if (!allowedNarrativeStepStatusSet.has(stepStatus)) {
+      addFailure(
+        `${contractPath}.planMachineStepStatusesRequiringNonEmptyCompletionSummary contains unknown step status ${stepStatus}.`,
       );
     }
   }
@@ -4444,6 +4739,8 @@ function checkSessionArtifactsContract(config) {
           requiredPlanningStages: planMachineRequiredPlanningStages,
           requiredNarrativeFields: planMachineRequiredNarrativeFields,
           preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+          statusesRequiringNonEmptyPreSpecNonGoals:
+            planMachineStatusesRequiringNonEmptyPreSpecNonGoals,
           statusesRequiringNarrativeContent: planMachineStatusesRequiringNarrativeContent,
           narrativeMinLength: planMachineNarrativeMinLength ?? 24,
           preSpecOutlineMinLength: planMachinePreSpecOutlineMinLength ?? 24,
@@ -4454,8 +4751,13 @@ function checkSessionArtifactsContract(config) {
           allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
           narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
           narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
+          implementationStepDeliverableDenyPatternRegexes:
+            planMachineImplementationStepDeliverableDenyPatternRegexes,
+          stepStatusesRequiringNonEmptyCompletionSummary:
+            planMachineStepStatusesRequiringNonEmptyCompletionSummary,
           implementationCompletionSummaryRequiredFields:
             planMachineImplementationCompletionSummaryRequiredFields,
+          statusCoherence: planMachineStatusCoherence,
           allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
           allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
           requiredSubagentFields: planMachineRequiredSubagentFields,

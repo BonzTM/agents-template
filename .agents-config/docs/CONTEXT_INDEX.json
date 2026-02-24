@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-24.08",
+    "version": "2026-02-24.09",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
@@ -118,6 +118,10 @@
         "purpose_goals",
         "non_goals"
       ],
+      "statusesRequiringNonEmptyPreSpecNonGoals": [
+        "ready",
+        "deferred"
+      ],
       "statusesRequiringNarrativeContent": [
         "in_progress",
         "complete"
@@ -141,6 +145,14 @@
         "completion_summary"
       ],
       "narrativeStepOptionalFields": [],
+      "implementationStepDeliverableDenyPatterns": [
+        "^\\s*(todo|tbd|placeholder|n\\/?a|none|unknown)\\s*$",
+        "^\\s*(step|task|item|deliverable)\\s*\\d+\\s*$",
+        "^\\s*<[^>]+>\\s*$"
+      ],
+      "stepStatusesRequiringNonEmptyCompletionSummary": [
+        "complete"
+      ],
       "implementationCompletionSummaryRequiredFields": [
         "delivered",
         "files_functions_hooks_touched",
@@ -181,6 +193,15 @@
         ".agents/plans/archived": [
           "complete",
           "archived"
+        ]
+      },
+      "statusCoherence": {
+        "requireInProgressPlanStatusWhenAnyStepInProgress": true,
+        "statusesRequiringAllImplementationStepsComplete": [
+          "complete"
+        ],
+        "statusesForbiddingInProgressImplementationSteps": [
+          "deferred"
         ]
       }
     },
