@@ -47,6 +47,12 @@ function isValidIsoDate(value) {
   return text !== null && Number.isFinite(Date.parse(text));
 }
 
+function resolveCanonicalWorktreesRoot(canonicalRepoRoot) {
+  const canonicalRepoRootResolved = path.resolve(canonicalRepoRoot);
+  const repoName = path.basename(canonicalRepoRootResolved);
+  return path.resolve(canonicalRepoRootResolved, "..", `${repoName}.worktrees`);
+}
+
 function sleepMs(ms) {
   const duration = Number.isFinite(ms) ? Math.max(0, Math.floor(ms)) : 0;
   if (duration <= 0) {
@@ -241,7 +247,7 @@ function resolveQueueLocation(repoRoot) {
     path.resolve(canonicalRepoRoot, ".agents");
   const worktreesRoot =
     toNonEmptyString(workspaceLayout.worktreesRoot) ??
-    path.resolve(canonicalRepoRoot, ".worktrees");
+    resolveCanonicalWorktreesRoot(canonicalRepoRoot);
 
   const repoRootResolved = path.resolve(repoRoot);
   const canonicalRepoRootResolved = path.resolve(canonicalRepoRoot);
@@ -402,8 +408,10 @@ function moveFeaturePlanDirectory(queueFile, featureId) {
     moved,
     rewrittenFiles,
     rewrittenReferences,
-    archivedPlanRef: `${toArchivedPrefix}/PLAN.md`,
+    archivedPlanRef: `${toArchivedPrefix}/PLAN.json`,
     previousPlanRefs: new Set([
+      `${fromCurrentPrefix}/PLAN.json`,
+      `${fromDeferredPrefix}/PLAN.json`,
       `${fromCurrentPrefix}/PLAN.md`,
       `${fromDeferredPrefix}/PLAN.md`,
     ]),

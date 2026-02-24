@@ -8,7 +8,7 @@ const SUPPORTED_PROFILES = new Set(["base", "node-web"]);
 const DEFAULT_PROFILES = ["base"];
 const SUPPORTED_AGENTS_MODES = new Set(["external", "local"]);
 const DEFAULT_AGENTS_WORKFILES_PATH = "../agents-workfiles";
-const REQUIRED_GITIGNORE_SNIPPETS = [".agents", ".agents/", ".agents/**", ".worktrees/"];
+const REQUIRED_GITIGNORE_SNIPPETS = [".agents", ".agents/", ".agents/**"];
 const DEFAULT_CHANGELOG_TEXT = `# Changelog
 
 All notable changes to this project will be documented in this file.
@@ -733,6 +733,7 @@ function main() {
   const helmRepoName = repoName;
   const helmRepoUrl = toNonEmptyString(args.helmRepoUrl) ?? `https://${repoOwner}.github.io/${repoName}`;
   const dockerImage = toNonEmptyString(args.dockerImage) ?? `ghcr.io/${repoOwner}/${repoName}`;
+  const canonicalWorktreesRootRel = `../${repoName}.worktrees`;
   const templateRepo = toNonEmptyString(args.templateRepo) ?? "BonzTM/agents-template";
   const templateRef = toNonEmptyString(args.templateRef) ?? "main";
   const templateLocalPath = toNonEmptyString(args.templateLocalPath) ?? "../agents-template";
@@ -803,7 +804,7 @@ function main() {
     ...rewrittenPolicy.contracts.workspaceLayout,
     canonicalRepoRoot: ".",
     canonicalAgentsRoot: canonicalAgentsRootRel,
-    worktreesRoot: ".worktrees",
+    worktreesRoot: canonicalWorktreesRootRel,
     localAgentsPath: ".agents",
     requireLocalAgentsSymlink: true,
     requireWorktreeAgentsSymlink: true,
@@ -854,7 +855,7 @@ function main() {
     ...rewrittenContextIndex.sessionArtifacts.workspaceLayout,
     canonicalRepoRoot: ".",
     canonicalAgentsRoot: canonicalAgentsRootRel,
-    worktreesRoot: ".worktrees",
+    worktreesRoot: canonicalWorktreesRootRel,
     localAgentsPath: ".agents",
     semanticMergeRequired: true,
     semanticMergeOnAgentsEditRequired: true,
@@ -965,7 +966,7 @@ function main() {
     templateLocalPathOverride: templateLocalPath,
   });
 
-  ensureDir(path.resolve(repoRoot, ".worktrees"));
+  ensureDir(path.resolve(repoRoot, canonicalWorktreesRootRel));
   ensureAgentsStorage({ repoRoot, canonicalAgentsRootAbs, agentsMode });
   ensureAgentsSeedFiles({ repoRoot, canonicalAgentsRootAbs, agentsMode });
 
