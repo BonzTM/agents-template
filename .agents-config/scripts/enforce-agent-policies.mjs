@@ -828,6 +828,12 @@ function validatePlanMachineDocument({
   narrativeMinSteps,
   specOutlineListFieldName,
   refinedSpecListFieldName,
+  specOutlineEntryRequiredFields,
+  refinedSpecEntryRequiredFields,
+  statusesRequiringSpecOutlineEntries,
+  statusesRequiringRefinedSpecEntries,
+  specOutlineMinEntries,
+  refinedSpecMinEntries,
   implementationStepsFieldName,
   allowedNarrativeStepStatuses,
   narrativeStepRequiredFields,
@@ -909,6 +915,12 @@ function validatePlanMachineDocument({
     const refinedSpecListField = toNonEmptyString(refinedSpecListFieldName) ?? "full_refined_spec";
     const implementationStepsField =
       toNonEmptyString(implementationStepsFieldName) ?? "steps";
+    const normalizedSpecOutlineEntryRequiredFields = normalizeStringArray(
+      specOutlineEntryRequiredFields,
+    );
+    const normalizedRefinedSpecEntryRequiredFields = normalizeStringArray(
+      refinedSpecEntryRequiredFields,
+    );
     const requiredStepFieldSet = new Set(narrativeStepRequiredFields);
     const optionalStepFieldSet = new Set(narrativeStepOptionalFields);
     const completionSummaryRequiredFieldSet = new Set(
@@ -929,6 +941,43 @@ function validatePlanMachineDocument({
       hasAny: false,
       hasInProgress: false,
       allComplete: true,
+    };
+    const validateStructuredNarrativeEntryList = ({
+      listValue,
+      listPath,
+      requiredFields,
+    }) => {
+      for (const [entryIndex, entry] of listValue.entries()) {
+        if (!isPlainObject(entry)) {
+          addFailure(`${listPath}[${entryIndex}] must be an object.`);
+          continue;
+        }
+        const entryPath = `${listPath}[${entryIndex}]`;
+        for (const fieldName of requiredFields) {
+          if (!(fieldName in entry)) {
+            addFailure(`${entryPath}.${fieldName} is required.`);
+            continue;
+          }
+          if (fieldName === "acceptance_criteria" || fieldName === "references") {
+            const fieldValue = entry[fieldName];
+            if (!Array.isArray(fieldValue)) {
+              addFailure(`${entryPath}.${fieldName} must be an array.`);
+              continue;
+            }
+            const normalizedValues = fieldValue.filter((value) => isNonEmptyString(value));
+            if (normalizedValues.length !== fieldValue.length) {
+              addFailure(`${entryPath}.${fieldName} must contain non-empty string values.`);
+            }
+            if (normalizedValues.length < 1) {
+              addFailure(`${entryPath}.${fieldName} must contain at least 1 entry.`);
+            }
+            continue;
+          }
+          if (!isNonEmptyString(entry[fieldName])) {
+            addFailure(`${entryPath}.${fieldName} must be a non-empty string.`);
+          }
+        }
+      }
     };
 
     const validateCompletionSummary = (completionSummary, stepPath, stepStatus) => {
@@ -1003,13 +1052,11 @@ function validatePlanMachineDocument({
           );
           continue;
         }
-        for (const [entryIndex, entry] of listValue.entries()) {
-          if (!isPlainObject(entry)) {
-            addFailure(
-              `${planMachineRef}.narrative.${fieldName}.${specOutlineListField}[${entryIndex}] must be an object.`,
-            );
-          }
-        }
+        validateStructuredNarrativeEntryList({
+          listValue,
+          listPath: `${planMachineRef}.narrative.${fieldName}.${specOutlineListField}`,
+          requiredFields: normalizedSpecOutlineEntryRequiredFields,
+        });
         continue;
       }
 
@@ -1021,13 +1068,11 @@ function validatePlanMachineDocument({
           );
           continue;
         }
-        for (const [entryIndex, entry] of listValue.entries()) {
-          if (!isPlainObject(entry)) {
-            addFailure(
-              `${planMachineRef}.narrative.${fieldName}.${refinedSpecListField}[${entryIndex}] must be an object.`,
-            );
-          }
-        }
+        validateStructuredNarrativeEntryList({
+          listValue,
+          listPath: `${planMachineRef}.narrative.${fieldName}.${refinedSpecListField}`,
+          requiredFields: normalizedRefinedSpecEntryRequiredFields,
+        });
         continue;
       }
 
@@ -1244,60 +1289,105 @@ function validatePlanMachineDocument({
     }
   }
 
-  if (statusesRequiringNarrativeContent.includes(status) && isPlainObject(narrative)) {
+  if (isPlainObject(narrative)) {
     const specOutlineListField = toNonEmptyString(specOutlineListFieldName) ?? "full_spec_outline";
     const refinedSpecListField = toNonEmptyString(refinedSpecListFieldName) ?? "full_refined_spec";
     const implementationStepsField =
       toNonEmptyString(implementationStepsFieldName) ?? "steps";
-    for (const fieldName of requiredNarrativeFields) {
+    const statusesRequiringSpecOutlineEntriesSet = new Set(
+      normalizeStringArray(statusesRequiringSpecOutlineEntries),
+    );
+    const statusesRequiringRefinedSpecEntriesSet = new Set(
+      normalizeStringArray(statusesRequiringRefinedSpecEntries),
+    );
+    const normalizedSpecOutlineMinEntries =
+      Number.isInteger(specOutlineMinEntries) && specOutlineMinEntries >= 1
+        ? specOutlineMinEntries
+        : 1;
+    const normalizedRefinedSpecMinEntries =
+      Number.isInteger(refinedSpecMinEntries) && refinedSpecMinEntries >= 1
+        ? refinedSpecMinEntries
+        : 1;
+    const countSectionEntries = (fieldName) => {
       const section = narrative[fieldName];
-      const normalizedSummary =
-        isPlainObject(section) && typeof section.summary === "string"
-          ? section.summary.trim()
-          : "";
-      if (normalizedSummary.length < narrativeMinLength) {
-        addFailure(
-            `${planMachineRef}.narrative.${fieldName}.summary must be at least ${narrativeMinLength} characters when status is ${status}.`,
-        );
+      if (!isPlainObject(section)) {
+        return { count: 0, listFieldName: "steps" };
       }
-
-      let stepCount = 0;
-      let listFieldName = "steps";
       if (fieldName === "spec_outline") {
-        listFieldName = specOutlineListField;
-        stepCount =
-          isPlainObject(section) && Array.isArray(section[specOutlineListField])
-            ? section[specOutlineListField].length
-            : 0;
-      } else if (fieldName === "refined_spec") {
-        listFieldName = refinedSpecListField;
-        stepCount =
-          isPlainObject(section) && Array.isArray(section[refinedSpecListField])
-            ? section[refinedSpecListField].length
-            : 0;
-      } else {
-        listFieldName = implementationStepsField;
-        stepCount =
-          isPlainObject(section) && Array.isArray(section[implementationStepsField])
-            ? section[implementationStepsField].length
-            : 0;
+        return {
+          count: Array.isArray(section[specOutlineListField]) ? section[specOutlineListField].length : 0,
+          listFieldName: specOutlineListField,
+        };
       }
-      if (stepCount < narrativeMinSteps) {
-        addFailure(
-          `${planMachineRef}.narrative.${fieldName}.${listFieldName} must contain at least ${narrativeMinSteps} item(s) when status is ${status}.`,
-        );
+      if (fieldName === "refined_spec") {
+        return {
+          count: Array.isArray(section[refinedSpecListField]) ? section[refinedSpecListField].length : 0,
+          listFieldName: refinedSpecListField,
+        };
       }
-    }
+      return {
+        count: Array.isArray(section[implementationStepsField])
+          ? section[implementationStepsField].length
+          : 0,
+        listFieldName: implementationStepsField,
+      };
+    };
 
-    if (isPlainObject(narrative.pre_spec_outline)) {
-      for (const fieldName of preSpecOutlineRequiredFields) {
-        const value =
-          typeof narrative.pre_spec_outline[fieldName] === "string"
-            ? narrative.pre_spec_outline[fieldName].trim()
+    if (statusesRequiringNarrativeContent.includes(status)) {
+      for (const fieldName of requiredNarrativeFields) {
+        const section = narrative[fieldName];
+        const normalizedSummary =
+          isPlainObject(section) && typeof section.summary === "string"
+            ? section.summary.trim()
             : "";
-        if (value.length < preSpecOutlineMinLength) {
+        if (normalizedSummary.length < narrativeMinLength) {
           addFailure(
-            `${planMachineRef}.narrative.pre_spec_outline.${fieldName} must be at least ${preSpecOutlineMinLength} characters when status is ${status}.`,
+            `${planMachineRef}.narrative.${fieldName}.summary must be at least ${narrativeMinLength} characters when status is ${status}.`,
+          );
+        }
+
+        const { count: stepCount, listFieldName } = countSectionEntries(fieldName);
+        let minimumCount = narrativeMinSteps;
+        if (fieldName === "spec_outline" && statusesRequiringSpecOutlineEntriesSet.has(status)) {
+          minimumCount = Math.max(minimumCount, normalizedSpecOutlineMinEntries);
+        }
+        if (fieldName === "refined_spec" && statusesRequiringRefinedSpecEntriesSet.has(status)) {
+          minimumCount = Math.max(minimumCount, normalizedRefinedSpecMinEntries);
+        }
+        if (stepCount < minimumCount) {
+          addFailure(
+            `${planMachineRef}.narrative.${fieldName}.${listFieldName} must contain at least ${minimumCount} item(s) when status is ${status}.`,
+          );
+        }
+      }
+
+      if (isPlainObject(narrative.pre_spec_outline)) {
+        for (const fieldName of preSpecOutlineRequiredFields) {
+          const value =
+            typeof narrative.pre_spec_outline[fieldName] === "string"
+              ? narrative.pre_spec_outline[fieldName].trim()
+              : "";
+          if (value.length < preSpecOutlineMinLength) {
+            addFailure(
+              `${planMachineRef}.narrative.pre_spec_outline.${fieldName} must be at least ${preSpecOutlineMinLength} characters when status is ${status}.`,
+            );
+          }
+        }
+      }
+    } else {
+      if (statusesRequiringSpecOutlineEntriesSet.has(status)) {
+        const { count, listFieldName } = countSectionEntries("spec_outline");
+        if (count < normalizedSpecOutlineMinEntries) {
+          addFailure(
+            `${planMachineRef}.narrative.spec_outline.${listFieldName} must contain at least ${normalizedSpecOutlineMinEntries} item(s) when status is ${status}.`,
+          );
+        }
+      }
+      if (statusesRequiringRefinedSpecEntriesSet.has(status)) {
+        const { count, listFieldName } = countSectionEntries("refined_spec");
+        if (count < normalizedRefinedSpecMinEntries) {
+          addFailure(
+            `${planMachineRef}.narrative.refined_spec.${listFieldName} must contain at least ${normalizedRefinedSpecMinEntries} item(s) when status is ${status}.`,
           );
         }
       }
@@ -1774,6 +1864,12 @@ function checkContextIndexContract(config) {
         "narrativeMinSteps",
         "specOutlineListFieldName",
         "refinedSpecListFieldName",
+        "specOutlineEntryRequiredFields",
+        "refinedSpecEntryRequiredFields",
+        "statusesRequiringSpecOutlineEntries",
+        "statusesRequiringRefinedSpecEntries",
+        "specOutlineMinEntries",
+        "refinedSpecMinEntries",
         "implementationStepsFieldName",
         "allowedNarrativeStepStatuses",
         "narrativeStepRequiredFields",
@@ -1915,6 +2011,60 @@ function checkContextIndexContract(config) {
       ) {
         addFailure(
           `${contract.indexFile}.sessionArtifacts.planMachineContract.refinedSpecListFieldName must equal contracts.sessionArtifacts.planMachineRefinedSpecListFieldName.`,
+        );
+      }
+      checkExactOrderedArray({
+        value: planMachineContract.specOutlineEntryRequiredFields,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineSpecOutlineEntryRequiredFields,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.specOutlineEntryRequiredFields`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.refinedSpecEntryRequiredFields,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineRefinedSpecEntryRequiredFields,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.refinedSpecEntryRequiredFields`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.statusesRequiringSpecOutlineEntries,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineStatusesRequiringSpecOutlineEntries,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.statusesRequiringSpecOutlineEntries`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.statusesRequiringRefinedSpecEntries,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineStatusesRequiringRefinedSpecEntries,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.statusesRequiringRefinedSpecEntries`,
+      });
+      const expectedSpecOutlineMinEntries =
+        Number.isInteger(sessionArtifactsContract.planMachineSpecOutlineMinEntries) &&
+        sessionArtifactsContract.planMachineSpecOutlineMinEntries >= 1
+          ? sessionArtifactsContract.planMachineSpecOutlineMinEntries
+          : 1;
+      if (
+        !Number.isInteger(planMachineContract.specOutlineMinEntries) ||
+        planMachineContract.specOutlineMinEntries !== expectedSpecOutlineMinEntries
+      ) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.specOutlineMinEntries must equal contracts.sessionArtifacts.planMachineSpecOutlineMinEntries.`,
+        );
+      }
+      const expectedRefinedSpecMinEntries =
+        Number.isInteger(sessionArtifactsContract.planMachineRefinedSpecMinEntries) &&
+        sessionArtifactsContract.planMachineRefinedSpecMinEntries >= 1
+          ? sessionArtifactsContract.planMachineRefinedSpecMinEntries
+          : 1;
+      if (
+        !Number.isInteger(planMachineContract.refinedSpecMinEntries) ||
+        planMachineContract.refinedSpecMinEntries !== expectedRefinedSpecMinEntries
+      ) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.refinedSpecMinEntries must equal contracts.sessionArtifacts.planMachineRefinedSpecMinEntries.`,
         );
       }
       if (
@@ -4127,6 +4277,38 @@ function checkSessionArtifactsContract(config) {
       `${contractPath}.planMachineRefinedSpecListFieldName must equal "full_refined_spec".`,
     );
   }
+  const planMachineSpecOutlineEntryRequiredFields = validateStringArray(
+    contract.planMachineSpecOutlineEntryRequiredFields,
+    `${contractPath}.planMachineSpecOutlineEntryRequiredFields`,
+  );
+  const planMachineRefinedSpecEntryRequiredFields = validateStringArray(
+    contract.planMachineRefinedSpecEntryRequiredFields,
+    `${contractPath}.planMachineRefinedSpecEntryRequiredFields`,
+  );
+  const planMachineStatusesRequiringSpecOutlineEntries = validateStringArray(
+    contract.planMachineStatusesRequiringSpecOutlineEntries,
+    `${contractPath}.planMachineStatusesRequiringSpecOutlineEntries`,
+  );
+  const planMachineStatusesRequiringRefinedSpecEntries = validateStringArray(
+    contract.planMachineStatusesRequiringRefinedSpecEntries,
+    `${contractPath}.planMachineStatusesRequiringRefinedSpecEntries`,
+  );
+  const planMachineSpecOutlineMinEntries =
+    Number.isInteger(contract.planMachineSpecOutlineMinEntries) &&
+    contract.planMachineSpecOutlineMinEntries >= 1
+      ? contract.planMachineSpecOutlineMinEntries
+      : null;
+  if (planMachineSpecOutlineMinEntries === null) {
+    addFailure(`${contractPath}.planMachineSpecOutlineMinEntries must be an integer >= 1.`);
+  }
+  const planMachineRefinedSpecMinEntries =
+    Number.isInteger(contract.planMachineRefinedSpecMinEntries) &&
+    contract.planMachineRefinedSpecMinEntries >= 1
+      ? contract.planMachineRefinedSpecMinEntries
+      : null;
+  if (planMachineRefinedSpecMinEntries === null) {
+    addFailure(`${contractPath}.planMachineRefinedSpecMinEntries must be an integer >= 1.`);
+  }
   const planMachineImplementationStepsFieldName = toNonEmptyString(
     contract.planMachineImplementationStepsFieldName,
   );
@@ -4284,6 +4466,42 @@ function checkSessionArtifactsContract(config) {
   checkRequiredFieldList({
     fieldName: "planMachineStatusesRequiringNarrativeContent",
     actualFields: contract.planMachineStatusesRequiringNarrativeContent,
+    requiredFields: ["in_progress", "complete"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineSpecOutlineEntryRequiredFields",
+    actualFields: contract.planMachineSpecOutlineEntryRequiredFields,
+    requiredFields: [
+      "id",
+      "objective",
+      "deliverable",
+      "acceptance_criteria",
+      "references",
+    ],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineRefinedSpecEntryRequiredFields",
+    actualFields: contract.planMachineRefinedSpecEntryRequiredFields,
+    requiredFields: [
+      "id",
+      "decision",
+      "rationale",
+      "acceptance_criteria",
+      "references",
+    ],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineStatusesRequiringSpecOutlineEntries",
+    actualFields: contract.planMachineStatusesRequiringSpecOutlineEntries,
+    requiredFields: ["in_progress", "complete"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineStatusesRequiringRefinedSpecEntries",
+    actualFields: contract.planMachineStatusesRequiringRefinedSpecEntries,
     requiredFields: ["in_progress", "complete"],
     contractPath,
   });
@@ -4585,6 +4803,20 @@ function checkSessionArtifactsContract(config) {
       );
     }
   }
+  for (const status of planMachineStatusesRequiringSpecOutlineEntries) {
+    if (!allPlanMachineAllowedStatuses.has(status)) {
+      addFailure(
+        `${contractPath}.planMachineStatusesRequiringSpecOutlineEntries contains unknown status ${status}.`,
+      );
+    }
+  }
+  for (const status of planMachineStatusesRequiringRefinedSpecEntries) {
+    if (!allPlanMachineAllowedStatuses.has(status)) {
+      addFailure(
+        `${contractPath}.planMachineStatusesRequiringRefinedSpecEntries contains unknown status ${status}.`,
+      );
+    }
+  }
   for (const status of planMachineStatusesRequiringNonEmptyPreSpecNonGoals) {
     if (!allPlanMachineAllowedStatuses.has(status)) {
       addFailure(
@@ -4857,6 +5089,12 @@ function checkSessionArtifactsContract(config) {
           narrativeMinSteps: planMachineNarrativeMinSteps ?? 1,
           specOutlineListFieldName: planMachineSpecOutlineListFieldName,
           refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+          specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+          refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
+          statusesRequiringSpecOutlineEntries: planMachineStatusesRequiringSpecOutlineEntries,
+          statusesRequiringRefinedSpecEntries: planMachineStatusesRequiringRefinedSpecEntries,
+          specOutlineMinEntries: planMachineSpecOutlineMinEntries ?? 1,
+          refinedSpecMinEntries: planMachineRefinedSpecMinEntries ?? 1,
           implementationStepsFieldName: planMachineImplementationStepsFieldName,
           allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
           narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,

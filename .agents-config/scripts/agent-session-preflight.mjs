@@ -767,21 +767,238 @@ function normalizePlanNarrativeStepStatus(value, allowedStepStatuses) {
   return allowedStepStatuses[0] ?? "pending";
 }
 
-function normalizePlanNarrativeObjectList(value) {
+function normalizeStringArrayLike(value) {
+  if (Array.isArray(value)) {
+    return normalizeStringArray(value);
+  }
+
+  const singleValue = toNonEmptyString(value);
+  return singleValue ? [singleValue] : [];
+}
+
+function toDeterministicSlug(value, fallbackPrefix, index) {
+  const raw = normalizeNarrativeText(value);
+  const normalized = raw
+    ? raw
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    : "";
+  if (normalized) {
+    return normalized.slice(0, 64);
+  }
+  return `${fallbackPrefix}-${index + 1}`;
+}
+
+function firstNonEmptyNarrativeText(...values) {
+  for (const value of values) {
+    const normalized = normalizeNarrativeText(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
+function normalizeSpecOrRefinedEntries(
+  value,
+  {
+    entryType = "spec_outline",
+    requiredFields = [],
+    fallbackReference = null,
+    fallbackSummary = null,
+  } = {},
+) {
   if (!Array.isArray(value)) {
     return [];
   }
 
+  const fallbackReferenceText = toNonEmptyString(fallbackReference);
+  const fallbackSummaryText = normalizeNarrativeText(fallbackSummary) ?? "";
+  const fallbackSummaryLine = fallbackSummaryText.split(/\n+/)[0]?.trim() ?? "";
+  const normalizedRequiredFields = normalizeStringArray(requiredFields);
+  const requiredFieldSet = new Set(normalizedRequiredFields);
+  const usedIds = new Set();
   const normalized = [];
-  for (const entry of value) {
-    if (!isPlainObject(entry)) {
-      const textEntry = toNonEmptyString(entry);
-      if (textEntry) {
-        normalized.push({ text: textEntry });
-      }
-      continue;
+
+  for (const [index, entry] of value.entries()) {
+    const entryObject = isPlainObject(entry) ? { ...entry } : {};
+    const rawTextEntry = toNonEmptyString(entry);
+    const commonText = firstNonEmptyNarrativeText(
+      entryObject.text,
+      entryObject.summary,
+      entryObject.description,
+      entryObject.notes,
+      entryObject.title,
+      entryObject.name,
+      rawTextEntry,
+      fallbackSummaryLine,
+    );
+    const references = normalizeStringArrayLike(
+      entryObject.references ??
+        entryObject.refs ??
+        entryObject.reference ??
+        entryObject.sources ??
+        entryObject.source ??
+        entryObject.links ??
+        entryObject.link ??
+        entryObject.files ??
+        entryObject.file ??
+        entryObject.paths ??
+        entryObject.path ??
+        entryObject.url,
+    );
+    if (references.length === 0 && fallbackReferenceText) {
+      references.push(fallbackReferenceText);
     }
-    normalized.push({ ...entry });
+
+    const acceptanceCriteria = normalizeStringArrayLike(
+      entryObject.acceptance_criteria ??
+        entryObject.acceptanceCriteria ??
+        entryObject.success_criteria ??
+        entryObject.criteria ??
+        entryObject.done_when ??
+        entryObject.definition_of_done ??
+        entryObject.verification_testing ??
+        entryObject.verification ??
+        entryObject.testing ??
+        entryObject.tests,
+    );
+
+    let requiredTextA = "";
+    let requiredTextB = "";
+    const fallbackCriterionPrefix =
+      entryType === "refined_spec" ? "Validate decision" : "Complete deliverable";
+    const idPrefix = entryType === "refined_spec" ? "refined-spec" : "spec-outline";
+
+    if (entryType === "refined_spec") {
+      requiredTextA = firstNonEmptyNarrativeText(
+        entryObject.decision,
+        entryObject.resolution,
+        entryObject.choice,
+        entryObject.proposal,
+        entryObject.recommendation,
+        entryObject.outcome,
+        commonText,
+        fallbackSummaryLine,
+      );
+      requiredTextB = firstNonEmptyNarrativeText(
+        entryObject.rationale,
+        entryObject.reason,
+        entryObject.reasoning,
+        entryObject.why,
+        entryObject.context,
+        entryObject.notes,
+        commonText,
+        requiredTextA,
+        fallbackSummaryLine,
+      );
+      entryObject.decision = requiredTextA;
+      entryObject.rationale = requiredTextB;
+    } else {
+      requiredTextA = firstNonEmptyNarrativeText(
+        entryObject.objective,
+        entryObject.goal,
+        entryObject.goals,
+        entryObject.purpose,
+        entryObject.problem,
+        commonText,
+        fallbackSummaryLine,
+      );
+      requiredTextB = firstNonEmptyNarrativeText(
+        entryObject.deliverable,
+        entryObject.output,
+        entryObject.outcome,
+        entryObject.result,
+        entryObject.artifact,
+        commonText,
+        requiredTextA,
+        fallbackSummaryLine,
+      );
+      entryObject.objective = requiredTextA;
+      entryObject.deliverable = requiredTextB;
+    }
+
+    if (acceptanceCriteria.length === 0) {
+      const criteriaTarget = requiredTextB || requiredTextA || commonText;
+      if (criteriaTarget) {
+        acceptanceCriteria.push(`${fallbackCriterionPrefix}: ${criteriaTarget}`);
+      }
+    }
+    if (references.length === 0 && fallbackReferenceText) {
+      references.push(fallbackReferenceText);
+    }
+
+    const idCandidate = toNonEmptyString(entryObject.id);
+    const fallbackIdSeed = firstNonEmptyNarrativeText(
+      idCandidate,
+      entryObject.key,
+      entryObject.slug,
+      requiredTextA,
+      requiredTextB,
+      commonText,
+      fallbackSummaryLine,
+    );
+    const normalizedId = ensureUniqueValue(
+      idCandidate ?? toDeterministicSlug(fallbackIdSeed, idPrefix, index),
+      usedIds,
+      idPrefix,
+      index,
+    );
+    entryObject.id = normalizedId;
+    entryObject.acceptance_criteria = [...new Set(acceptanceCriteria)];
+    entryObject.references = [...new Set(references)];
+
+    if (!requiredTextA) {
+      if (entryType === "refined_spec") {
+        entryObject.decision = fallbackSummaryLine || normalizedId;
+      } else {
+        entryObject.objective = fallbackSummaryLine || normalizedId;
+      }
+    }
+    if (!requiredTextB) {
+      if (entryType === "refined_spec") {
+        entryObject.rationale = entryObject.decision;
+      } else {
+        entryObject.deliverable = entryObject.objective;
+      }
+    }
+
+    for (const fieldName of requiredFieldSet) {
+      if (fieldName === "acceptance_criteria") {
+        if (!Array.isArray(entryObject.acceptance_criteria)) {
+          entryObject.acceptance_criteria = [];
+        }
+        if (entryObject.acceptance_criteria.length === 0) {
+          const criteriaTarget =
+            firstNonEmptyNarrativeText(requiredTextB, requiredTextA, fallbackSummaryLine) ||
+            normalizedId;
+          entryObject.acceptance_criteria.push(`${fallbackCriterionPrefix}: ${criteriaTarget}`);
+        }
+        continue;
+      }
+      if (fieldName === "references") {
+        if (!Array.isArray(entryObject.references)) {
+          entryObject.references = [];
+        }
+        if (entryObject.references.length === 0 && fallbackReferenceText) {
+          entryObject.references.push(fallbackReferenceText);
+        }
+        continue;
+      }
+      if (!isNonEmptyString(entryObject[fieldName])) {
+        entryObject[fieldName] =
+          firstNonEmptyNarrativeText(
+            entryObject[fieldName],
+            requiredTextA,
+            requiredTextB,
+            commonText,
+            fallbackSummaryLine,
+          ) || normalizedId;
+      }
+    }
+
+    normalized.push(entryObject);
   }
 
   return normalized;
@@ -1015,7 +1232,12 @@ function normalizeImplementationPlanSteps(
 function normalizeSpecOrRefinedNarrativeSection(
   value,
   fallbackSummary,
-  listFieldName,
+  {
+    listFieldName = "steps",
+    entryType = "spec_outline",
+    requiredFields = [],
+    fallbackReference = null,
+  } = {},
 ) {
   const fallbackSummaryText = normalizeNarrativeText(fallbackSummary) ?? "";
   const normalizedListFieldName = toNonEmptyString(listFieldName) ?? "steps";
@@ -1035,8 +1257,14 @@ function normalizeSpecOrRefinedNarrativeSection(
   }
 
   const summary = normalizeNarrativeText(value.summary) ?? fallbackSummaryText;
-  const listEntries = normalizePlanNarrativeObjectList(
+  const listEntries = normalizeSpecOrRefinedEntries(
     Array.isArray(value[normalizedListFieldName]) ? value[normalizedListFieldName] : value.steps,
+    {
+      entryType,
+      requiredFields,
+      fallbackReference,
+      fallbackSummary: summary,
+    },
   );
   return { summary, [normalizedListFieldName]: listEntries };
 }
@@ -1282,6 +1510,8 @@ function buildPlanMachineTemplate({
   requiredPlanningStages,
   requiredNarrativeFields,
   preSpecOutlineRequiredFields,
+  specOutlineEntryRequiredFields,
+  refinedSpecEntryRequiredFields,
   legacyNarrativeSections,
   legacyPreSpecOutline,
   specOutlineListFieldName,
@@ -1319,7 +1549,12 @@ function buildPlanMachineTemplate({
       narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
         null,
         legacyNarrative[fieldName],
-        normalizedSpecOutlineListFieldName,
+        {
+          listFieldName: normalizedSpecOutlineListFieldName,
+          entryType: "spec_outline",
+          requiredFields: normalizeStringArray(specOutlineEntryRequiredFields),
+          fallbackReference: planRef,
+        },
       );
       continue;
     }
@@ -1327,7 +1562,12 @@ function buildPlanMachineTemplate({
       narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
         null,
         legacyNarrative[fieldName],
-        normalizedRefinedSpecListFieldName,
+        {
+          listFieldName: normalizedRefinedSpecListFieldName,
+          entryType: "refined_spec",
+          requiredFields: normalizeStringArray(refinedSpecEntryRequiredFields),
+          fallbackReference: planRef,
+        },
       );
       continue;
     }
@@ -1425,6 +1665,8 @@ function normalizePlanMachineDocument({
   requiredPlanningStages,
   requiredNarrativeFields,
   preSpecOutlineRequiredFields,
+  specOutlineEntryRequiredFields,
+  refinedSpecEntryRequiredFields,
   legacyNarrativeSections,
   legacyPreSpecOutline,
   specOutlineListFieldName,
@@ -1458,6 +1700,8 @@ function normalizePlanMachineDocument({
     requiredPlanningStages,
     requiredNarrativeFields,
     preSpecOutlineRequiredFields,
+    specOutlineEntryRequiredFields,
+    refinedSpecEntryRequiredFields,
     legacyNarrativeSections,
     legacyPreSpecOutline,
     specOutlineListFieldName: normalizedSpecOutlineListFieldName,
@@ -1528,7 +1772,12 @@ function normalizePlanMachineDocument({
       narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
         narrative[fieldName],
         legacyNarrative[fieldName],
-        normalizedSpecOutlineListFieldName,
+        {
+          listFieldName: normalizedSpecOutlineListFieldName,
+          entryType: "spec_outline",
+          requiredFields: normalizeStringArray(specOutlineEntryRequiredFields),
+          fallbackReference: planRef,
+        },
       );
       continue;
     }
@@ -1536,7 +1785,12 @@ function normalizePlanMachineDocument({
       narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
         narrative[fieldName],
         legacyNarrative[fieldName],
-        normalizedRefinedSpecListFieldName,
+        {
+          listFieldName: normalizedRefinedSpecListFieldName,
+          entryType: "refined_spec",
+          requiredFields: normalizeStringArray(refinedSpecEntryRequiredFields),
+          fallbackReference: planRef,
+        },
       );
       continue;
     }
@@ -1961,6 +2215,42 @@ function main() {
   const planMachineRefinedSpecListFieldName =
     toNonEmptyString(sessionArtifacts.planMachineRefinedSpecListFieldName) ??
     "full_refined_spec";
+  const planMachineSpecOutlineEntryRequiredFields = normalizeStringArray(
+    sessionArtifacts.planMachineSpecOutlineEntryRequiredFields ?? [
+      "id",
+      "objective",
+      "deliverable",
+      "acceptance_criteria",
+      "references",
+    ],
+  );
+  const planMachineRefinedSpecEntryRequiredFields = normalizeStringArray(
+    sessionArtifacts.planMachineRefinedSpecEntryRequiredFields ?? [
+      "id",
+      "decision",
+      "rationale",
+      "acceptance_criteria",
+      "references",
+    ],
+  );
+  const planMachineStatusesRequiringSpecOutlineEntries = normalizeStringArray(
+    sessionArtifacts.planMachineStatusesRequiringSpecOutlineEntries ??
+      planMachineStatusesRequiringNarrativeContent,
+  );
+  const planMachineStatusesRequiringRefinedSpecEntries = normalizeStringArray(
+    sessionArtifacts.planMachineStatusesRequiringRefinedSpecEntries ??
+      planMachineStatusesRequiringNarrativeContent,
+  );
+  const planMachineSpecOutlineMinEntries =
+    Number.isInteger(sessionArtifacts.planMachineSpecOutlineMinEntries) &&
+    sessionArtifacts.planMachineSpecOutlineMinEntries >= 1
+      ? sessionArtifacts.planMachineSpecOutlineMinEntries
+      : 1;
+  const planMachineRefinedSpecMinEntries =
+    Number.isInteger(sessionArtifacts.planMachineRefinedSpecMinEntries) &&
+    sessionArtifacts.planMachineRefinedSpecMinEntries >= 1
+      ? sessionArtifacts.planMachineRefinedSpecMinEntries
+      : 1;
   const planMachineImplementationStepsFieldName =
     toNonEmptyString(sessionArtifacts.planMachineImplementationStepsFieldName) ??
     "steps";
@@ -2459,6 +2749,14 @@ function main() {
     narrative_min_steps: planMachineNarrativeMinSteps,
     spec_outline_list_field_name: planMachineSpecOutlineListFieldName,
     refined_spec_list_field_name: planMachineRefinedSpecListFieldName,
+    spec_outline_entry_required_fields: planMachineSpecOutlineEntryRequiredFields,
+    refined_spec_entry_required_fields: planMachineRefinedSpecEntryRequiredFields,
+    statuses_requiring_spec_outline_entries:
+      planMachineStatusesRequiringSpecOutlineEntries,
+    statuses_requiring_refined_spec_entries:
+      planMachineStatusesRequiringRefinedSpecEntries,
+    spec_outline_min_entries: planMachineSpecOutlineMinEntries,
+    refined_spec_min_entries: planMachineRefinedSpecMinEntries,
     implementation_steps_field_name: planMachineImplementationStepsFieldName,
     allowed_narrative_step_statuses: planMachineAllowedNarrativeStepStatuses,
     narrative_step_required_fields: planMachineNarrativeStepRequiredFields,
@@ -2549,6 +2847,8 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+              specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+              refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
               specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -2602,6 +2902,8 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+              specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+              refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
               specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -2642,6 +2944,8 @@ function main() {
                 requiredPlanningStages: planMachineRequiredPlanningStages,
                 requiredNarrativeFields: planMachineRequiredNarrativeFields,
                 preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+                specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+                refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
                 legacyNarrativeSections,
                 legacyPreSpecOutline,
                 specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -2828,6 +3132,8 @@ function main() {
             requiredPlanningStages: planMachineRequiredPlanningStages,
             requiredNarrativeFields: planMachineRequiredNarrativeFields,
             preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+            specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+            refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
             legacyNarrativeSections,
             legacyPreSpecOutline,
             specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -2872,6 +3178,8 @@ function main() {
             requiredPlanningStages: planMachineRequiredPlanningStages,
             requiredNarrativeFields: planMachineRequiredNarrativeFields,
             preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+            specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+            refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
             legacyNarrativeSections,
             legacyPreSpecOutline,
             specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -2911,6 +3219,8 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+              specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+              refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
               specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -3554,6 +3864,8 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+              specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+              refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
               specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -3612,6 +3924,8 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+              specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+              refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
               specOutlineListFieldName: planMachineSpecOutlineListFieldName,
@@ -3657,6 +3971,8 @@ function main() {
                 requiredPlanningStages: planMachineRequiredPlanningStages,
                 requiredNarrativeFields: planMachineRequiredNarrativeFields,
                 preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
+                specOutlineEntryRequiredFields: planMachineSpecOutlineEntryRequiredFields,
+                refinedSpecEntryRequiredFields: planMachineRefinedSpecEntryRequiredFields,
                 legacyNarrativeSections,
                 legacyPreSpecOutline,
                 specOutlineListFieldName: planMachineSpecOutlineListFieldName,
