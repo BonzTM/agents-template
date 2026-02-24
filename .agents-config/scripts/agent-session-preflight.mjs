@@ -539,6 +539,10 @@ function toNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function isNonEmptyString(value) {
+  return toNonEmptyString(value) !== null;
+}
+
 function sleepMs(ms) {
   const duration = Number.isFinite(ms) ? Math.max(0, Math.floor(ms)) : 0;
   if (duration <= 0) {
