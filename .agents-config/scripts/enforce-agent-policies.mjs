@@ -800,8 +800,10 @@ function validatePlanMachineDocument({
   requiredTopLevelFields,
   requiredPlanningStages,
   requiredNarrativeFields,
+  preSpecOutlineRequiredFields,
   statusesRequiringNarrativeContent,
   narrativeMinLength,
+  preSpecOutlineMinLength,
   narrativeMinSteps,
   allowedNarrativeStepStatuses,
   narrativeStepRequiredFields,
@@ -925,6 +927,21 @@ function validatePlanMachineDocument({
         }
       }
     }
+
+    if (!("pre_spec_outline" in narrative)) {
+      addFailure(`${planMachineRef}.narrative is missing required field pre_spec_outline.`);
+    } else if (!isPlainObject(narrative.pre_spec_outline)) {
+      addFailure(`${planMachineRef}.narrative.pre_spec_outline must be an object.`);
+    } else {
+      const preSpecOutline = narrative.pre_spec_outline;
+      for (const fieldName of preSpecOutlineRequiredFields) {
+        if (typeof preSpecOutline[fieldName] !== "string") {
+          addFailure(
+            `${planMachineRef}.narrative.pre_spec_outline.${fieldName} must be a string.`,
+          );
+        }
+      }
+    }
   }
 
   if (statusesRequiringNarrativeContent.includes(status) && isPlainObject(narrative)) {
@@ -945,6 +962,20 @@ function validatePlanMachineDocument({
         addFailure(
           `${planMachineRef}.narrative.${fieldName}.steps must contain at least ${narrativeMinSteps} step(s) when status is ${status}.`,
         );
+      }
+    }
+
+    if (isPlainObject(narrative.pre_spec_outline)) {
+      for (const fieldName of preSpecOutlineRequiredFields) {
+        const value =
+          typeof narrative.pre_spec_outline[fieldName] === "string"
+            ? narrative.pre_spec_outline[fieldName].trim()
+            : "";
+        if (value.length < preSpecOutlineMinLength) {
+          addFailure(
+            `${planMachineRef}.narrative.pre_spec_outline.${fieldName} must be at least ${preSpecOutlineMinLength} characters when status is ${status}.`,
+          );
+        }
       }
     }
   }
@@ -1411,8 +1442,10 @@ function checkContextIndexContract(config) {
         "requiredTopLevelFields",
         "requiredPlanningStages",
         "requiredNarrativeFields",
+        "preSpecOutlineRequiredFields",
         "statusesRequiringNarrativeContent",
         "narrativeMinLength",
+        "preSpecOutlineMinLength",
         "narrativeMinSteps",
         "allowedNarrativeStepStatuses",
         "narrativeStepRequiredFields",
@@ -1473,6 +1506,13 @@ function checkContextIndexContract(config) {
         pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.requiredNarrativeFields`,
       });
       checkExactOrderedArray({
+        value: planMachineContract.preSpecOutlineRequiredFields,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachinePreSpecOutlineRequiredFields,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.preSpecOutlineRequiredFields`,
+      });
+      checkExactOrderedArray({
         value: planMachineContract.statusesRequiringNarrativeContent,
         expected: normalizeStringArray(
           sessionArtifactsContract.planMachineStatusesRequiringNarrativeContent,
@@ -1490,6 +1530,19 @@ function checkContextIndexContract(config) {
       ) {
         addFailure(
           `${contract.indexFile}.sessionArtifacts.planMachineContract.narrativeMinLength must equal contracts.sessionArtifacts.planMachineNarrativeMinLength.`,
+        );
+      }
+      const expectedPreSpecOutlineMinLength =
+        Number.isInteger(sessionArtifactsContract.planMachinePreSpecOutlineMinLength) &&
+        sessionArtifactsContract.planMachinePreSpecOutlineMinLength >= 1
+          ? sessionArtifactsContract.planMachinePreSpecOutlineMinLength
+          : 24;
+      if (
+        !Number.isInteger(planMachineContract.preSpecOutlineMinLength) ||
+        planMachineContract.preSpecOutlineMinLength !== expectedPreSpecOutlineMinLength
+      ) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.preSpecOutlineMinLength must equal contracts.sessionArtifacts.planMachinePreSpecOutlineMinLength.`,
         );
       }
       const expectedNarrativeMinSteps =
@@ -3575,6 +3628,10 @@ function checkSessionArtifactsContract(config) {
     contract.planMachineRequiredNarrativeFields,
     `${contractPath}.planMachineRequiredNarrativeFields`,
   );
+  const planMachinePreSpecOutlineRequiredFields = validateStringArray(
+    contract.planMachinePreSpecOutlineRequiredFields,
+    `${contractPath}.planMachinePreSpecOutlineRequiredFields`,
+  );
   const planMachineStatusesRequiringNarrativeContent = validateStringArray(
     contract.planMachineStatusesRequiringNarrativeContent,
     `${contractPath}.planMachineStatusesRequiringNarrativeContent`,
@@ -3586,6 +3643,14 @@ function checkSessionArtifactsContract(config) {
       : null;
   if (planMachineNarrativeMinLength === null) {
     addFailure(`${contractPath}.planMachineNarrativeMinLength must be an integer >= 1.`);
+  }
+  const planMachinePreSpecOutlineMinLength =
+    Number.isInteger(contract.planMachinePreSpecOutlineMinLength) &&
+    contract.planMachinePreSpecOutlineMinLength >= 1
+      ? contract.planMachinePreSpecOutlineMinLength
+      : null;
+  if (planMachinePreSpecOutlineMinLength === null) {
+    addFailure(`${contractPath}.planMachinePreSpecOutlineMinLength must be an integer >= 1.`);
   }
   const planMachineNarrativeMinSteps =
     Number.isInteger(contract.planMachineNarrativeMinSteps) &&
@@ -3663,6 +3728,12 @@ function checkSessionArtifactsContract(config) {
       "refined_spec",
       "implementation_plan",
     ],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachinePreSpecOutlineRequiredFields",
+    actualFields: contract.planMachinePreSpecOutlineRequiredFields,
+    requiredFields: ["purpose_goals", "non_goals"],
     contractPath,
   });
   checkRequiredFieldList({
@@ -4151,8 +4222,10 @@ function checkSessionArtifactsContract(config) {
           requiredTopLevelFields: planMachineRequiredTopLevelFields,
           requiredPlanningStages: planMachineRequiredPlanningStages,
           requiredNarrativeFields: planMachineRequiredNarrativeFields,
+          preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
           statusesRequiringNarrativeContent: planMachineStatusesRequiringNarrativeContent,
           narrativeMinLength: planMachineNarrativeMinLength ?? 24,
+          preSpecOutlineMinLength: planMachinePreSpecOutlineMinLength ?? 24,
           narrativeMinSteps: planMachineNarrativeMinSteps ?? 1,
           allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
           narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,

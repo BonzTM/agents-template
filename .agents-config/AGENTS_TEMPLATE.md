@@ -81,8 +81,8 @@ Queue-first execution rule:
 - Before implementation/investigation execution starts, all planned work must exist as atomic entries in `.agents/EXECUTION_QUEUE.json`.
 - `.agents/EXECUTION_QUEUE.json` is authoritative for task state/order; `PLAN.json` is the machine-authoritative lifecycle companion for each plan, and `PLAN.md` is legacy historical context only.
 - `npm run agent:preflight` auto-syncs `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` into queue items.
-- `npm run agent:preflight` seeds/normalizes `.agents/plans/*/*/PLAN.json` and enforces `status`, `planning_stages`, `narrative`, and `subagent` metadata fields including `subagent.last_executor` (null/non-empty string; required non-empty when plan `status` is `in_progress` or `complete`).
-- If `PLAN.md` exists in current/deferred plan tracks, preflight migrates it into canonical `PLAN.json`, extracting `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` sections into `narrative.<section>.summary` (with `steps: []`) when present; Markdown remains legacy history.
+- `npm run agent:preflight` seeds/normalizes `.agents/plans/*/*/PLAN.json` and enforces `status`, `planning_stages`, `narrative`, and `subagent` metadata fields including `subagent.last_executor` (null/non-empty string; required non-empty when plan `status` is `in_progress` or `complete`) and `narrative.pre_spec_outline` (`purpose_goals`/`non_goals` string fields).
+- If `PLAN.md` exists in current/deferred plan tracks, preflight migrates it into canonical `PLAN.json`, extracting `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` sections into `narrative.<section>.summary` (with `steps: []`) when present; when `narrative.pre_spec_outline` is missing, preflight deterministically backfills `purpose_goals` from existing `narrative.spec_outline.summary` (or legacy extracted spec outline text) where available; Markdown remains legacy history.
 - Policy enforcement requires each current/deferred plan directory to have a corresponding queue item via `plan_ref`.
 - `npm run agent:preflight` also backfills `.agents/plans/archived/*/PLAN.json` into `.agents/EXECUTION_ARCHIVE_INDEX.json` + feature shard archives idempotently.
 - Queue state model is explicit and idempotent: top-level and per-item `state` use `active`/`deferred`/`pending`/`complete`, and items keep stable `id` + `idempotency_key`.
@@ -101,11 +101,12 @@ Simplified plan architecture:
 - optional legacy historical artifact: `PLAN.md` (non-authoritative)
 - Optional when needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
 - Legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files are valid historical formats.
-- Required `PLAN.json` metadata includes lifecycle fields (`status`, `updated_at`, `planning_stages`), authoritative narrative fields (`narrative.spec_outline`, `narrative.refined_spec`, `narrative.implementation_plan`), `plan_ref`, and subagent fields (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`).
-- Each `PLAN.json.narrative.<section>` value must be an object: `{ "summary": string, "steps": Step[] }`.
+- Required `PLAN.json` metadata includes lifecycle fields (`status`, `updated_at`, `planning_stages`), authoritative narrative fields (`narrative.spec_outline`, `narrative.refined_spec`, `narrative.implementation_plan`, `narrative.pre_spec_outline`), `plan_ref`, and subagent fields (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`).
+- `PLAN.json.narrative.spec_outline`, `PLAN.json.narrative.refined_spec`, and `PLAN.json.narrative.implementation_plan` must be objects: `{ "summary": string, "steps": Step[] }`.
+- `PLAN.json.narrative.pre_spec_outline` must be an object with required string fields: `{ "purpose_goals": string, "non_goals": string }`.
 - Narrative step contract: required `id`/`title`/`status` (non-empty strings), optional `notes` (non-empty string when present), and `status` must be policy-allowlisted (default: `pending`, `in_progress`, `complete`, `blocked`).
 - `PLAN.json.narrative.*` is the authoritative active planning context; `PLAN.md` prose is legacy historical context only.
-- For policy-configured statuses requiring narrative content (default: `in_progress`, `complete`), each required narrative summary must meet the configured minimum length (default: `24` characters) and must include at least the configured minimum step count (default: `1`).
+- For policy-configured statuses requiring narrative content (default: `in_progress`, `complete`), each required narrative summary must meet the configured minimum length (default: `24` characters), include at least the configured minimum step count (default: `1`), and `narrative.pre_spec_outline.purpose_goals`/`narrative.pre_spec_outline.non_goals` must meet the configured pre-spec minimum length (default: `24` characters each).
 
 ## Orchestrator/Subagent Contract Pointer
 

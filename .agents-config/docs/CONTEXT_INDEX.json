@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-24.06",
+    "version": "2026-02-24.07",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
@@ -114,11 +114,16 @@
         "refined_spec",
         "implementation_plan"
       ],
+      "preSpecOutlineRequiredFields": [
+        "purpose_goals",
+        "non_goals"
+      ],
       "statusesRequiringNarrativeContent": [
         "in_progress",
         "complete"
       ],
       "narrativeMinLength": 24,
+      "preSpecOutlineMinLength": 24,
       "narrativeMinSteps": 1,
       "allowedNarrativeStepStatuses": [
         "pending",

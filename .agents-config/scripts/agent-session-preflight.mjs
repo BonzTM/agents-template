@@ -706,6 +706,29 @@ function mapNarrativeHeadingToField(value) {
   return null;
 }
 
+function mapPreSpecOutlineHeadingToField(value) {
+  const normalized = normalizePlanNarrativeHeading(value);
+  if (
+    normalized === "purpose" ||
+    normalized === "goals" ||
+    normalized === "purpose goals" ||
+    normalized === "purpose and goals" ||
+    normalized === "goals and purpose" ||
+    normalized === "objectives"
+  ) {
+    return "purpose_goals";
+  }
+  if (
+    normalized === "non goals" ||
+    normalized === "out of scope" ||
+    normalized === "non goals and out of scope" ||
+    normalized === "out of scope and non goals"
+  ) {
+    return "non_goals";
+  }
+  return null;
+}
+
 function normalizeNarrativeText(value) {
   if (typeof value !== "string") {
     return null;
@@ -871,6 +894,66 @@ function readLegacyPlanNarrativeSections(planFileAbs, requiredNarrativeFields) {
   return output;
 }
 
+function normalizePlanPreSpecOutline(
+  value,
+  {
+    requiredFields = ["purpose_goals", "non_goals"],
+    fallbackValues = {},
+  } = {},
+) {
+  const existing = isPlainObject(value) ? { ...value } : {};
+  const normalizedRequiredFields = normalizeStringArray(requiredFields);
+
+  for (const fieldName of normalizedRequiredFields) {
+    const normalizedCurrent = normalizeNarrativeText(existing[fieldName]);
+    const normalizedFallback = normalizeNarrativeText(fallbackValues[fieldName]) ?? "";
+    existing[fieldName] = normalizedCurrent ?? normalizedFallback;
+  }
+
+  return existing;
+}
+
+function readLegacyPlanPreSpecOutline(planFileAbs, requiredPreSpecOutlineFields) {
+  const output = {};
+  const requiredFields = normalizeStringArray(requiredPreSpecOutlineFields);
+  for (const fieldName of requiredFields) {
+    output[fieldName] = "";
+  }
+
+  if (!fs.existsSync(planFileAbs)) {
+    return output;
+  }
+
+  const content = fs.readFileSync(planFileAbs, "utf8");
+  const lines = content.split(/\r?\n/);
+  const sectionLinesByField = new Map();
+  for (const fieldName of requiredFields) {
+    sectionLinesByField.set(fieldName, []);
+  }
+
+  let activeField = null;
+  for (const line of lines) {
+    const headingMatch = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (headingMatch) {
+      activeField = mapPreSpecOutlineHeadingToField(headingMatch[1]);
+      continue;
+    }
+
+    if (!activeField || !sectionLinesByField.has(activeField)) {
+      continue;
+    }
+    sectionLinesByField.get(activeField).push(line);
+  }
+
+  for (const fieldName of requiredFields) {
+    const sectionLines = sectionLinesByField.get(fieldName) ?? [];
+    const sectionText = normalizeNarrativeText(sectionLines.join("\n"));
+    output[fieldName] = sectionText ?? "";
+  }
+
+  return output;
+}
+
 function readPlanHeading(planFileAbs) {
   if (!fs.existsSync(planFileAbs)) {
     return null;
@@ -959,7 +1042,9 @@ function buildPlanMachineTemplate({
   now,
   requiredPlanningStages,
   requiredNarrativeFields,
+  preSpecOutlineRequiredFields,
   legacyNarrativeSections,
+  legacyPreSpecOutline,
   allowedNarrativeStepStatuses,
   narrativeStepRequiredFields,
   narrativeStepOptionalFields,
@@ -989,6 +1074,26 @@ function buildPlanMachineTemplate({
       },
     );
   }
+  const normalizedPreSpecOutlineFields = normalizeStringArray(preSpecOutlineRequiredFields);
+  const normalizedLegacyPreSpecOutline =
+    legacyPreSpecOutline && isPlainObject(legacyPreSpecOutline) ? legacyPreSpecOutline : {};
+  const preSpecOutlineFallbacks = {};
+  for (const fieldName of normalizedPreSpecOutlineFields) {
+    let fallbackText =
+      normalizeNarrativeText(normalizedLegacyPreSpecOutline[fieldName]) ?? "";
+    if (!fallbackText && fieldName === "purpose_goals") {
+      const specOutlineSummary =
+        isPlainObject(narrative.spec_outline) && typeof narrative.spec_outline.summary === "string"
+          ? narrative.spec_outline.summary
+          : legacyNarrative.spec_outline;
+      fallbackText = normalizeNarrativeText(specOutlineSummary) ?? "";
+    }
+    preSpecOutlineFallbacks[fieldName] = fallbackText;
+  }
+  narrative.pre_spec_outline = normalizePlanPreSpecOutline(null, {
+    requiredFields: normalizedPreSpecOutlineFields,
+    fallbackValues: preSpecOutlineFallbacks,
+  });
 
   return {
     schema_version: schemaVersion,
@@ -1031,7 +1136,9 @@ function normalizePlanMachineDocument({
   now,
   requiredPlanningStages,
   requiredNarrativeFields,
+  preSpecOutlineRequiredFields,
   legacyNarrativeSections,
+  legacyPreSpecOutline,
   allowedNarrativeStepStatuses,
   narrativeStepRequiredFields,
   narrativeStepOptionalFields,
@@ -1050,7 +1157,9 @@ function normalizePlanMachineDocument({
     now,
     requiredPlanningStages,
     requiredNarrativeFields,
+    preSpecOutlineRequiredFields,
     legacyNarrativeSections,
+    legacyPreSpecOutline,
     allowedNarrativeStepStatuses,
     narrativeStepRequiredFields,
     narrativeStepOptionalFields,
@@ -1119,6 +1228,26 @@ function normalizePlanMachineDocument({
       },
     );
   }
+  const normalizedPreSpecOutlineFields = normalizeStringArray(preSpecOutlineRequiredFields);
+  const normalizedLegacyPreSpecOutline =
+    legacyPreSpecOutline && isPlainObject(legacyPreSpecOutline) ? legacyPreSpecOutline : {};
+  const preSpecOutlineFallbacks = {};
+  for (const fieldName of normalizedPreSpecOutlineFields) {
+    let fallbackText =
+      normalizeNarrativeText(normalizedLegacyPreSpecOutline[fieldName]) ?? "";
+    if (!fallbackText && fieldName === "purpose_goals") {
+      const specOutlineSummary =
+        isPlainObject(narrative.spec_outline) && typeof narrative.spec_outline.summary === "string"
+          ? narrative.spec_outline.summary
+          : legacyNarrative.spec_outline;
+      fallbackText = normalizeNarrativeText(specOutlineSummary) ?? "";
+    }
+    preSpecOutlineFallbacks[fieldName] = fallbackText;
+  }
+  narrative.pre_spec_outline = normalizePlanPreSpecOutline(narrative.pre_spec_outline, {
+    requiredFields: normalizedPreSpecOutlineFields,
+    fallbackValues: preSpecOutlineFallbacks,
+  });
   setIfDifferent("narrative", narrative);
 
   const subagent =
@@ -1450,6 +1579,12 @@ function main() {
       "implementation_plan",
     ],
   );
+  const planMachinePreSpecOutlineRequiredFields = normalizeStringArray(
+    sessionArtifacts.planMachinePreSpecOutlineRequiredFields ?? [
+      "purpose_goals",
+      "non_goals",
+    ],
+  );
   const planMachineStatusesRequiringNarrativeContent = normalizeStringArray(
     sessionArtifacts.planMachineStatusesRequiringNarrativeContent ?? [
       "in_progress",
@@ -1460,6 +1595,11 @@ function main() {
     Number.isInteger(sessionArtifacts.planMachineNarrativeMinLength) &&
     sessionArtifacts.planMachineNarrativeMinLength >= 1
       ? sessionArtifacts.planMachineNarrativeMinLength
+      : 24;
+  const planMachinePreSpecOutlineMinLength =
+    Number.isInteger(sessionArtifacts.planMachinePreSpecOutlineMinLength) &&
+    sessionArtifacts.planMachinePreSpecOutlineMinLength >= 1
+      ? sessionArtifacts.planMachinePreSpecOutlineMinLength
       : 24;
   const planMachineNarrativeMinSteps =
     Number.isInteger(sessionArtifacts.planMachineNarrativeMinSteps) &&
@@ -1901,8 +2041,10 @@ function main() {
     schema_version: planMachineSchemaVersion,
     roots: planMachineRoots,
     required_narrative_fields: planMachineRequiredNarrativeFields,
+    pre_spec_outline_required_fields: planMachinePreSpecOutlineRequiredFields,
     statuses_requiring_narrative_content: planMachineStatusesRequiringNarrativeContent,
     narrative_min_length: planMachineNarrativeMinLength,
+    pre_spec_outline_min_length: planMachinePreSpecOutlineMinLength,
     narrative_min_steps: planMachineNarrativeMinSteps,
     allowed_narrative_step_statuses: planMachineAllowedNarrativeStepStatuses,
     narrative_step_required_fields: planMachineNarrativeStepRequiredFields,
@@ -1957,6 +2099,13 @@ function main() {
                 planMachineRequiredNarrativeFields,
               )
             : {};
+        const legacyPreSpecOutline =
+          legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+            ? readLegacyPlanPreSpecOutline(
+                legacyPlanMarkdownAbs,
+                planMachinePreSpecOutlineRequiredFields,
+              )
+            : {};
         if (!fs.existsSync(planAbs)) {
           if (
             planMachineContractEnabled &&
@@ -1974,7 +2123,9 @@ function main() {
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
+              legacyPreSpecOutline,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2017,7 +2168,9 @@ function main() {
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
+              legacyPreSpecOutline,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2047,7 +2200,9 @@ function main() {
                 now,
                 requiredPlanningStages: planMachineRequiredPlanningStages,
                 requiredNarrativeFields: planMachineRequiredNarrativeFields,
+                preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
                 legacyNarrativeSections,
+                legacyPreSpecOutline,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2199,6 +2354,13 @@ function main() {
               planMachineRequiredNarrativeFields,
             )
           : {};
+      const legacyPreSpecOutline =
+        legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+          ? readLegacyPlanPreSpecOutline(
+              legacyPlanMarkdownAbs,
+              planMachinePreSpecOutlineRequiredFields,
+            )
+          : {};
       if (!fs.existsSync(planAbs)) {
         if (
           planMachineContractEnabled &&
@@ -2216,7 +2378,9 @@ function main() {
             now,
             requiredPlanningStages: planMachineRequiredPlanningStages,
             requiredNarrativeFields: planMachineRequiredNarrativeFields,
+            preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
             legacyNarrativeSections,
+            legacyPreSpecOutline,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2250,7 +2414,9 @@ function main() {
             now,
             requiredPlanningStages: planMachineRequiredPlanningStages,
             requiredNarrativeFields: planMachineRequiredNarrativeFields,
+            preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
             legacyNarrativeSections,
+            legacyPreSpecOutline,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2279,7 +2445,9 @@ function main() {
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
+              legacyPreSpecOutline,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2887,6 +3055,13 @@ function main() {
                 planMachineRequiredNarrativeFields,
               )
             : {};
+        const legacyPreSpecOutline =
+          legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+            ? readLegacyPlanPreSpecOutline(
+                legacyPlanMarkdownAbs,
+                planMachinePreSpecOutlineRequiredFields,
+              )
+            : {};
 
         if (!fs.existsSync(planAbs)) {
           if (
@@ -2905,7 +3080,9 @@ function main() {
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
+              legacyPreSpecOutline,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2953,7 +3130,9 @@ function main() {
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
+              legacyPreSpecOutline,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2988,7 +3167,9 @@ function main() {
                 now,
                 requiredPlanningStages: planMachineRequiredPlanningStages,
                 requiredNarrativeFields: planMachineRequiredNarrativeFields,
+                preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
                 legacyNarrativeSections,
+                legacyPreSpecOutline,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3463,9 +3644,11 @@ function main() {
       schema_version: planMachineSummary.schema_version,
       roots: planMachineSummary.roots,
       required_narrative_fields: planMachineSummary.required_narrative_fields,
+      pre_spec_outline_required_fields: planMachineSummary.pre_spec_outline_required_fields,
       statuses_requiring_narrative_content:
         planMachineSummary.statuses_requiring_narrative_content,
       narrative_min_length: planMachineSummary.narrative_min_length,
+      pre_spec_outline_min_length: planMachineSummary.pre_spec_outline_min_length,
       narrative_min_steps: planMachineSummary.narrative_min_steps,
       allowed_narrative_step_statuses:
         planMachineSummary.allowed_narrative_step_statuses,
