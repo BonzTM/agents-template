@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "canonical-ruleset",
-    "version": "2026-02-24.04",
+    "version": "2026-02-24.05",
     "description": "Canonical governance rule catalog used for policy and drift checks.",
     "generated_from": [
       ".agents-config/policies/agent-governance.json",
@@ -10,8 +10,8 @@
     "lineage": {
       "policy_required_ids_sha256": "e15dbde56df0b1223550666f90dde1d2583657404e0f3b645936fa098842226d",
       "policy_orchestrator_rules_sha256": "2ed533f4959dde7409cf7030d0b6d5853d160632f172488a2a04810ac21fef99",
-      "rules_doc_catalog_sha256": "4b0041c0b8fa5fe0ecc6ab773b7abdf5709627e0c0d626325a0cb716afb94a15",
-      "canonical_rules_sha256": "ebcd2380abcf9bea02cdd30ce2d7a490cfdfafbad0615ec37d54f1b91773351b"
+      "rules_doc_catalog_sha256": "d6a2cfe95e084f1ac1b6b0987a8f4b608ad9abac7099a214fdf156aee59429b9",
+      "canonical_rules_sha256": "2d61c656d23e512efd9691838e67b51b59068caf2778657d86ed54cc2e4c153a"
     }
   },
   "rules": [
@@ -73,7 +73,7 @@
     },
     {
       "id": "rule_plan_machine_contract_required",
-      "statement": "Maintain machine-readable plan lifecycle metadata in `PLAN.json` for each active/deferred/archived feature plan directory.",
+      "statement": "Maintain machine-readable plan lifecycle + authoritative narrative context in `PLAN.json` for each active/deferred/archived feature plan directory.",
       "category": "governance",
       "severity": "error",
       "overrideable": false,

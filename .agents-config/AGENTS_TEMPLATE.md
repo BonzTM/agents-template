@@ -81,8 +81,8 @@ Queue-first execution rule:
 - Before implementation/investigation execution starts, all planned work must exist as atomic entries in `.agents/EXECUTION_QUEUE.json`.
 - `.agents/EXECUTION_QUEUE.json` is authoritative for task state/order; `PLAN.json` is the machine-authoritative lifecycle companion for each plan, and `PLAN.md` is legacy historical context only.
 - `npm run agent:preflight` auto-syncs `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` into queue items.
-- `npm run agent:preflight` seeds/normalizes `.agents/plans/*/*/PLAN.json` and enforces `status`, `planning_stages`, and `subagent` metadata fields including `subagent.last_executor` (null/non-empty string; required non-empty when plan `status` is `in_progress` or `complete`).
-- If `PLAN.md` exists in current/deferred plan tracks, preflight migrates it into canonical `PLAN.json` and treats Markdown as legacy history.
+- `npm run agent:preflight` seeds/normalizes `.agents/plans/*/*/PLAN.json` and enforces `status`, `planning_stages`, `narrative`, and `subagent` metadata fields including `subagent.last_executor` (null/non-empty string; required non-empty when plan `status` is `in_progress` or `complete`).
+- If `PLAN.md` exists in current/deferred plan tracks, preflight migrates it into canonical `PLAN.json`, extracting `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` sections into `narrative` when present; Markdown remains legacy history.
 - Policy enforcement requires each current/deferred plan directory to have a corresponding queue item via `plan_ref`.
 - `npm run agent:preflight` also backfills `.agents/plans/archived/*/PLAN.json` into `.agents/EXECUTION_ARCHIVE_INDEX.json` + feature shard archives idempotently.
 - Queue state model is explicit and idempotent: top-level and per-item `state` use `active`/`deferred`/`pending`/`complete`, and items keep stable `id` + `idempotency_key`.
@@ -101,7 +101,9 @@ Simplified plan architecture:
 - optional legacy historical artifact: `PLAN.md` (non-authoritative)
 - Optional when needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
 - Legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files are valid historical formats.
-- Required `PLAN.json` metadata includes lifecycle fields (`status`, `updated_at`, `planning_stages`), `plan_ref`, and subagent fields (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`).
+- Required `PLAN.json` metadata includes lifecycle fields (`status`, `updated_at`, `planning_stages`), authoritative narrative fields (`narrative.spec_outline`, `narrative.refined_spec`, `narrative.implementation_plan`), `plan_ref`, and subagent fields (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`).
+- `PLAN.json.narrative.*` is the authoritative active planning context; `PLAN.md` prose is legacy historical context only.
+- For policy-configured statuses requiring narrative content (default: `in_progress`, `complete`), each required narrative field must meet the configured minimum length (default: `24` characters).
 
 ## Orchestrator/Subagent Contract Pointer
 

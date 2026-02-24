@@ -480,6 +480,10 @@ function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function toNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -675,6 +679,81 @@ function toFeatureTitleFromSlug(slug) {
     .join(" ");
 }
 
+function normalizePlanNarrativeHeading(value) {
+  const text = toNonEmptyString(value);
+  if (!text) {
+    return null;
+  }
+
+  return text
+    .toLowerCase()
+    .replace(/[`*_]+/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function mapNarrativeHeadingToField(value) {
+  const normalized = normalizePlanNarrativeHeading(value);
+  if (normalized === "spec outline") {
+    return "spec_outline";
+  }
+  if (normalized === "refined spec") {
+    return "refined_spec";
+  }
+  if (normalized === "detailed implementation plan" || normalized === "implementation plan") {
+    return "implementation_plan";
+  }
+  return null;
+}
+
+function normalizeNarrativeText(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+function readLegacyPlanNarrativeSections(planFileAbs, requiredNarrativeFields) {
+  const output = {};
+  const requiredFields = normalizeStringArray(requiredNarrativeFields);
+  for (const fieldName of requiredFields) {
+    output[fieldName] = "";
+  }
+
+  if (!fs.existsSync(planFileAbs)) {
+    return output;
+  }
+
+  const content = fs.readFileSync(planFileAbs, "utf8");
+  const lines = content.split(/\r?\n/);
+  const sectionLinesByField = new Map();
+  for (const fieldName of requiredFields) {
+    sectionLinesByField.set(fieldName, []);
+  }
+
+  let activeField = null;
+  for (const line of lines) {
+    const headingMatch = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (headingMatch) {
+      activeField = mapNarrativeHeadingToField(headingMatch[1]);
+      continue;
+    }
+
+    if (!activeField || !sectionLinesByField.has(activeField)) {
+      continue;
+    }
+    sectionLinesByField.get(activeField).push(line);
+  }
+
+  for (const fieldName of requiredFields) {
+    const sectionLines = sectionLinesByField.get(fieldName) ?? [];
+    const sectionText = normalizeNarrativeText(sectionLines.join("\n"));
+    output[fieldName] = sectionText ?? "";
+  }
+
+  return output;
+}
+
 function readPlanHeading(planFileAbs) {
   if (!fs.existsSync(planFileAbs)) {
     return null;
@@ -762,6 +841,8 @@ function buildPlanMachineTemplate({
   rootPath,
   now,
   requiredPlanningStages,
+  requiredNarrativeFields,
+  legacyNarrativeSections,
   allowedStatusByRoot,
 }) {
   const defaultStatus = defaultPlanLifecycleStatus(rootPath);
@@ -770,6 +851,16 @@ function buildPlanMachineTemplate({
   const planningStages = {};
   for (const stage of requiredPlanningStages) {
     planningStages[stage] = stageState;
+  }
+  const narrative = {};
+  const normalizedNarrativeFields = normalizeStringArray(requiredNarrativeFields);
+  const legacyNarrative =
+    legacyNarrativeSections && isPlainObject(legacyNarrativeSections)
+      ? legacyNarrativeSections
+      : {};
+  for (const fieldName of normalizedNarrativeFields) {
+    const value = normalizeNarrativeText(legacyNarrative[fieldName]);
+    narrative[fieldName] = value ?? "";
   }
 
   return {
@@ -784,6 +875,7 @@ function buildPlanMachineTemplate({
     }),
     updated_at: now,
     planning_stages: planningStages,
+    narrative,
     subagent: {
       requirement: "optional",
       primary_agent: null,
@@ -811,6 +903,8 @@ function normalizePlanMachineDocument({
   rootPath,
   now,
   requiredPlanningStages,
+  requiredNarrativeFields,
+  legacyNarrativeSections,
   allowedPlanningStageStates,
   allowedSubagentRequirements,
   requiredSubagentFields,
@@ -825,6 +919,8 @@ function normalizePlanMachineDocument({
     rootPath,
     now,
     requiredPlanningStages,
+    requiredNarrativeFields,
+    legacyNarrativeSections,
     allowedStatusByRoot,
   });
 
@@ -872,6 +968,19 @@ function normalizePlanMachineDocument({
         : defaultStageState;
   }
   setIfDifferent("planning_stages", planningStages);
+
+  const narrative = isPlainObject(value.narrative) ? { ...value.narrative } : {};
+  const normalizedNarrativeFields = normalizeStringArray(requiredNarrativeFields);
+  const legacyNarrative =
+    legacyNarrativeSections && isPlainObject(legacyNarrativeSections)
+      ? legacyNarrativeSections
+      : {};
+  for (const fieldName of normalizedNarrativeFields) {
+    const currentValue = normalizeNarrativeText(narrative[fieldName]);
+    const fallbackValue = normalizeNarrativeText(legacyNarrative[fieldName]) ?? "";
+    narrative[fieldName] = currentValue ?? fallbackValue;
+  }
+  setIfDifferent("narrative", narrative);
 
   const subagent =
     value.subagent && typeof value.subagent === "object" && !Array.isArray(value.subagent)
@@ -1195,6 +1304,24 @@ function main() {
       "implementation_plan",
     ],
   );
+  const planMachineRequiredNarrativeFields = normalizeStringArray(
+    sessionArtifacts.planMachineRequiredNarrativeFields ?? [
+      "spec_outline",
+      "refined_spec",
+      "implementation_plan",
+    ],
+  );
+  const planMachineStatusesRequiringNarrativeContent = normalizeStringArray(
+    sessionArtifacts.planMachineStatusesRequiringNarrativeContent ?? [
+      "in_progress",
+      "complete",
+    ],
+  );
+  const planMachineNarrativeMinLength =
+    Number.isInteger(sessionArtifacts.planMachineNarrativeMinLength) &&
+    sessionArtifacts.planMachineNarrativeMinLength >= 1
+      ? sessionArtifacts.planMachineNarrativeMinLength
+      : 24;
   const planMachineAllowedPlanningStageStates = normalizeStringArray(
     sessionArtifacts.planMachineAllowedPlanningStageStates ?? [
       "pending",
@@ -1611,6 +1738,9 @@ function main() {
     machine_file_name: planMachineFileName,
     schema_version: planMachineSchemaVersion,
     roots: planMachineRoots,
+    required_narrative_fields: planMachineRequiredNarrativeFields,
+    statuses_requiring_narrative_content: planMachineStatusesRequiringNarrativeContent,
+    narrative_min_length: planMachineNarrativeMinLength,
     created_machine_files: [],
     normalized_machine_files: [],
     migrated_from_legacy_plan_md_refs: [],
@@ -1654,6 +1784,13 @@ function main() {
           legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
             ? readPlanHeading(legacyPlanMarkdownAbs)
             : null;
+        const legacyNarrativeSections =
+          legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+            ? readLegacyPlanNarrativeSections(
+                legacyPlanMarkdownAbs,
+                planMachineRequiredNarrativeFields,
+              )
+            : {};
         if (!fs.existsSync(planAbs)) {
           if (
             planMachineContractEnabled &&
@@ -1670,6 +1807,8 @@ function main() {
               rootPath,
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
+              requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              legacyNarrativeSections,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planAbs, template);
@@ -1708,6 +1847,8 @@ function main() {
               rootPath,
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
+              requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              legacyNarrativeSections,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planMachineAbs, template);
@@ -1733,6 +1874,8 @@ function main() {
                 rootPath,
                 now,
                 requiredPlanningStages: planMachineRequiredPlanningStages,
+                requiredNarrativeFields: planMachineRequiredNarrativeFields,
+                legacyNarrativeSections,
                 allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
                 allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
                 requiredSubagentFields: planMachineRequiredSubagentFields,
@@ -1874,6 +2017,13 @@ function main() {
         legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
           ? readPlanHeading(legacyPlanMarkdownAbs)
           : null;
+      const legacyNarrativeSections =
+        legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+          ? readLegacyPlanNarrativeSections(
+              legacyPlanMarkdownAbs,
+              planMachineRequiredNarrativeFields,
+            )
+          : {};
       if (!fs.existsSync(planAbs)) {
         if (
           planMachineContractEnabled &&
@@ -1890,6 +2040,8 @@ function main() {
             rootPath: archivedPlanRoot,
             now,
             requiredPlanningStages: planMachineRequiredPlanningStages,
+            requiredNarrativeFields: planMachineRequiredNarrativeFields,
+            legacyNarrativeSections,
             allowedStatusByRoot: planMachineAllowedStatusByRoot,
           });
           writeJson(planAbs, template);
@@ -1919,6 +2071,8 @@ function main() {
             rootPath: archivedPlanRoot,
             now,
             requiredPlanningStages: planMachineRequiredPlanningStages,
+            requiredNarrativeFields: planMachineRequiredNarrativeFields,
+            legacyNarrativeSections,
             allowedStatusByRoot: planMachineAllowedStatusByRoot,
           });
           writeJson(planMachineAbs, template);
@@ -1943,6 +2097,8 @@ function main() {
               rootPath: archivedPlanRoot,
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
+              requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              legacyNarrativeSections,
               allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
               allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
               requiredSubagentFields: planMachineRequiredSubagentFields,
@@ -2540,6 +2696,13 @@ function main() {
           legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
             ? readPlanHeading(legacyPlanMarkdownAbs)
             : null;
+        const legacyNarrativeSections =
+          legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+            ? readLegacyPlanNarrativeSections(
+                legacyPlanMarkdownAbs,
+                planMachineRequiredNarrativeFields,
+              )
+            : {};
 
         if (!fs.existsSync(planAbs)) {
           if (
@@ -2557,6 +2720,8 @@ function main() {
               rootPath,
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
+              requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              legacyNarrativeSections,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planAbs, template);
@@ -2600,6 +2765,8 @@ function main() {
               rootPath,
               now,
               requiredPlanningStages: planMachineRequiredPlanningStages,
+              requiredNarrativeFields: planMachineRequiredNarrativeFields,
+              legacyNarrativeSections,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planMachineAbs, template);
@@ -2630,6 +2797,8 @@ function main() {
                 rootPath,
                 now,
                 requiredPlanningStages: planMachineRequiredPlanningStages,
+                requiredNarrativeFields: planMachineRequiredNarrativeFields,
+                legacyNarrativeSections,
                 allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
                 allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
                 requiredSubagentFields: planMachineRequiredSubagentFields,
@@ -2915,7 +3084,7 @@ function main() {
   }
   if (planMachineSummary.created_machine_files.length > 0) {
     nextActions.push(
-      `Plan machine contract created ${planMachineSummary.created_machine_files.length} ${planMachineFileName} file(s); fill status/planning/subagent metadata before implementation`,
+      `Plan machine contract created ${planMachineSummary.created_machine_files.length} ${planMachineFileName} file(s); fill status/planning/narrative/subagent metadata before implementation`,
     );
   }
   if (planMachineSummary.normalized_machine_files.length > 0) {
@@ -2925,7 +3094,7 @@ function main() {
   }
   if (planMachineSummary.migrated_from_legacy_plan_md_refs.length > 0) {
     nextActions.push(
-      `Converted ${planMachineSummary.migrated_from_legacy_plan_md_refs.length} legacy PLAN.md artifact(s) into authoritative ${planMachineFileName}`,
+      `Converted ${planMachineSummary.migrated_from_legacy_plan_md_refs.length} legacy PLAN.md artifact(s) into authoritative ${planMachineFileName} (including narrative section extraction when present)`,
     );
   }
   if (planMachineSummary.missing_machine_files.length > 0) {
@@ -3100,6 +3269,10 @@ function main() {
       machine_file_name: planMachineSummary.machine_file_name,
       schema_version: planMachineSummary.schema_version,
       roots: planMachineSummary.roots,
+      required_narrative_fields: planMachineSummary.required_narrative_fields,
+      statuses_requiring_narrative_content:
+        planMachineSummary.statuses_requiring_narrative_content,
+      narrative_min_length: planMachineSummary.narrative_min_length,
       created_machine_files: planMachineSummary.created_machine_files,
       normalized_machine_files: planMachineSummary.normalized_machine_files,
       migrated_from_legacy_plan_md_refs: planMachineSummary.migrated_from_legacy_plan_md_refs,

@@ -799,6 +799,9 @@ function validatePlanMachineDocument({
   expectedSchemaVersion,
   requiredTopLevelFields,
   requiredPlanningStages,
+  requiredNarrativeFields,
+  statusesRequiringNarrativeContent,
+  narrativeMinLength,
   allowedPlanningStageStates,
   allowedSubagentRequirements,
   requiredSubagentFields,
@@ -857,6 +860,33 @@ function validatePlanMachineDocument({
       if (!stageValue || !allowedPlanningStageStates.includes(stageValue)) {
         addFailure(
           `${planMachineRef}.planning_stages.${stageName} must be one of: ${allowedPlanningStageStates.join(", ")}.`,
+        );
+      }
+    }
+  }
+
+  const narrative = planMachine.narrative;
+  if (!isPlainObject(narrative)) {
+    addFailure(`${planMachineRef}.narrative must be an object.`);
+  } else {
+    for (const fieldName of requiredNarrativeFields) {
+      if (!(fieldName in narrative)) {
+        addFailure(`${planMachineRef}.narrative is missing required field ${fieldName}.`);
+        continue;
+      }
+      if (typeof narrative[fieldName] !== "string") {
+        addFailure(`${planMachineRef}.narrative.${fieldName} must be a string.`);
+      }
+    }
+  }
+
+  if (statusesRequiringNarrativeContent.includes(status) && isPlainObject(narrative)) {
+    for (const fieldName of requiredNarrativeFields) {
+      const value = narrative[fieldName];
+      const normalized = typeof value === "string" ? value.trim() : "";
+      if (normalized.length < narrativeMinLength) {
+        addFailure(
+          `${planMachineRef}.narrative.${fieldName} must be at least ${narrativeMinLength} characters when status is ${status}.`,
         );
       }
     }
@@ -1323,6 +1353,9 @@ function checkContextIndexContract(config) {
         "roots",
         "requiredTopLevelFields",
         "requiredPlanningStages",
+        "requiredNarrativeFields",
+        "statusesRequiringNarrativeContent",
+        "narrativeMinLength",
         "allowedPlanningStageStates",
         "allowedSubagentRequirements",
         "requiredSubagentFields",
@@ -1373,6 +1406,31 @@ function checkContextIndexContract(config) {
         expected: normalizeStringArray(sessionArtifactsContract.planMachineRequiredPlanningStages),
         pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.requiredPlanningStages`,
       });
+      checkExactOrderedArray({
+        value: planMachineContract.requiredNarrativeFields,
+        expected: normalizeStringArray(sessionArtifactsContract.planMachineRequiredNarrativeFields),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.requiredNarrativeFields`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.statusesRequiringNarrativeContent,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineStatusesRequiringNarrativeContent,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.statusesRequiringNarrativeContent`,
+      });
+      const expectedNarrativeMinLength =
+        Number.isInteger(sessionArtifactsContract.planMachineNarrativeMinLength) &&
+        sessionArtifactsContract.planMachineNarrativeMinLength >= 1
+          ? sessionArtifactsContract.planMachineNarrativeMinLength
+          : 24;
+      if (
+        !Number.isInteger(planMachineContract.narrativeMinLength) ||
+        planMachineContract.narrativeMinLength !== expectedNarrativeMinLength
+      ) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.narrativeMinLength must equal contracts.sessionArtifacts.planMachineNarrativeMinLength.`,
+        );
+      }
       checkExactOrderedArray({
         value: planMachineContract.allowedPlanningStageStates,
         expected: normalizeStringArray(
@@ -3418,6 +3476,22 @@ function checkSessionArtifactsContract(config) {
     contract.planMachineRequiredPlanningStages,
     `${contractPath}.planMachineRequiredPlanningStages`,
   );
+  const planMachineRequiredNarrativeFields = validateStringArray(
+    contract.planMachineRequiredNarrativeFields,
+    `${contractPath}.planMachineRequiredNarrativeFields`,
+  );
+  const planMachineStatusesRequiringNarrativeContent = validateStringArray(
+    contract.planMachineStatusesRequiringNarrativeContent,
+    `${contractPath}.planMachineStatusesRequiringNarrativeContent`,
+  );
+  const planMachineNarrativeMinLength =
+    Number.isInteger(contract.planMachineNarrativeMinLength) &&
+    contract.planMachineNarrativeMinLength >= 1
+      ? contract.planMachineNarrativeMinLength
+      : null;
+  if (planMachineNarrativeMinLength === null) {
+    addFailure(`${contractPath}.planMachineNarrativeMinLength must be an integer >= 1.`);
+  }
   const planMachineAllowedPlanningStageStates = validateStringArray(
     contract.planMachineAllowedPlanningStageStates,
     `${contractPath}.planMachineAllowedPlanningStageStates`,
@@ -3451,6 +3525,7 @@ function checkSessionArtifactsContract(config) {
       "status",
       "updated_at",
       "planning_stages",
+      "narrative",
       "subagent",
     ],
     contractPath,
@@ -3463,6 +3538,22 @@ function checkSessionArtifactsContract(config) {
       "refined_spec",
       "implementation_plan",
     ],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineRequiredNarrativeFields",
+    actualFields: contract.planMachineRequiredNarrativeFields,
+    requiredFields: [
+      "spec_outline",
+      "refined_spec",
+      "implementation_plan",
+    ],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineStatusesRequiringNarrativeContent",
+    actualFields: contract.planMachineStatusesRequiringNarrativeContent,
+    requiredFields: ["in_progress", "complete"],
     contractPath,
   });
   checkRequiredFieldList({
@@ -3693,6 +3784,13 @@ function checkSessionArtifactsContract(config) {
   const allPlanMachineAllowedStatuses = new Set(
     Object.values(planMachineAllowedStatusByRoot).flat(),
   );
+  for (const status of planMachineStatusesRequiringNarrativeContent) {
+    if (!allPlanMachineAllowedStatuses.has(status)) {
+      addFailure(
+        `${contractPath}.planMachineStatusesRequiringNarrativeContent contains unknown status ${status}.`,
+      );
+    }
+  }
   for (const status of planMachineStatusesRequiringLastExecutor) {
     if (!allPlanMachineAllowedStatuses.has(status)) {
       addFailure(
@@ -3919,6 +4017,9 @@ function checkSessionArtifactsContract(config) {
           expectedSchemaVersion: contract.planMachineSchemaVersion,
           requiredTopLevelFields: planMachineRequiredTopLevelFields,
           requiredPlanningStages: planMachineRequiredPlanningStages,
+          requiredNarrativeFields: planMachineRequiredNarrativeFields,
+          statusesRequiringNarrativeContent: planMachineStatusesRequiringNarrativeContent,
+          narrativeMinLength: planMachineNarrativeMinLength ?? 24,
           allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
           allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
           requiredSubagentFields: planMachineRequiredSubagentFields,

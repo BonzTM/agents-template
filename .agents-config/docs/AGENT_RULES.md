@@ -15,7 +15,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_queue_single_source_of_truth`: Use `.agents/EXECUTION_QUEUE.json` as the only queue/scope authority across orchestrator and subagents.
 - `rule_queue_scoped_context_read`: Read only queue fields/items relevant to the active feature/item scope to preserve context efficiency.
 - `rule_queue_archive_on_complete`: Move completed task/feature work from hot queue into feature-sharded archive artifacts.
-- `rule_plan_machine_contract_required`: Maintain machine-readable plan lifecycle metadata in `PLAN.json` for each active/deferred/archived feature plan directory.
+- `rule_plan_machine_contract_required`: Maintain machine-readable plan lifecycle + authoritative narrative context in `PLAN.json` for each active/deferred/archived feature plan directory.
 - `rule_scope_tight_no_overbroad_refactor`: Keep changes narrowly scoped unless the user explicitly requests broad refactors.
 - `rule_hybrid_machine_human_contract`: Use machine-readable contracts as authority with concise human nuance addenda when needed.
 - `rule_policy_sync_required`: When process expectations change, update policy + enforcement + human docs together.
@@ -295,8 +295,11 @@ When policy expectations change, update all relevant governance artifacts in the
 - Legacy `PLAN.md` artifacts (when present) should preserve explicit `Spec outline`, `Refined spec`, and `Detailed implementation plan` sections for historical auditability.
 - `PLAN.json` is the machine-authoritative lifecycle record and must include:
   - lifecycle/status metadata (`status`, `updated_at`, `planning_stages`)
+  - authoritative narrative context fields (`narrative.spec_outline`, `narrative.refined_spec`, `narrative.implementation_plan`)
   - the plan reference link (`plan_ref`)
   - subagent policy/ownership metadata (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`)
+- Treat `PLAN.json.narrative.*` as the authoritative active planning prose context (replacing active `PLAN.md` prose authority).
+- For configured required statuses (default: `in_progress`, `complete`), each required narrative field must satisfy the policy minimum length (default: `24` characters).
 
 ### Re-Context and Retrospective Checks
 
@@ -368,7 +371,8 @@ When policy expectations change, update all relevant governance artifacts in the
   - `npm run agent:preflight` must auto-register every `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` as queue items (state defaults: `pending` for current, `deferred` for deferred).
   - Each plan track must include `.agents/plans/<root>/<feature_id>/PLAN.json` as the machine lifecycle contract; preflight seeds/normalizes it and policy checks fail if missing/invalid.
   - If `PLAN.md` exists in current/deferred plan tracks, preflight must convert/migrate it into canonical `PLAN.json`; Markdown remains historical only.
-  - `PLAN.json` must keep `plan_ref` aligned to the canonical queue-tracked plan artifact (`PLAN.json`) and include canonical planning stage + subagent fields (`subagent.last_executor` must be null or a non-empty string, and must be non-empty when plan `status` is `in_progress` or `complete`).
+  - During migration, preflight should extract `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` section text into `PLAN.json.narrative.*` when present.
+  - `PLAN.json` must keep `plan_ref` aligned to the canonical queue-tracked plan artifact (`PLAN.json`) and include canonical planning stage + narrative + subagent fields (`subagent.last_executor` must be null or a non-empty string, and must be non-empty when plan `status` is `in_progress` or `complete`).
   - Policy enforcement must fail if any current/deferred plan directory lacks a corresponding queue item `plan_ref`.
   - `npm run agent:preflight` must also backfill archived feature plans (`.agents/plans/archived/*/PLAN.json`) into `.agents/EXECUTION_ARCHIVE_INDEX.json` and the corresponding `.agents/archives/<feature_id>.jsonl` shard.
 - Scoped queue read discipline:
@@ -401,7 +405,7 @@ When policy expectations change, update all relevant governance artifacts in the
 - Consolidation boundary:
   - `.agents/EXECUTION_QUEUE.json` is authoritative for atomic execution state.
   - `.agents/CONTINUITY.md` records decisions/outcomes/history, not queue status.
-  - `PLAN.json` files are machine-authoritative plan lifecycle records.
+- `PLAN.json` files are machine-authoritative plan lifecycle and narrative-context records.
 - Optional `PLAN.md` files are legacy historical context and must not be treated as authoritative state.
 - Stale-link hygiene:
   - Run an automated stale reference scan for `.agents/plans/**` paths; unresolved references must fail preflight/policy checks by default.
