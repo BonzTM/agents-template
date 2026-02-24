@@ -713,6 +713,123 @@ function normalizeNarrativeText(value) {
   return value.replace(/\r\n/g, "\n").trim();
 }
 
+function normalizePlanNarrativeStepStatus(value, allowedStepStatuses) {
+  const normalizedStatus = toNonEmptyString(value);
+  if (normalizedStatus && allowedStepStatuses.includes(normalizedStatus)) {
+    return normalizedStatus;
+  }
+  if (allowedStepStatuses.includes("pending")) {
+    return "pending";
+  }
+  return allowedStepStatuses[0] ?? "pending";
+}
+
+function normalizePlanNarrativeSteps(
+  value,
+  {
+    allowedStepStatuses = ["pending", "in_progress", "complete", "blocked"],
+    requiredStepFields = ["id", "title", "status"],
+    optionalStepFields = ["notes"],
+  } = {},
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const usedIds = new Set();
+  const normalized = [];
+  const requiredFieldSet = new Set(normalizeStringArray(requiredStepFields));
+  const optionalFieldSet = new Set(normalizeStringArray(optionalStepFields));
+
+  for (const [index, entry] of value.entries()) {
+    if (!isPlainObject(entry)) {
+      continue;
+    }
+
+    const titleFallback =
+      toNonEmptyString(entry.title) ??
+      toNonEmptyString(entry.name) ??
+      toNonEmptyString(entry.summary) ??
+      `Step ${index + 1}`;
+    const normalizedIdSeed =
+      toQueueToken(toNonEmptyString(entry.id) ?? titleFallback, `step-${index + 1}`)
+        .replace(/-/g, "_");
+    const normalizedId = ensureUniqueValue(
+      normalizedIdSeed,
+      usedIds,
+      "step",
+      index,
+    );
+    const normalizedStatus = normalizePlanNarrativeStepStatus(
+      entry.status,
+      allowedStepStatuses,
+    );
+
+    const step = {};
+    if (requiredFieldSet.has("id") || "id" in entry) {
+      step.id = normalizedId;
+    }
+    if (requiredFieldSet.has("title") || "title" in entry) {
+      step.title = titleFallback;
+    }
+    if (requiredFieldSet.has("status") || "status" in entry) {
+      step.status = normalizedStatus;
+    }
+    if (optionalFieldSet.has("notes") || "notes" in entry) {
+      const notes = normalizeNarrativeText(entry.notes);
+      if (notes) {
+        step.notes = notes;
+      }
+    }
+    if (requiredFieldSet.has("id") && !toNonEmptyString(step.id)) {
+      step.id = ensureUniqueValue(`step_${index + 1}`, usedIds, "step", index);
+    }
+    if (requiredFieldSet.has("title") && !toNonEmptyString(step.title)) {
+      step.title = `Step ${index + 1}`;
+    }
+    if (requiredFieldSet.has("status") && !toNonEmptyString(step.status)) {
+      step.status = normalizePlanNarrativeStepStatus(null, allowedStepStatuses);
+    }
+    normalized.push(step);
+  }
+
+  return normalized;
+}
+
+function normalizePlanNarrativeSection(
+  value,
+  fallbackSummary,
+  {
+    allowedStepStatuses = ["pending", "in_progress", "complete", "blocked"],
+    requiredStepFields = ["id", "title", "status"],
+    optionalStepFields = ["notes"],
+  } = {},
+) {
+  const fallbackSummaryText = normalizeNarrativeText(fallbackSummary) ?? "";
+
+  if (typeof value === "string") {
+    return {
+      summary: normalizeNarrativeText(value) ?? fallbackSummaryText,
+      steps: [],
+    };
+  }
+
+  if (!isPlainObject(value)) {
+    return {
+      summary: fallbackSummaryText,
+      steps: [],
+    };
+  }
+
+  const summary = normalizeNarrativeText(value.summary) ?? fallbackSummaryText;
+  const steps = normalizePlanNarrativeSteps(value.steps, {
+    allowedStepStatuses,
+    requiredStepFields,
+    optionalStepFields,
+  });
+  return { summary, steps };
+}
+
 function readLegacyPlanNarrativeSections(planFileAbs, requiredNarrativeFields) {
   const output = {};
   const requiredFields = normalizeStringArray(requiredNarrativeFields);
@@ -843,6 +960,9 @@ function buildPlanMachineTemplate({
   requiredPlanningStages,
   requiredNarrativeFields,
   legacyNarrativeSections,
+  allowedNarrativeStepStatuses,
+  narrativeStepRequiredFields,
+  narrativeStepOptionalFields,
   allowedStatusByRoot,
 }) {
   const defaultStatus = defaultPlanLifecycleStatus(rootPath);
@@ -859,8 +979,15 @@ function buildPlanMachineTemplate({
       ? legacyNarrativeSections
       : {};
   for (const fieldName of normalizedNarrativeFields) {
-    const value = normalizeNarrativeText(legacyNarrative[fieldName]);
-    narrative[fieldName] = value ?? "";
+    narrative[fieldName] = normalizePlanNarrativeSection(
+      null,
+      legacyNarrative[fieldName],
+      {
+        allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
+        requiredStepFields: normalizeStringArray(narrativeStepRequiredFields),
+        optionalStepFields: normalizeStringArray(narrativeStepOptionalFields),
+      },
+    );
   }
 
   return {
@@ -905,6 +1032,9 @@ function normalizePlanMachineDocument({
   requiredPlanningStages,
   requiredNarrativeFields,
   legacyNarrativeSections,
+  allowedNarrativeStepStatuses,
+  narrativeStepRequiredFields,
+  narrativeStepOptionalFields,
   allowedPlanningStageStates,
   allowedSubagentRequirements,
   requiredSubagentFields,
@@ -921,6 +1051,9 @@ function normalizePlanMachineDocument({
     requiredPlanningStages,
     requiredNarrativeFields,
     legacyNarrativeSections,
+    allowedNarrativeStepStatuses,
+    narrativeStepRequiredFields,
+    narrativeStepOptionalFields,
     allowedStatusByRoot,
   });
 
@@ -976,9 +1109,15 @@ function normalizePlanMachineDocument({
       ? legacyNarrativeSections
       : {};
   for (const fieldName of normalizedNarrativeFields) {
-    const currentValue = normalizeNarrativeText(narrative[fieldName]);
-    const fallbackValue = normalizeNarrativeText(legacyNarrative[fieldName]) ?? "";
-    narrative[fieldName] = currentValue ?? fallbackValue;
+    narrative[fieldName] = normalizePlanNarrativeSection(
+      narrative[fieldName],
+      legacyNarrative[fieldName],
+      {
+        allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
+        requiredStepFields: normalizeStringArray(narrativeStepRequiredFields),
+        optionalStepFields: normalizeStringArray(narrativeStepOptionalFields),
+      },
+    );
   }
   setIfDifferent("narrative", narrative);
 
@@ -1322,6 +1461,29 @@ function main() {
     sessionArtifacts.planMachineNarrativeMinLength >= 1
       ? sessionArtifacts.planMachineNarrativeMinLength
       : 24;
+  const planMachineNarrativeMinSteps =
+    Number.isInteger(sessionArtifacts.planMachineNarrativeMinSteps) &&
+    sessionArtifacts.planMachineNarrativeMinSteps >= 0
+      ? sessionArtifacts.planMachineNarrativeMinSteps
+      : 1;
+  const planMachineAllowedNarrativeStepStatuses = normalizeStringArray(
+    sessionArtifacts.planMachineAllowedNarrativeStepStatuses ?? [
+      "pending",
+      "in_progress",
+      "complete",
+      "blocked",
+    ],
+  );
+  const planMachineNarrativeStepRequiredFields = normalizeStringArray(
+    sessionArtifacts.planMachineNarrativeStepRequiredFields ?? [
+      "id",
+      "title",
+      "status",
+    ],
+  );
+  const planMachineNarrativeStepOptionalFields = normalizeStringArray(
+    sessionArtifacts.planMachineNarrativeStepOptionalFields ?? ["notes"],
+  );
   const planMachineAllowedPlanningStageStates = normalizeStringArray(
     sessionArtifacts.planMachineAllowedPlanningStageStates ?? [
       "pending",
@@ -1741,6 +1903,10 @@ function main() {
     required_narrative_fields: planMachineRequiredNarrativeFields,
     statuses_requiring_narrative_content: planMachineStatusesRequiringNarrativeContent,
     narrative_min_length: planMachineNarrativeMinLength,
+    narrative_min_steps: planMachineNarrativeMinSteps,
+    allowed_narrative_step_statuses: planMachineAllowedNarrativeStepStatuses,
+    narrative_step_required_fields: planMachineNarrativeStepRequiredFields,
+    narrative_step_optional_fields: planMachineNarrativeStepOptionalFields,
     created_machine_files: [],
     normalized_machine_files: [],
     migrated_from_legacy_plan_md_refs: [],
@@ -1809,6 +1975,9 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               legacyNarrativeSections,
+              allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+              narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planAbs, template);
@@ -1849,6 +2018,9 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               legacyNarrativeSections,
+              allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+              narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planMachineAbs, template);
@@ -1876,6 +2048,9 @@ function main() {
                 requiredPlanningStages: planMachineRequiredPlanningStages,
                 requiredNarrativeFields: planMachineRequiredNarrativeFields,
                 legacyNarrativeSections,
+                allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+                narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+                narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
                 allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
                 allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
                 requiredSubagentFields: planMachineRequiredSubagentFields,
@@ -2042,6 +2217,9 @@ function main() {
             requiredPlanningStages: planMachineRequiredPlanningStages,
             requiredNarrativeFields: planMachineRequiredNarrativeFields,
             legacyNarrativeSections,
+            allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+            narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+            narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
             allowedStatusByRoot: planMachineAllowedStatusByRoot,
           });
           writeJson(planAbs, template);
@@ -2073,6 +2251,9 @@ function main() {
             requiredPlanningStages: planMachineRequiredPlanningStages,
             requiredNarrativeFields: planMachineRequiredNarrativeFields,
             legacyNarrativeSections,
+            allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+            narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+            narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
             allowedStatusByRoot: planMachineAllowedStatusByRoot,
           });
           writeJson(planMachineAbs, template);
@@ -2099,6 +2280,9 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               legacyNarrativeSections,
+              allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+              narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
               allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
               requiredSubagentFields: planMachineRequiredSubagentFields,
@@ -2722,6 +2906,9 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               legacyNarrativeSections,
+              allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+              narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planAbs, template);
@@ -2767,6 +2954,9 @@ function main() {
               requiredPlanningStages: planMachineRequiredPlanningStages,
               requiredNarrativeFields: planMachineRequiredNarrativeFields,
               legacyNarrativeSections,
+              allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+              narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+              narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
               allowedStatusByRoot: planMachineAllowedStatusByRoot,
             });
             writeJson(planMachineAbs, template);
@@ -2799,6 +2989,9 @@ function main() {
                 requiredPlanningStages: planMachineRequiredPlanningStages,
                 requiredNarrativeFields: planMachineRequiredNarrativeFields,
                 legacyNarrativeSections,
+                allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+                narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+                narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
                 allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
                 allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
                 requiredSubagentFields: planMachineRequiredSubagentFields,
@@ -3273,6 +3466,13 @@ function main() {
       statuses_requiring_narrative_content:
         planMachineSummary.statuses_requiring_narrative_content,
       narrative_min_length: planMachineSummary.narrative_min_length,
+      narrative_min_steps: planMachineSummary.narrative_min_steps,
+      allowed_narrative_step_statuses:
+        planMachineSummary.allowed_narrative_step_statuses,
+      narrative_step_required_fields:
+        planMachineSummary.narrative_step_required_fields,
+      narrative_step_optional_fields:
+        planMachineSummary.narrative_step_optional_fields,
       created_machine_files: planMachineSummary.created_machine_files,
       normalized_machine_files: planMachineSummary.normalized_machine_files,
       migrated_from_legacy_plan_md_refs: planMachineSummary.migrated_from_legacy_plan_md_refs,

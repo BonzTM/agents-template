@@ -273,7 +273,7 @@ When policy expectations change, update all relevant governance artifacts in the
   2. Refined spec.
   3. Detailed implementation plan.
 - Planning/refinement may span sessions; continue increasing detail until execution is safe.
-- Detailed plans must break work into atomic tasks with explicit status: `Pending`, `In Progress`, `Complete`.
+- Detailed plans must break work into atomic tasks with explicit status values from policy (default: `pending`, `in_progress`, `complete`, `blocked`).
 - Apply concise verbosity targets from `contracts.orchestratorSubagent.verbosityBudgets`:
   - spec outline `<= 220` words,
   - refined spec `<= 420` words,
@@ -298,8 +298,10 @@ When policy expectations change, update all relevant governance artifacts in the
   - authoritative narrative context fields (`narrative.spec_outline`, `narrative.refined_spec`, `narrative.implementation_plan`)
   - the plan reference link (`plan_ref`)
   - subagent policy/ownership metadata (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`)
+- Each `PLAN.json.narrative.<section>` value must be a structured object: `{ "summary": string, "steps": Step[] }`.
+- Narrative step contract: required `id`/`title`/`status` (non-empty strings), optional `notes` (non-empty string when present), and `status` must be policy-allowlisted (default: `pending`, `in_progress`, `complete`, `blocked`).
 - Treat `PLAN.json.narrative.*` as the authoritative active planning prose context (replacing active `PLAN.md` prose authority).
-- For configured required statuses (default: `in_progress`, `complete`), each required narrative field must satisfy the policy minimum length (default: `24` characters).
+- For configured required statuses (default: `in_progress`, `complete`), each required narrative summary must satisfy the policy minimum length (default: `24` characters) and meet the configured minimum step count (default: `1`).
 
 ### Re-Context and Retrospective Checks
 
@@ -371,7 +373,7 @@ When policy expectations change, update all relevant governance artifacts in the
   - `npm run agent:preflight` must auto-register every `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` as queue items (state defaults: `pending` for current, `deferred` for deferred).
   - Each plan track must include `.agents/plans/<root>/<feature_id>/PLAN.json` as the machine lifecycle contract; preflight seeds/normalizes it and policy checks fail if missing/invalid.
   - If `PLAN.md` exists in current/deferred plan tracks, preflight must convert/migrate it into canonical `PLAN.json`; Markdown remains historical only.
-  - During migration, preflight should extract `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` section text into `PLAN.json.narrative.*` when present.
+  - During migration, preflight should extract `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` section text into `PLAN.json.narrative.<section>.summary` when present (with `steps` defaulting to an empty array).
   - `PLAN.json` must keep `plan_ref` aligned to the canonical queue-tracked plan artifact (`PLAN.json`) and include canonical planning stage + narrative + subagent fields (`subagent.last_executor` must be null or a non-empty string, and must be non-empty when plan `status` is `in_progress` or `complete`).
   - Policy enforcement must fail if any current/deferred plan directory lacks a corresponding queue item `plan_ref`.
   - `npm run agent:preflight` must also backfill archived feature plans (`.agents/plans/archived/*/PLAN.json`) into `.agents/EXECUTION_ARCHIVE_INDEX.json` and the corresponding `.agents/archives/<feature_id>.jsonl` shard.

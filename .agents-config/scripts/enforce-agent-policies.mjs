@@ -802,6 +802,10 @@ function validatePlanMachineDocument({
   requiredNarrativeFields,
   statusesRequiringNarrativeContent,
   narrativeMinLength,
+  narrativeMinSteps,
+  allowedNarrativeStepStatuses,
+  narrativeStepRequiredFields,
+  narrativeStepOptionalFields,
   allowedPlanningStageStates,
   allowedSubagentRequirements,
   requiredSubagentFields,
@@ -869,24 +873,77 @@ function validatePlanMachineDocument({
   if (!isPlainObject(narrative)) {
     addFailure(`${planMachineRef}.narrative must be an object.`);
   } else {
+    const requiredStepFieldSet = new Set(narrativeStepRequiredFields);
+    const optionalStepFieldSet = new Set(narrativeStepOptionalFields);
     for (const fieldName of requiredNarrativeFields) {
       if (!(fieldName in narrative)) {
         addFailure(`${planMachineRef}.narrative is missing required field ${fieldName}.`);
         continue;
       }
-      if (typeof narrative[fieldName] !== "string") {
-        addFailure(`${planMachineRef}.narrative.${fieldName} must be a string.`);
+      if (!isPlainObject(narrative[fieldName])) {
+        addFailure(`${planMachineRef}.narrative.${fieldName} must be an object.`);
+        continue;
+      }
+
+      const section = narrative[fieldName];
+      if (typeof section.summary !== "string") {
+        addFailure(`${planMachineRef}.narrative.${fieldName}.summary must be a string.`);
+      }
+      if (!Array.isArray(section.steps)) {
+        addFailure(`${planMachineRef}.narrative.${fieldName}.steps must be an array.`);
+        continue;
+      }
+
+      for (const [stepIndex, step] of section.steps.entries()) {
+        if (!isPlainObject(step)) {
+          addFailure(
+            `${planMachineRef}.narrative.${fieldName}.steps[${stepIndex}] must be an object.`,
+          );
+          continue;
+        }
+        for (const stepField of requiredStepFieldSet) {
+          if (!isNonEmptyString(step[stepField])) {
+            addFailure(
+              `${planMachineRef}.narrative.${fieldName}.steps[${stepIndex}].${stepField} must be a non-empty string.`,
+            );
+          }
+        }
+        const stepStatus = toNonEmptyString(step.status);
+        if (requiredStepFieldSet.has("status")) {
+          if (!stepStatus || !allowedNarrativeStepStatuses.includes(stepStatus)) {
+            addFailure(
+              `${planMachineRef}.narrative.${fieldName}.steps[${stepIndex}].status must be one of: ${allowedNarrativeStepStatuses.join(", ")}.`,
+            );
+          }
+        }
+        if (optionalStepFieldSet.has("notes") || "notes" in step) {
+          if (!(step.notes === undefined || isNonEmptyString(step.notes))) {
+            addFailure(
+              `${planMachineRef}.narrative.${fieldName}.steps[${stepIndex}].notes must be a non-empty string when present.`,
+            );
+          }
+        }
       }
     }
   }
 
   if (statusesRequiringNarrativeContent.includes(status) && isPlainObject(narrative)) {
     for (const fieldName of requiredNarrativeFields) {
-      const value = narrative[fieldName];
-      const normalized = typeof value === "string" ? value.trim() : "";
-      if (normalized.length < narrativeMinLength) {
+      const section = narrative[fieldName];
+      const normalizedSummary =
+        isPlainObject(section) && typeof section.summary === "string"
+          ? section.summary.trim()
+          : "";
+      if (normalizedSummary.length < narrativeMinLength) {
         addFailure(
-          `${planMachineRef}.narrative.${fieldName} must be at least ${narrativeMinLength} characters when status is ${status}.`,
+          `${planMachineRef}.narrative.${fieldName}.summary must be at least ${narrativeMinLength} characters when status is ${status}.`,
+        );
+      }
+      const stepCount =
+        isPlainObject(section) && Array.isArray(section.steps) ? section.steps.length : 0;
+      if (stepCount < narrativeMinSteps) {
+        addFailure(
+          `${planMachineRef}.narrative.${fieldName}.steps must contain at least ${narrativeMinSteps} step(s) when status is ${status}.`,
         );
       }
     }
@@ -1356,6 +1413,10 @@ function checkContextIndexContract(config) {
         "requiredNarrativeFields",
         "statusesRequiringNarrativeContent",
         "narrativeMinLength",
+        "narrativeMinSteps",
+        "allowedNarrativeStepStatuses",
+        "narrativeStepRequiredFields",
+        "narrativeStepOptionalFields",
         "allowedPlanningStageStates",
         "allowedSubagentRequirements",
         "requiredSubagentFields",
@@ -1431,6 +1492,40 @@ function checkContextIndexContract(config) {
           `${contract.indexFile}.sessionArtifacts.planMachineContract.narrativeMinLength must equal contracts.sessionArtifacts.planMachineNarrativeMinLength.`,
         );
       }
+      const expectedNarrativeMinSteps =
+        Number.isInteger(sessionArtifactsContract.planMachineNarrativeMinSteps) &&
+        sessionArtifactsContract.planMachineNarrativeMinSteps >= 0
+          ? sessionArtifactsContract.planMachineNarrativeMinSteps
+          : 1;
+      if (
+        !Number.isInteger(planMachineContract.narrativeMinSteps) ||
+        planMachineContract.narrativeMinSteps !== expectedNarrativeMinSteps
+      ) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.narrativeMinSteps must equal contracts.sessionArtifacts.planMachineNarrativeMinSteps.`,
+        );
+      }
+      checkExactOrderedArray({
+        value: planMachineContract.allowedNarrativeStepStatuses,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineAllowedNarrativeStepStatuses,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.allowedNarrativeStepStatuses`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.narrativeStepRequiredFields,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineNarrativeStepRequiredFields,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.narrativeStepRequiredFields`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.narrativeStepOptionalFields,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineNarrativeStepOptionalFields,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.narrativeStepOptionalFields`,
+      });
       checkExactOrderedArray({
         value: planMachineContract.allowedPlanningStageStates,
         expected: normalizeStringArray(
@@ -3492,6 +3587,26 @@ function checkSessionArtifactsContract(config) {
   if (planMachineNarrativeMinLength === null) {
     addFailure(`${contractPath}.planMachineNarrativeMinLength must be an integer >= 1.`);
   }
+  const planMachineNarrativeMinSteps =
+    Number.isInteger(contract.planMachineNarrativeMinSteps) &&
+    contract.planMachineNarrativeMinSteps >= 0
+      ? contract.planMachineNarrativeMinSteps
+      : null;
+  if (planMachineNarrativeMinSteps === null) {
+    addFailure(`${contractPath}.planMachineNarrativeMinSteps must be an integer >= 0.`);
+  }
+  const planMachineAllowedNarrativeStepStatuses = validateStringArray(
+    contract.planMachineAllowedNarrativeStepStatuses,
+    `${contractPath}.planMachineAllowedNarrativeStepStatuses`,
+  );
+  const planMachineNarrativeStepRequiredFields = validateStringArray(
+    contract.planMachineNarrativeStepRequiredFields,
+    `${contractPath}.planMachineNarrativeStepRequiredFields`,
+  );
+  const planMachineNarrativeStepOptionalFields = validateStringArray(
+    contract.planMachineNarrativeStepOptionalFields,
+    `${contractPath}.planMachineNarrativeStepOptionalFields`,
+  );
   const planMachineAllowedPlanningStageStates = validateStringArray(
     contract.planMachineAllowedPlanningStageStates,
     `${contractPath}.planMachineAllowedPlanningStageStates`,
@@ -3554,6 +3669,24 @@ function checkSessionArtifactsContract(config) {
     fieldName: "planMachineStatusesRequiringNarrativeContent",
     actualFields: contract.planMachineStatusesRequiringNarrativeContent,
     requiredFields: ["in_progress", "complete"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineAllowedNarrativeStepStatuses",
+    actualFields: contract.planMachineAllowedNarrativeStepStatuses,
+    requiredFields: ["pending", "in_progress", "complete", "blocked"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineNarrativeStepRequiredFields",
+    actualFields: contract.planMachineNarrativeStepRequiredFields,
+    requiredFields: ["id", "title", "status"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineNarrativeStepOptionalFields",
+    actualFields: contract.planMachineNarrativeStepOptionalFields,
+    requiredFields: ["notes"],
     contractPath,
   });
   checkRequiredFieldList({
@@ -4020,6 +4153,10 @@ function checkSessionArtifactsContract(config) {
           requiredNarrativeFields: planMachineRequiredNarrativeFields,
           statusesRequiringNarrativeContent: planMachineStatusesRequiringNarrativeContent,
           narrativeMinLength: planMachineNarrativeMinLength ?? 24,
+          narrativeMinSteps: planMachineNarrativeMinSteps ?? 1,
+          allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
+          narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
+          narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
           allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
           allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
           requiredSubagentFields: planMachineRequiredSubagentFields,
