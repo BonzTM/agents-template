@@ -95,10 +95,29 @@ function resolveGitCommonDir(repoRoot) {
   return path.resolve(repoRoot, result.stdout);
 }
 
+function derivePrimaryRepoRootFromCommonDir(commonDir) {
+  if (!commonDir) {
+    return null;
+  }
+
+  let cursor = path.resolve(commonDir);
+  while (true) {
+    if (path.basename(cursor) === ".git") {
+      return path.resolve(cursor, "..");
+    }
+    const parent = path.dirname(cursor);
+    if (parent === cursor) {
+      return null;
+    }
+    cursor = parent;
+  }
+}
+
 function resolvePrimaryRepoRoot(repoRoot) {
   const commonDir = resolveGitCommonDir(repoRoot);
-  if (commonDir && path.basename(commonDir) === ".git") {
-    return path.resolve(commonDir, "..");
+  const primaryRepoRoot = derivePrimaryRepoRootFromCommonDir(commonDir);
+  if (primaryRepoRoot) {
+    return primaryRepoRoot;
   }
   return path.resolve(repoRoot);
 }
