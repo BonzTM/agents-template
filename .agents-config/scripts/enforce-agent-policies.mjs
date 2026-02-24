@@ -88,6 +88,12 @@ function isPathWithin(candidatePath, parentPath) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function resolveCanonicalWorktreesRoot(canonicalRepoRoot) {
+  const canonicalRepoRootResolved = path.resolve(canonicalRepoRoot);
+  const repoName = path.basename(canonicalRepoRootResolved);
+  return path.resolve(canonicalRepoRootResolved, "..", `${repoName}.worktrees`);
+}
+
 function resolveAgentsAwarePath({
   repoRoot,
   canonicalAgentsRoot,
@@ -757,6 +763,153 @@ function scanStalePlanReferences(scanRoots, resolvePath = (value) => value) {
   return findings;
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizePlanMachineAllowedStatusByRoot({
+  rawAllowedStatusByRoot,
+  roots,
+  contractPath,
+}) {
+  const allowedStatusByRoot = {};
+  for (const rootPath of roots) {
+    const candidate = isPlainObject(rawAllowedStatusByRoot)
+      ? rawAllowedStatusByRoot[rootPath]
+      : undefined;
+    const normalizedStates = normalizeStringArray(candidate);
+    if (normalizedStates.length === 0) {
+      addFailure(
+        `${contractPath}.planMachineAllowedStatusByRoot is missing non-empty status list for ${rootPath}.`,
+      );
+      allowedStatusByRoot[rootPath] = [];
+      continue;
+    }
+    allowedStatusByRoot[rootPath] = normalizedStates;
+  }
+  return allowedStatusByRoot;
+}
+
+function validatePlanMachineDocument({
+  planMachineRef,
+  planMachineAbs,
+  expectedFeatureId,
+  expectedPlanRef,
+  expectedRoot,
+  expectedSchemaVersion,
+  requiredTopLevelFields,
+  requiredPlanningStages,
+  allowedPlanningStageStates,
+  allowedSubagentRequirements,
+  requiredSubagentFields,
+  statusesRequiringLastExecutor,
+  allowedStatusByRoot,
+}) {
+  if (!fs.existsSync(planMachineAbs)) {
+    addFailure(`${planMachineRef} is required for plan directory ${expectedRoot}/${expectedFeatureId}.`);
+    return;
+  }
+
+  const planMachine = readJsonIfPresent(planMachineRef, false);
+  if (!planMachine || !isPlainObject(planMachine)) {
+    addFailure(`${planMachineRef} must contain a top-level JSON object.`);
+    return;
+  }
+
+  for (const fieldName of requiredTopLevelFields) {
+    if (!(fieldName in planMachine)) {
+      addFailure(`${planMachineRef} is missing required field ${fieldName}.`);
+    }
+  }
+
+  if (toNonEmptyString(planMachine.schema_version) !== expectedSchemaVersion) {
+    addFailure(
+      `${planMachineRef}.schema_version must equal ${expectedSchemaVersion}.`,
+    );
+  }
+  if (toNonEmptyString(planMachine.feature_id) !== expectedFeatureId) {
+    addFailure(`${planMachineRef}.feature_id must equal ${expectedFeatureId}.`);
+  }
+  if (toNonEmptyString(planMachine.plan_ref) !== expectedPlanRef) {
+    addFailure(`${planMachineRef}.plan_ref must equal ${expectedPlanRef}.`);
+  }
+  if (!isNonEmptyString(planMachine.feature_title)) {
+    addFailure(`${planMachineRef}.feature_title must be a non-empty string.`);
+  }
+  if (!isValidIsoDate(planMachine.updated_at)) {
+    addFailure(`${planMachineRef}.updated_at must be a valid ISO timestamp.`);
+  }
+
+  const rootAllowedStatuses = allowedStatusByRoot[expectedRoot] ?? [];
+  const status = toNonEmptyString(planMachine.status);
+  if (!status || !rootAllowedStatuses.includes(status)) {
+    addFailure(
+      `${planMachineRef}.status must be one of: ${rootAllowedStatuses.join(", ")}.`,
+    );
+  }
+
+  const planningStages = planMachine.planning_stages;
+  if (!isPlainObject(planningStages)) {
+    addFailure(`${planMachineRef}.planning_stages must be an object.`);
+  } else {
+    for (const stageName of requiredPlanningStages) {
+      const stageValue = toNonEmptyString(planningStages[stageName]);
+      if (!stageValue || !allowedPlanningStageStates.includes(stageValue)) {
+        addFailure(
+          `${planMachineRef}.planning_stages.${stageName} must be one of: ${allowedPlanningStageStates.join(", ")}.`,
+        );
+      }
+    }
+  }
+
+  const subagent = planMachine.subagent;
+  if (!isPlainObject(subagent)) {
+    addFailure(`${planMachineRef}.subagent must be an object.`);
+    return;
+  }
+
+  for (const fieldName of requiredSubagentFields) {
+    if (!(fieldName in subagent)) {
+      addFailure(`${planMachineRef}.subagent is missing required field ${fieldName}.`);
+    }
+  }
+
+  const requirement = toNonEmptyString(subagent.requirement);
+  if (!requirement || !allowedSubagentRequirements.includes(requirement)) {
+    addFailure(
+      `${planMachineRef}.subagent.requirement must be one of: ${allowedSubagentRequirements.join(", ")}.`,
+    );
+  }
+
+  if (!(subagent.primary_agent === null || isNonEmptyString(subagent.primary_agent))) {
+    addFailure(`${planMachineRef}.subagent.primary_agent must be null or a non-empty string.`);
+  }
+
+  if (!Array.isArray(subagent.execution_agents)) {
+    addFailure(`${planMachineRef}.subagent.execution_agents must be an array.`);
+  } else {
+    const invalidAgent = subagent.execution_agents.find((entry) => !isNonEmptyString(entry));
+    if (invalidAgent !== undefined) {
+      addFailure(
+        `${planMachineRef}.subagent.execution_agents must contain non-empty string values.`,
+      );
+    }
+  }
+
+  if (!(subagent.last_executor === null || isNonEmptyString(subagent.last_executor))) {
+    addFailure(`${planMachineRef}.subagent.last_executor must be null or a non-empty string.`);
+  }
+
+  if (
+    statusesRequiringLastExecutor.includes(status) &&
+    !isNonEmptyString(subagent.last_executor)
+  ) {
+    addFailure(
+      `${planMachineRef}.subagent.last_executor must be a non-empty string when status is ${status}.`,
+    );
+  }
+}
+
 function checkWorkspaceLayoutContract(config, runtimeRepoRoot) {
   const contractPath = "contracts.workspaceLayout";
   const contract = config?.contracts?.workspaceLayout;
@@ -799,10 +952,11 @@ function checkWorkspaceLayoutContract(config, runtimeRepoRoot) {
   const runtimeRepoRootResolved = path.resolve(runtimeRepoRoot);
   const localAgentsPath = toNonEmptyString(contract.localAgentsPath) ?? ".agents";
   const normalizedLocalAgentsPath = localAgentsPath.replace(/\\/g, "/");
+  const expectedWorktreesRootResolved = resolveCanonicalWorktreesRoot(canonicalRepoRootResolved);
 
-  if (worktreesRootResolved !== path.resolve(canonicalRepoRootResolved, ".worktrees")) {
+  if (worktreesRootResolved !== expectedWorktreesRootResolved) {
     addFailure(
-      `${contractPath}.worktreesRoot must equal ${canonicalRepoRootResolved}/.worktrees.`,
+      `${contractPath}.worktreesRoot must equal ${expectedWorktreesRootResolved}.`,
     );
   }
 
@@ -867,7 +1021,6 @@ function checkWorkspaceLayoutContract(config, runtimeRepoRoot) {
       normalizedLocalAgentsPath,
       `${normalizedLocalAgentsPath}/`,
       `${normalizedLocalAgentsPath}/**`,
-      ".worktrees/",
     ]) {
       if (!gitignoreContent.includes(snippet)) {
         addFailure(`.gitignore must include ${snippet} for local-context hygiene.`);
@@ -1082,6 +1235,7 @@ function checkContextIndexContract(config) {
       "plansRoot",
       "planRoots",
       "planQueueSync",
+      "planMachineContract",
       "archivedPlanSync",
       "stalePlanReferenceCheck",
       "queueQualityGate",
@@ -1153,6 +1307,121 @@ function checkContextIndexContract(config) {
     } else {
       addFailure(
         `${contract.indexFile}.sessionArtifacts.planQueueSync must be an object.`,
+      );
+    }
+
+    if (
+      index.sessionArtifacts.planMachineContract &&
+      typeof index.sessionArtifacts.planMachineContract === "object"
+    ) {
+      const planMachineContract = index.sessionArtifacts.planMachineContract;
+      for (const fieldName of [
+        "enabled",
+        "planFileName",
+        "machineFileName",
+        "schemaVersion",
+        "roots",
+        "requiredTopLevelFields",
+        "requiredPlanningStages",
+        "allowedPlanningStageStates",
+        "allowedSubagentRequirements",
+        "requiredSubagentFields",
+        "statusesRequiringLastExecutor",
+        "allowedStatusByRoot",
+      ]) {
+        if (!(fieldName in planMachineContract)) {
+          addFailure(
+            `${contract.indexFile}.sessionArtifacts.planMachineContract is missing required field ${fieldName}.`,
+          );
+        }
+      }
+
+      const expectedPlanFileName =
+        toNonEmptyString(sessionArtifactsContract.planQueueSyncPlanFileName) ?? "PLAN.json";
+      if (toNonEmptyString(planMachineContract.planFileName) !== expectedPlanFileName) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.planFileName must equal contracts.sessionArtifacts.planQueueSyncPlanFileName.`,
+        );
+      }
+      const expectedMachineFileName =
+        toNonEmptyString(sessionArtifactsContract.planMachineFileName) ?? "PLAN.json";
+      if (toNonEmptyString(planMachineContract.machineFileName) !== expectedMachineFileName) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.machineFileName must equal contracts.sessionArtifacts.planMachineFileName.`,
+        );
+      }
+      const expectedSchemaVersion =
+        toNonEmptyString(sessionArtifactsContract.planMachineSchemaVersion) ?? "1.0";
+      if (toNonEmptyString(planMachineContract.schemaVersion) !== expectedSchemaVersion) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.schemaVersion must equal contracts.sessionArtifacts.planMachineSchemaVersion.`,
+        );
+      }
+
+      checkExactOrderedArray({
+        value: planMachineContract.roots,
+        expected: normalizeStringArray(sessionArtifactsContract.planMachineRoots),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.roots`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.requiredTopLevelFields,
+        expected: normalizeStringArray(sessionArtifactsContract.planMachineRequiredTopLevelFields),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.requiredTopLevelFields`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.requiredPlanningStages,
+        expected: normalizeStringArray(sessionArtifactsContract.planMachineRequiredPlanningStages),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.requiredPlanningStages`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.allowedPlanningStageStates,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineAllowedPlanningStageStates,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.allowedPlanningStageStates`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.allowedSubagentRequirements,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineAllowedSubagentRequirements,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.allowedSubagentRequirements`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.requiredSubagentFields,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineRequiredSubagentFields,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.requiredSubagentFields`,
+      });
+      checkExactOrderedArray({
+        value: planMachineContract.statusesRequiringLastExecutor,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineStatusesRequiringLastExecutor,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.statusesRequiringLastExecutor`,
+      });
+
+      const expectedAllowedByRoot =
+        sessionArtifactsContract.planMachineAllowedStatusByRoot &&
+        typeof sessionArtifactsContract.planMachineAllowedStatusByRoot === "object"
+          ? sessionArtifactsContract.planMachineAllowedStatusByRoot
+          : {};
+      const actualAllowedByRoot =
+        planMachineContract.allowedStatusByRoot &&
+        typeof planMachineContract.allowedStatusByRoot === "object"
+          ? planMachineContract.allowedStatusByRoot
+          : {};
+      for (const rootPath of normalizeStringArray(sessionArtifactsContract.planMachineRoots)) {
+        checkExactOrderedArray({
+          value: actualAllowedByRoot[rootPath],
+          expected: normalizeStringArray(expectedAllowedByRoot[rootPath]),
+          pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.allowedStatusByRoot.${rootPath}`,
+        });
+      }
+    } else {
+      addFailure(
+        `${contract.indexFile}.sessionArtifacts.planMachineContract must be an object.`,
       );
     }
 
@@ -1475,6 +1744,37 @@ function checkContextIndexContract(config) {
     if (index.orchestratorSubagent.allowSubagentDelegation !== false) {
       addFailure(
         `${contract.indexFile}.orchestratorSubagent.allowSubagentDelegation must be false.`,
+      );
+    }
+    const defaultPattern = toNonEmptyString(index.orchestratorSubagent.defaultPattern);
+    if (defaultPattern !== "operator_subagent_required_non_trivial") {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.defaultPattern must equal "operator_subagent_required_non_trivial".`,
+      );
+    }
+    if (index.orchestratorSubagent.nonTrivialSubagentDelegationRequired !== true) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.nonTrivialSubagentDelegationRequired must be true.`,
+      );
+    }
+    if (index.orchestratorSubagent.idleSubagentReleaseRequired !== true) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.idleSubagentReleaseRequired must be true.`,
+      );
+    }
+    const idleSubagentMaxIdleMinutes = index.orchestratorSubagent.idleSubagentMaxIdleMinutes;
+    if (!Number.isInteger(idleSubagentMaxIdleMinutes) || idleSubagentMaxIdleMinutes < 1) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.idleSubagentMaxIdleMinutes must be a positive integer.`,
+      );
+    }
+    const policyIdleMax =
+      policyOrchestratorSubagent && typeof policyOrchestratorSubagent === "object"
+        ? policyOrchestratorSubagent.idleSubagentMaxIdleMinutes
+        : undefined;
+    if (Number.isInteger(policyIdleMax) && idleSubagentMaxIdleMinutes !== policyIdleMax) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.idleSubagentMaxIdleMinutes must equal contracts.orchestratorSubagent.idleSubagentMaxIdleMinutes.`,
       );
     }
 
@@ -3046,8 +3346,8 @@ function checkSessionArtifactsContract(config) {
 
   if (!isNonEmptyString(contract.planQueueSyncPlanFileName)) {
     addFailure(`${contractPath}.planQueueSyncPlanFileName must be a non-empty string.`);
-  } else if (contract.planQueueSyncPlanFileName !== "PLAN.md") {
-    addFailure(`${contractPath}.planQueueSyncPlanFileName must equal "PLAN.md".`);
+  } else if (contract.planQueueSyncPlanFileName !== "PLAN.json") {
+    addFailure(`${contractPath}.planQueueSyncPlanFileName must equal "PLAN.json".`);
   }
 
   const planQueueSyncRoots = validateStringArray(
@@ -3081,6 +3381,115 @@ function checkSessionArtifactsContract(config) {
     addFailure(`${contractPath}.planQueueSyncDefaultSubscope must be null or a non-empty string.`);
   }
 
+  if (typeof contract.planMachineContractEnabled !== "boolean") {
+    addFailure(`${contractPath}.planMachineContractEnabled must be a boolean.`);
+  }
+
+  if (!isNonEmptyString(contract.planMachineFileName)) {
+    addFailure(`${contractPath}.planMachineFileName must be a non-empty string.`);
+  } else if (contract.planMachineFileName !== "PLAN.json") {
+    addFailure(`${contractPath}.planMachineFileName must equal "PLAN.json".`);
+  }
+
+  if (!isNonEmptyString(contract.planMachineSchemaVersion)) {
+    addFailure(`${contractPath}.planMachineSchemaVersion must be a non-empty string.`);
+  }
+
+  const planMachineRoots = validateStringArray(
+    contract.planMachineRoots,
+    `${contractPath}.planMachineRoots`,
+  );
+  checkRequiredFieldList({
+    fieldName: "planMachineRoots",
+    actualFields: contract.planMachineRoots,
+    requiredFields: [
+      ".agents/plans/current",
+      ".agents/plans/deferred",
+      ".agents/plans/archived",
+    ],
+    contractPath,
+  });
+
+  const planMachineRequiredTopLevelFields = validateStringArray(
+    contract.planMachineRequiredTopLevelFields,
+    `${contractPath}.planMachineRequiredTopLevelFields`,
+  );
+  const planMachineRequiredPlanningStages = validateStringArray(
+    contract.planMachineRequiredPlanningStages,
+    `${contractPath}.planMachineRequiredPlanningStages`,
+  );
+  const planMachineAllowedPlanningStageStates = validateStringArray(
+    contract.planMachineAllowedPlanningStageStates,
+    `${contractPath}.planMachineAllowedPlanningStageStates`,
+  );
+  const planMachineAllowedSubagentRequirements = validateStringArray(
+    contract.planMachineAllowedSubagentRequirements,
+    `${contractPath}.planMachineAllowedSubagentRequirements`,
+  );
+  const planMachineRequiredSubagentFields = validateStringArray(
+    contract.planMachineRequiredSubagentFields,
+    `${contractPath}.planMachineRequiredSubagentFields`,
+  );
+  const planMachineStatusesRequiringLastExecutor = validateStringArray(
+    contract.planMachineStatusesRequiringLastExecutor,
+    `${contractPath}.planMachineStatusesRequiringLastExecutor`,
+  );
+  const planMachineAllowedStatusByRoot = normalizePlanMachineAllowedStatusByRoot({
+    rawAllowedStatusByRoot: contract.planMachineAllowedStatusByRoot,
+    roots: planMachineRoots,
+    contractPath,
+  });
+
+  checkRequiredFieldList({
+    fieldName: "planMachineRequiredTopLevelFields",
+    actualFields: contract.planMachineRequiredTopLevelFields,
+    requiredFields: [
+      "schema_version",
+      "feature_id",
+      "feature_title",
+      "plan_ref",
+      "status",
+      "updated_at",
+      "planning_stages",
+      "subagent",
+    ],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineRequiredPlanningStages",
+    actualFields: contract.planMachineRequiredPlanningStages,
+    requiredFields: [
+      "spec_outline",
+      "refined_spec",
+      "implementation_plan",
+    ],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineAllowedPlanningStageStates",
+    actualFields: contract.planMachineAllowedPlanningStageStates,
+    requiredFields: ["pending", "in_progress", "complete"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineAllowedSubagentRequirements",
+    actualFields: contract.planMachineAllowedSubagentRequirements,
+    requiredFields: ["required", "recommended", "optional", "none"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineRequiredSubagentFields",
+    actualFields: contract.planMachineRequiredSubagentFields,
+    requiredFields: ["requirement", "primary_agent", "execution_agents", "last_executor"],
+    contractPath,
+  });
+  checkRequiredFieldList({
+    fieldName: "planMachineStatusesRequiringLastExecutor",
+    actualFields: contract.planMachineStatusesRequiringLastExecutor,
+    requiredFields: ["in_progress", "complete"],
+    contractPath,
+  });
+
   if (typeof contract.archivedPlanSyncEnabled !== "boolean") {
     addFailure(`${contractPath}.archivedPlanSyncEnabled must be a boolean.`);
   }
@@ -3091,6 +3500,8 @@ function checkSessionArtifactsContract(config) {
 
   if (!isNonEmptyString(contract.archivedPlanFileName)) {
     addFailure(`${contractPath}.archivedPlanFileName must be a non-empty string.`);
+  } else if (contract.archivedPlanFileName !== "PLAN.json") {
+    addFailure(`${contractPath}.archivedPlanFileName must equal "PLAN.json".`);
   }
 
   if (!isNonEmptyString(contract.archivedPlanCanonicalHandoffFileName)) {
@@ -3199,9 +3610,12 @@ function checkSessionArtifactsContract(config) {
 
   const archivedPlanRoot = toNonEmptyString(contract.archivedPlanRoot) ?? ".agents/plans/archived";
   const archivedPlanRootResolved = resolveContractPath(archivedPlanRoot);
-  const archivedPlanFileName = toNonEmptyString(contract.archivedPlanFileName) ?? "PLAN.md";
+  const archivedPlanFileName = toNonEmptyString(contract.archivedPlanFileName) ?? "PLAN.json";
   const archivedPlanCanonicalHandoffFileName =
     toNonEmptyString(contract.archivedPlanCanonicalHandoffFileName) ?? "HANDOFF.md";
+  const planMachineContractEnabled = contract.planMachineContractEnabled === true;
+  const planMachineFileName = toNonEmptyString(contract.planMachineFileName) ?? "PLAN.json";
+  const planMachineSchemaVersion = toNonEmptyString(contract.planMachineSchemaVersion) ?? "1.0";
   const archivedPlanArchiveKeyPrefix =
     toNonEmptyString(contract.archivedPlanArchiveKeyPrefix) ?? "feature-plan:";
   const archivedPlanIndexKind =
@@ -3252,6 +3666,41 @@ function checkSessionArtifactsContract(config) {
       }
     }
   }
+
+  const planRootsSet = new Set(normalizeStringArray(contract.planRoots));
+  for (const rootPath of planMachineRoots) {
+    if (!planRootsSet.has(rootPath)) {
+      addFailure(
+        `${contractPath}.planMachineRoots contains ${rootPath}, which is not listed in planRoots.`,
+      );
+    }
+  }
+
+  for (const [rootPath, statuses] of Object.entries(planMachineAllowedStatusByRoot)) {
+    if (!planMachineRoots.includes(rootPath)) {
+      addFailure(
+        `${contractPath}.planMachineAllowedStatusByRoot contains unknown root key ${rootPath}.`,
+      );
+      continue;
+    }
+    if (!Array.isArray(statuses) || statuses.length === 0) {
+      addFailure(
+        `${contractPath}.planMachineAllowedStatusByRoot.${rootPath} must be a non-empty array.`,
+      );
+    }
+  }
+
+  const allPlanMachineAllowedStatuses = new Set(
+    Object.values(planMachineAllowedStatusByRoot).flat(),
+  );
+  for (const status of planMachineStatusesRequiringLastExecutor) {
+    if (!allPlanMachineAllowedStatuses.has(status)) {
+      addFailure(
+        `${contractPath}.planMachineStatusesRequiringLastExecutor contains unknown status ${status}.`,
+      );
+    }
+  }
+
   const statesRequiringExecutionStart = new Set(
     validateStringArray(
       contract.statesRequiringExecutionStart,
@@ -3434,6 +3883,52 @@ function checkSessionArtifactsContract(config) {
     "open_questions",
   ];
 
+  if (planMachineContractEnabled === true) {
+    const planFileNameDefault = toNonEmptyString(contract.planQueueSyncPlanFileName) ?? "PLAN.json";
+    const archivedPlanFileNameResolved =
+      toNonEmptyString(contract.archivedPlanFileName) ?? "PLAN.json";
+
+    for (const rootPath of planMachineRoots) {
+      const rootResolved = resolveContractPath(rootPath);
+      if (!fs.existsSync(rootResolved)) {
+        addFailure(
+          `${rootPath} must exist when ${contractPath}.planMachineContractEnabled is true.`,
+        );
+        continue;
+      }
+
+      const planFileNameForRoot =
+        rootPath === archivedPlanRoot ? archivedPlanFileNameResolved : planFileNameDefault;
+      const featureDirs = listFeaturePlanDirectories(rootResolved);
+      for (const featureDir of featureDirs) {
+        const planRef = `${rootPath}/${featureDir}/${planFileNameForRoot}`;
+        const planAbs = resolveContractPath(planRef);
+        if (!fs.existsSync(planAbs)) {
+          addFailure(`${planRef} is required for plan directory ${rootPath}/${featureDir}.`);
+          continue;
+        }
+
+        const planMachineRef = `${rootPath}/${featureDir}/${contract.planMachineFileName}`;
+        const planMachineAbs = resolveContractPath(planMachineRef);
+        validatePlanMachineDocument({
+          planMachineRef,
+          planMachineAbs,
+          expectedFeatureId: featureDir,
+          expectedPlanRef: planRef,
+          expectedRoot: rootPath,
+          expectedSchemaVersion: contract.planMachineSchemaVersion,
+          requiredTopLevelFields: planMachineRequiredTopLevelFields,
+          requiredPlanningStages: planMachineRequiredPlanningStages,
+          allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
+          allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
+          requiredSubagentFields: planMachineRequiredSubagentFields,
+          statusesRequiringLastExecutor: planMachineStatusesRequiringLastExecutor,
+          allowedStatusByRoot: planMachineAllowedStatusByRoot,
+        });
+      }
+    }
+  }
+
   const archivedPlanDirectories = listFeaturePlanDirectories(archivedPlanRootResolved);
   const archivedPlanExpectations = [];
   for (const featureDir of archivedPlanDirectories) {
@@ -3441,12 +3936,21 @@ function checkSessionArtifactsContract(config) {
     const featureDirResolved = path.resolve(archivedPlanRootResolved, featureDir);
     const canonicalPlanRef = `${featureDirPath}/${archivedPlanFileName}`;
     const canonicalPlanDiskPath = path.resolve(featureDirResolved, archivedPlanFileName);
+    const planMachineRef = `${featureDirPath}/${contract.planMachineFileName}`;
+    const planMachineDiskPath = path.resolve(featureDirResolved, contract.planMachineFileName);
     const canonicalHandoffRef = `${featureDirPath}/${archivedPlanCanonicalHandoffFileName}`;
     const canonicalPlanExists = fs.existsSync(canonicalPlanDiskPath);
     if (!canonicalPlanExists) {
       addFailure(
         `${canonicalPlanRef} is required for archived plan directory ${featureDirPath}.`,
       );
+    }
+    if (planMachineContractEnabled === true && planMachineRoots.includes(archivedPlanRoot)) {
+      if (!fs.existsSync(planMachineDiskPath)) {
+        addFailure(
+          `${planMachineRef} is required for archived plan directory ${featureDirPath}.`,
+        );
+      }
     }
 
     const hasLegacyHandoff = archivedPlanLegacyHandoffFileNames.some((legacyFileName) =>
@@ -3465,6 +3969,7 @@ function checkSessionArtifactsContract(config) {
       featureId: featureDir,
       archiveKey: `${archivedPlanArchiveKeyPrefix}${featureDir}`,
       planRef: canonicalPlanRef,
+      planMachineRef,
       archiveRef: `${contract.archiveRoot}/${toArchiveFeatureShardName(featureDir)}.${contract.archiveFormat}`,
       planExists: canonicalPlanExists,
     });
@@ -4026,6 +4531,17 @@ function checkSessionArtifactsContract(config) {
               continue;
             }
 
+            let planMachineRef = null;
+            if (planMachineContractEnabled === true && planMachineRoots.includes(rootPath)) {
+              planMachineRef = `${rootPath}/${featureDir}/${contract.planMachineFileName}`;
+              const planMachineAbs = resolveContractPath(planMachineRef);
+              if (!fs.existsSync(planMachineAbs)) {
+                addFailure(
+                  `${planMachineRef} is required for plan directory ${rootPath}/${featureDir}.`,
+                );
+              }
+            }
+
             const matchedItems = planRefToItems.get(planRef) ?? [];
             if (matchedItems.length === 0) {
               addFailure(
@@ -4041,6 +4557,17 @@ function checkSessionArtifactsContract(config) {
               if (!hasDeferredItem) {
                 addFailure(
                   `${contract.executionQueueFile} plan_ref ${planRef} must have at least one item in deferred state.`,
+                );
+              }
+            }
+
+            if (planMachineRef) {
+              const hasMachineReference = matchedItems.some((item) =>
+                Array.isArray(item?.references) && item.references.includes(planMachineRef),
+              );
+              if (!hasMachineReference) {
+                addFailure(
+                  `${contract.executionQueueFile} plan_ref ${planRef} must include ${planMachineRef} in item references.`,
                 );
               }
             }
@@ -4212,6 +4739,15 @@ function checkSessionArtifactsContract(config) {
           if (toNonEmptyString(matchedEntry.plan_ref) !== expected.planRef) {
             addFailure(
               `${contract.archiveIndexFile} entry ${expected.archiveKey} must reference plan_ref ${expected.planRef}.`,
+            );
+          }
+          if (
+            planMachineContractEnabled === true &&
+            planMachineRoots.includes(archivedPlanRoot) &&
+            toNonEmptyString(matchedEntry.plan_machine_ref) !== expected.planMachineRef
+          ) {
+            addFailure(
+              `${contract.archiveIndexFile} entry ${expected.archiveKey} must reference plan_machine_ref ${expected.planMachineRef}.`,
             );
           }
         }
@@ -4904,6 +5440,19 @@ function checkOrchestratorSubagentContracts(config) {
     }
   }
 
+  if (contract.nonTrivialSubagentDelegationRequired !== true) {
+    addFailure(`${contractPath}.nonTrivialSubagentDelegationRequired must be true.`);
+  }
+  if (contract.idleSubagentReleaseRequired !== true) {
+    addFailure(`${contractPath}.idleSubagentReleaseRequired must be true.`);
+  }
+  if (
+    !Number.isInteger(contract.idleSubagentMaxIdleMinutes) ||
+    contract.idleSubagentMaxIdleMinutes < 1
+  ) {
+    addFailure(`${contractPath}.idleSubagentMaxIdleMinutes must be a positive integer.`);
+  }
+
   if (!contract.verbosityBudgets || typeof contract.verbosityBudgets !== "object") {
     addFailure(`${contractPath}.verbosityBudgets must be an object.`);
   } else {
@@ -5075,10 +5624,12 @@ function checkOrchestratorSubagentContracts(config) {
     "orch_machine_payload_authoritative",
     "orch_delegate_substantive_work",
     "orch_operator_subagent_default",
+    "orch_non_trivial_subagent_mandatory",
     "orch_human_nuance_addendum",
     "orch_atomic_task_delegation",
     "orch_dual_channel_result_envelope",
     "orch_orchestrator_coordination_only",
+    "orch_release_idle_subagents_required",
     "orch_default_cli_routing",
     "orch_unconfirmed_unknowns",
     "orch_atomic_single_objective_scope",

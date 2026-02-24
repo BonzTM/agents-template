@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-22.06",
+    "version": "2026-02-24.04",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
@@ -73,7 +73,7 @@
     ],
     "planQueueSync": {
       "enabled": true,
-      "planFileName": "PLAN.md",
+      "planFileName": "PLAN.json",
       "roots": [
         ".agents/plans/current",
         ".agents/plans/deferred"
@@ -83,10 +83,73 @@
         ".agents/plans/deferred": "deferred"
       }
     },
+    "planMachineContract": {
+      "enabled": true,
+      "planFileName": "PLAN.json",
+      "machineFileName": "PLAN.json",
+      "schemaVersion": "1.0",
+      "roots": [
+        ".agents/plans/current",
+        ".agents/plans/deferred",
+        ".agents/plans/archived"
+      ],
+      "requiredTopLevelFields": [
+        "schema_version",
+        "feature_id",
+        "feature_title",
+        "plan_ref",
+        "status",
+        "updated_at",
+        "planning_stages",
+        "subagent"
+      ],
+      "requiredPlanningStages": [
+        "spec_outline",
+        "refined_spec",
+        "implementation_plan"
+      ],
+      "allowedPlanningStageStates": [
+        "pending",
+        "in_progress",
+        "complete"
+      ],
+      "allowedSubagentRequirements": [
+        "required",
+        "recommended",
+        "optional",
+        "none"
+      ],
+      "requiredSubagentFields": [
+        "requirement",
+        "primary_agent",
+        "execution_agents",
+        "last_executor"
+      ],
+      "statusesRequiringLastExecutor": [
+        "in_progress",
+        "complete"
+      ],
+      "allowedStatusByRoot": {
+        ".agents/plans/current": [
+          "draft",
+          "ready",
+          "in_progress",
+          "blocked",
+          "complete"
+        ],
+        ".agents/plans/deferred": [
+          "deferred"
+        ],
+        ".agents/plans/archived": [
+          "complete",
+          "archived"
+        ]
+      }
+    },
     "archivedPlanSync": {
       "enabled": true,
       "root": ".agents/plans/archived",
-      "planFileName": "PLAN.md",
+      "planFileName": "PLAN.json",
       "archiveKeyPrefix": "feature-plan:",
       "indexKind": "feature"
     },
@@ -108,7 +171,7 @@
     "workspaceLayout": {
       "canonicalRepoRoot": ".",
       "canonicalAgentsRoot": "../agents-workfiles/agents-template",
-      "worktreesRoot": ".worktrees",
+      "worktreesRoot": "../agents-template.worktrees",
       "semanticMergeRequired": true,
       "semanticMergeOnAgentsEditRequired": true,
       "worktreeAgentsSymlinkRequired": true,
@@ -160,7 +223,10 @@
     "policyPath": "contracts.orchestratorSubagent",
     "singleOrchestratorOnly": true,
     "allowSubagentDelegation": false,
-    "defaultPattern": "operator_subagent_unless_trivial",
+    "defaultPattern": "operator_subagent_required_non_trivial",
+    "nonTrivialSubagentDelegationRequired": true,
+    "idleSubagentReleaseRequired": true,
+    "idleSubagentMaxIdleMinutes": 15,
     "modelRouting": {
       "orchestrator": "gpt-5.3-codex",
       "subagent": "gpt-5.3-codex",

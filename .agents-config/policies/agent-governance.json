@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-02-22.06",
+    "version": "2026-02-24.04",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
@@ -224,7 +224,7 @@
         ".agents/plans/archived"
       ],
       "planQueueSyncEnabled": true,
-      "planQueueSyncPlanFileName": "PLAN.md",
+      "planQueueSyncPlanFileName": "PLAN.json",
       "planQueueSyncRoots": [
         ".agents/plans/current",
         ".agents/plans/deferred"
@@ -236,9 +236,69 @@
       "planQueueSyncDefaultOwner": "orchestrator",
       "planQueueSyncDefaultItemType": "task",
       "planQueueSyncDefaultSubscope": "plan-track",
+      "planMachineContractEnabled": true,
+      "planMachineFileName": "PLAN.json",
+      "planMachineSchemaVersion": "1.0",
+      "planMachineRoots": [
+        ".agents/plans/current",
+        ".agents/plans/deferred",
+        ".agents/plans/archived"
+      ],
+      "planMachineRequiredTopLevelFields": [
+        "schema_version",
+        "feature_id",
+        "feature_title",
+        "plan_ref",
+        "status",
+        "updated_at",
+        "planning_stages",
+        "subagent"
+      ],
+      "planMachineRequiredPlanningStages": [
+        "spec_outline",
+        "refined_spec",
+        "implementation_plan"
+      ],
+      "planMachineAllowedPlanningStageStates": [
+        "pending",
+        "in_progress",
+        "complete"
+      ],
+      "planMachineAllowedSubagentRequirements": [
+        "required",
+        "recommended",
+        "optional",
+        "none"
+      ],
+      "planMachineRequiredSubagentFields": [
+        "requirement",
+        "primary_agent",
+        "execution_agents",
+        "last_executor"
+      ],
+      "planMachineStatusesRequiringLastExecutor": [
+        "in_progress",
+        "complete"
+      ],
+      "planMachineAllowedStatusByRoot": {
+        ".agents/plans/current": [
+          "draft",
+          "ready",
+          "in_progress",
+          "blocked",
+          "complete"
+        ],
+        ".agents/plans/deferred": [
+          "deferred"
+        ],
+        ".agents/plans/archived": [
+          "complete",
+          "archived"
+        ]
+      },
       "archivedPlanSyncEnabled": true,
       "archivedPlanRoot": ".agents/plans/archived",
-      "archivedPlanFileName": "PLAN.md",
+      "archivedPlanFileName": "PLAN.json",
       "archivedPlanCanonicalHandoffFileName": "HANDOFF.md",
       "archivedPlanLegacyHandoffFileNames": [
         "LLM_SESSION_HANDOFF.md"
@@ -416,7 +476,7 @@
     "workspaceLayout": {
       "canonicalRepoRoot": ".",
       "canonicalAgentsRoot": "../agents-workfiles/agents-template",
-      "worktreesRoot": ".worktrees",
+      "worktreesRoot": "../agents-template.worktrees",
       "enforceWorktreeRoot": true,
       "requireSemanticMergeForAgents": true,
       "requireSemanticMergeOnAgentsEdit": true,
@@ -451,6 +511,7 @@
         "rule_queue_single_source_of_truth",
         "rule_queue_scoped_context_read",
         "rule_queue_archive_on_complete",
+        "rule_plan_machine_contract_required",
         "rule_scope_tight_no_overbroad_refactor",
         "rule_hybrid_machine_human_contract",
         "rule_policy_sync_required",
@@ -478,10 +539,12 @@
         "orch_machine_payload_authoritative",
         "orch_delegate_substantive_work",
         "orch_operator_subagent_default",
+        "orch_non_trivial_subagent_mandatory",
         "orch_human_nuance_addendum",
         "orch_atomic_task_delegation",
         "orch_dual_channel_result_envelope",
         "orch_orchestrator_coordination_only",
+        "orch_release_idle_subagents_required",
         "orch_default_cli_routing",
         "orch_unconfirmed_unknowns",
         "orch_atomic_single_objective_scope",
@@ -518,6 +581,9 @@
         "singleOrchestratorOnly": true,
         "allowSubagentDelegation": false
       },
+      "nonTrivialSubagentDelegationRequired": true,
+      "idleSubagentReleaseRequired": true,
+      "idleSubagentMaxIdleMinutes": 15,
       "verbosityBudgets": {
         "subagentObjectiveMaxWords": 32,
         "subagentInputContextMaxWords": 200,
@@ -572,7 +638,11 @@
         },
         {
           "id": "orch_operator_subagent_default",
-          "statement": "Default to operator/subagent delegation for non-trivial work; direct single-agent execution is allowed only for trivial tasks."
+          "statement": "All non-trivial work must be delegated to subagents; direct single-agent execution is restricted to trivial tasks."
+        },
+        {
+          "id": "orch_non_trivial_subagent_mandatory",
+          "statement": "Treat subagent delegation for non-trivial work as mandatory and non-optional to preserve orchestrator context budget."
         },
         {
           "id": "orch_human_nuance_addendum",
@@ -589,6 +659,10 @@
         {
           "id": "orch_orchestrator_coordination_only",
           "statement": "Limit orchestrator direct execution to coordination/meta tasks; if delegation is infeasible, record explicit rationale first."
+        },
+        {
+          "id": "orch_release_idle_subagents_required",
+          "statement": "Release idle subagents as soon as they are no longer actively executing delegated work."
         },
         {
           "id": "orch_default_cli_routing",
@@ -1089,7 +1163,7 @@
       },
       {
         "prefix": ".worktrees/",
-        "message": ".worktrees/** is local-only execution workspace and must not be committed."
+        "message": ".worktrees/** is deprecated legacy workspace location; use ../<repo-name>.worktrees."
       }
     ]
   }

@@ -73,16 +73,18 @@ Canonical local artifact roots are under `.agents/`:
 - Local `.agents` directory mode is available only when bootstrap is explicitly set to `--agents-mode local`.
 - Treat `.agents/**` as shared multi-writer state and apply semantic merges (preserve concurrent entries; never clobber with blind overwrite).
 - `.agents/**` may be concurrently modified by other agent sessions; every edit under `.agents/**` must be semantically merged against latest on-disk state before write.
-- All additional Git worktrees must be created under `.worktrees`.
+- All additional Git worktrees must be created under `../<repo-name>.worktrees`.
 - In non-primary worktrees, `.agents` must be a symlink to the canonical shared root.
 
 Queue-first execution rule:
 
 - Before implementation/investigation execution starts, all planned work must exist as atomic entries in `.agents/EXECUTION_QUEUE.json`.
-- `.agents/EXECUTION_QUEUE.json` is authoritative for task state/order; `PLAN.md` provides human detail and references queue item IDs.
-- `npm run agent:preflight` auto-syncs `.agents/plans/current/*/PLAN.md` and `.agents/plans/deferred/*/PLAN.md` into queue items.
+- `.agents/EXECUTION_QUEUE.json` is authoritative for task state/order; `PLAN.json` is the machine-authoritative lifecycle companion for each plan, and `PLAN.md` is legacy historical context only.
+- `npm run agent:preflight` auto-syncs `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` into queue items.
+- `npm run agent:preflight` seeds/normalizes `.agents/plans/*/*/PLAN.json` and enforces `status`, `planning_stages`, and `subagent` metadata fields including `subagent.last_executor` (null/non-empty string; required non-empty when plan `status` is `in_progress` or `complete`).
+- If `PLAN.md` exists in current/deferred plan tracks, preflight migrates it into canonical `PLAN.json` and treats Markdown as legacy history.
 - Policy enforcement requires each current/deferred plan directory to have a corresponding queue item via `plan_ref`.
-- `npm run agent:preflight` also backfills `.agents/plans/archived/*/PLAN.md` into `.agents/EXECUTION_ARCHIVE_INDEX.json` + feature shard archives idempotently.
+- `npm run agent:preflight` also backfills `.agents/plans/archived/*/PLAN.json` into `.agents/EXECUTION_ARCHIVE_INDEX.json` + feature shard archives idempotently.
 - Queue state model is explicit and idempotent: top-level and per-item `state` use `active`/`deferred`/`pending`/`complete`, and items keep stable `id` + `idempotency_key`.
 - When a task or feature becomes `complete`, move it from hot queue into feature shard archive.
 - Do not read archive shards during normal startup; read archive on-demand for historical lookup only.
@@ -95,9 +97,11 @@ Queue-first execution rule:
 
 Simplified plan architecture:
 
-- required per active feature: `PLAN.md`
+- required per active feature: `PLAN.json`
+- optional legacy historical artifact: `PLAN.md` (non-authoritative)
 - Optional when needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
 - Legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files are valid historical formats.
+- Required `PLAN.json` metadata includes lifecycle fields (`status`, `updated_at`, `planning_stages`), `plan_ref`, and subagent fields (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`).
 
 ## Orchestrator/Subagent Contract Pointer
 
@@ -111,10 +115,12 @@ Policy-canonical rule IDs:
 - `orch_machine_payload_authoritative`
 - `orch_delegate_substantive_work`
 - `orch_operator_subagent_default`
+- `orch_non_trivial_subagent_mandatory`
 - `orch_human_nuance_addendum`
 - `orch_atomic_task_delegation`
 - `orch_dual_channel_result_envelope`
 - `orch_orchestrator_coordination_only`
+- `orch_release_idle_subagents_required`
 - `orch_default_cli_routing`
 - `orch_unconfirmed_unknowns`
 - `orch_atomic_single_objective_scope`
@@ -124,7 +130,8 @@ Policy-canonical rule IDs:
 - `orch_codex_model_default`
 
 Single-orchestrator topology is required: one orchestrator agent owns cross-task coordination/context and subagents execute delegated atomic tasks only.
-Operator/subagent execution is the default for non-trivial work; direct single-agent execution is allowed only for trivial tasks.
+Operator/subagent execution is mandatory for non-trivial work; direct single-agent execution is allowed only for trivial tasks.
+Release idle subagents immediately once they are no longer actively executing delegated work.
 Subagent handoff brevity and spec/refined-spec/plan verbosity budgets are defined in `contracts.orchestratorSubagent.verbosityBudgets`.
 Default model routing is policy-defined by role/risk:
 - orchestrator: `gpt-5.3-codex` with `xhigh` reasoning effort

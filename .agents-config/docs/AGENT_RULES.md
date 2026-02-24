@@ -15,6 +15,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_queue_single_source_of_truth`: Use `.agents/EXECUTION_QUEUE.json` as the only queue/scope authority across orchestrator and subagents.
 - `rule_queue_scoped_context_read`: Read only queue fields/items relevant to the active feature/item scope to preserve context efficiency.
 - `rule_queue_archive_on_complete`: Move completed task/feature work from hot queue into feature-sharded archive artifacts.
+- `rule_plan_machine_contract_required`: Maintain machine-readable plan lifecycle metadata in `PLAN.json` for each active/deferred/archived feature plan directory.
 - `rule_scope_tight_no_overbroad_refactor`: Keep changes narrowly scoped unless the user explicitly requests broad refactors.
 - `rule_hybrid_machine_human_contract`: Use machine-readable contracts as authority with concise human nuance addenda when needed.
 - `rule_policy_sync_required`: When process expectations change, update policy + enforcement + human docs together.
@@ -27,7 +28,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_managed_files_canonical_contract_required`: Keep managed workflow manifests (`.agents-config/agent-managed.json` and `.agents-config/tools/bootstrap/managed-files.template.json`) canonical with explicit `canonical_contract` defaults and authority modes.
 - `rule_managed_files_known_overrides_only`: Permit managed-file override payloads only for explicitly allowlisted entries (`allow_override=true`) and fail unknown `.agents-config/agent-overrides/**` payload files.
 - `rule_canonical_agents_root`: Treat `.agents` as the canonical project-local agent-context path; bootstrap defaults to external workfiles mode where `.agents` symlinks to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`), and local `.agents` mode is explicit via `--agents-mode local`.
-- `rule_worktree_root_required`: Keep all non-primary Git worktrees under `.worktrees`.
+- `rule_worktree_root_required`: Keep all non-primary Git worktrees under `../<repo-name>.worktrees`.
 - `rule_agents_semantic_merge_required`: `.agents/**` is shared multi-session state; every `.agents/**` edit must be semantically merged against latest on-disk state.
 - `rule_tdd_default`: Prefer true TDD and document deviations when strict TDD is impractical.
 - `rule_coverage_default_100`: Treat 100% coverage as default bar unless user-approved exception exists.
@@ -41,7 +42,9 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_release_notes_template_required`: Enforce canonical release-notes template + generator workflow, section order, and plain-English non-jargon summaries through policy checks.
 - `rule_release_notes_changelog_source_required`: Treat `CHANGELOG.md` as release-notes source of truth and rotate `Unreleased` during `release:prepare`.
 - `orch_single_orchestrator_authority`: Enforce exactly one orchestrator context owner per session; subagents do not orchestrate.
-- `orch_operator_subagent_default`: Default to operator/subagent delegation for non-trivial work; direct single-agent execution is only for trivial tasks.
+- `orch_operator_subagent_default`: All non-trivial work must be delegated to subagents; direct single-agent execution is only for trivial tasks.
+- `orch_non_trivial_subagent_mandatory`: Subagent delegation for non-trivial work is mandatory and non-optional.
+- `orch_release_idle_subagents_required`: Idle subagents must be released once they are no longer actively executing work.
 - `orch_concise_subagent_briefs`: Enforce concise subagent payload/addendum shape with explicit verbosity budgets.
 - `orch_spec_refined_plan_verbosity`: Enforce concise spec outline/refined spec/implementation-plan verbosity ladder.
 
@@ -161,7 +164,7 @@ At task start, explicitly determine:
 - Local `.agents` directory mode is allowed only when bootstrap is explicitly set to `--agents-mode local`.
 - Treat `.agents/**` as shared multi-writer state; reconcile concurrent edits using semantic merges instead of blind overwrite.
 - `.agents/**` may be concurrently modified by other agent sessions; every `.agents/**` edit must be semantically merged against latest on-disk state before write.
-- All non-primary Git worktrees must live under `.worktrees`.
+- All non-primary Git worktrees must live under `../<repo-name>.worktrees`.
 - For worktree execution, copy required local `.gitignore`d context files into the worktree (for example `.agents/**`, `.agents/plans/**`, and other local context files needed for correctness), keep them untracked, and never commit/push them.
 
 ### Managed Files Canonical Contract (Required)
@@ -182,10 +185,12 @@ At task start, explicitly determine:
   - `orch_machine_payload_authoritative`
   - `orch_delegate_substantive_work`
   - `orch_operator_subagent_default`
+  - `orch_non_trivial_subagent_mandatory`
   - `orch_human_nuance_addendum`
   - `orch_atomic_task_delegation`
   - `orch_dual_channel_result_envelope`
   - `orch_orchestrator_coordination_only`
+  - `orch_release_idle_subagents_required`
   - `orch_default_cli_routing`
   - `orch_unconfirmed_unknowns`
   - `orch_atomic_single_objective_scope`
@@ -199,7 +204,8 @@ Machine vs human guidance split for orchestration:
 - Machine-readable payload/config drives execution and validation.
 - Human-readable addendum captures nuance, rationale, and caveats not encoded in schema fields.
 - One orchestrator agent owns cross-task coordination/context in a session; subagents execute delegated atomic tasks and do not recursively orchestrate.
-- Operator/subagent delegation is the default for non-trivial work; direct single-agent execution is only for trivial tasks.
+- Operator/subagent delegation is mandatory for non-trivial work; direct single-agent execution is only for trivial tasks.
+- Idle subagents must be released as soon as they are no longer actively executing delegated work.
 - Subagent payload brevity is mandatory: one concrete objective, bounded context input, bounded completion summary.
 - Spec outline, refined spec, and detailed implementation plan sections must follow policy-defined verbosity budgets.
 - Model routing defaults are role/risk specific:
@@ -272,7 +278,7 @@ When policy expectations change, update all relevant governance artifacts in the
   - spec outline `<= 220` words,
   - refined spec `<= 420` words,
   - per-atomic-task implementation block `<= 160` words.
-- If a task requires exceeding a verbosity target for correctness, record a short rationale directly in `PLAN.md`.
+- If a task requires exceeding a verbosity target for correctness, record a short rationale in `PLAN.json` (and mirror it in `PLAN.md` only when preserving legacy historical context).
 - Mark a task `In Progress` before implementation; when marked `Complete`, add a short completion summary (files changed + verification result).
 - Work in small batches and checkpoint frequently; if you cannot commit directly, instruct the user to commit at logical milestones.
 - Before moving to a new task/session/phase, update current task summaries to reflect actual work and verification status.
@@ -282,10 +288,15 @@ When policy expectations change, update all relevant governance artifacts in the
 - For non-trivial phase transitions, pause and confirm direction with the user before proceeding.
 - Explicit queue gate: before execution starts, add/update atomic work items in `.agents/EXECUTION_QUEUE.json` with `planned_at` metadata and acceptance criteria.
 - Plan architecture is intentionally simple:
-  - required per active feature directory: `PLAN.md`
+  - required per active feature directory: `PLAN.json`
+  - optional legacy historical artifact: `PLAN.md` (non-authoritative; do not use as active source of truth)
   - optional as needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
   - legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files remain valid historical formats.
-- `PLAN.md` should include explicit sections for `Spec outline`, `Refined spec`, and `Detailed implementation plan` so verbosity controls are auditable.
+- Legacy `PLAN.md` artifacts (when present) should preserve explicit `Spec outline`, `Refined spec`, and `Detailed implementation plan` sections for historical auditability.
+- `PLAN.json` is the machine-authoritative lifecycle record and must include:
+  - lifecycle/status metadata (`status`, `updated_at`, `planning_stages`)
+  - the plan reference link (`plan_ref`)
+  - subagent policy/ownership metadata (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`)
 
 ### Re-Context and Retrospective Checks
 
@@ -344,7 +355,7 @@ When policy expectations change, update all relevant governance artifacts in the
   - Bootstrap defaults to external workfiles mode: `.agents` is a symlink to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`).
   - Local `.agents` directory mode is allowed only when bootstrap is explicitly set to `--agents-mode local`.
   - If running from a worktree, `.agents` in that worktree must be a symlink to the canonical root.
-  - Keep all non-primary worktrees under `.worktrees`.
+  - Keep all non-primary worktrees under `../<repo-name>.worktrees`.
 - Keep canonical machine-readable execution queue in `.agents/EXECUTION_QUEUE.json`:
   - top-level: `version`, `created_at`, `updated_at`, `last_updated`, `state`, `feature_id`, `task_id`, `objective`, `in_scope`, `out_of_scope`, `acceptance_criteria`, `constraints`, `references`, `open_questions`, `deferred_reason`, `cancel_reason`, `items`.
   - top-level `state` values: `active`, `deferred`, `pending`, `complete`.
@@ -354,9 +365,12 @@ When policy expectations change, update all relevant governance artifacts in the
   - `.agents/EXECUTION_QUEUE.json` is the only active scope/queue authority for orchestrator and subagents.
   - Do not maintain parallel queue/scope state files.
 - Plan-to-queue synchronization:
-  - `npm run agent:preflight` must auto-register every `.agents/plans/current/*/PLAN.md` and `.agents/plans/deferred/*/PLAN.md` as queue items (state defaults: `pending` for current, `deferred` for deferred).
+  - `npm run agent:preflight` must auto-register every `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` as queue items (state defaults: `pending` for current, `deferred` for deferred).
+  - Each plan track must include `.agents/plans/<root>/<feature_id>/PLAN.json` as the machine lifecycle contract; preflight seeds/normalizes it and policy checks fail if missing/invalid.
+  - If `PLAN.md` exists in current/deferred plan tracks, preflight must convert/migrate it into canonical `PLAN.json`; Markdown remains historical only.
+  - `PLAN.json` must keep `plan_ref` aligned to the canonical queue-tracked plan artifact (`PLAN.json`) and include canonical planning stage + subagent fields (`subagent.last_executor` must be null or a non-empty string, and must be non-empty when plan `status` is `in_progress` or `complete`).
   - Policy enforcement must fail if any current/deferred plan directory lacks a corresponding queue item `plan_ref`.
-  - `npm run agent:preflight` must also backfill archived feature plans (`.agents/plans/archived/*/PLAN.md`) into `.agents/EXECUTION_ARCHIVE_INDEX.json` and the corresponding `.agents/archives/<feature_id>.jsonl` shard.
+  - `npm run agent:preflight` must also backfill archived feature plans (`.agents/plans/archived/*/PLAN.json`) into `.agents/EXECUTION_ARCHIVE_INDEX.json` and the corresponding `.agents/archives/<feature_id>.jsonl` shard.
 - Scoped queue read discipline:
   - Load required top-level fields first (`state`, `feature_id`, `task_id`, `objective`, `last_updated`, `updated_at`, `in_scope`, `out_of_scope`, `open_questions`), then select only relevant queue items for the current work item/feature.
   - Prefer selectors `id`, `plan_ref`, `owner`, and dependency closure via `depends_on`; avoid loading the full `items` array when not required.
@@ -387,7 +401,8 @@ When policy expectations change, update all relevant governance artifacts in the
 - Consolidation boundary:
   - `.agents/EXECUTION_QUEUE.json` is authoritative for atomic execution state.
   - `.agents/CONTINUITY.md` records decisions/outcomes/history, not queue status.
-  - `PLAN.md` files provide human detail and should reference queue item IDs instead of duplicating status tracking.
+  - `PLAN.json` files are machine-authoritative plan lifecycle records.
+- Optional `PLAN.md` files are legacy historical context and must not be treated as authoritative state.
 - Stale-link hygiene:
   - Run an automated stale reference scan for `.agents/plans/**` paths; unresolved references must fail preflight/policy checks by default.
 - Treat `.agents/SESSION_BRIEF.json` as a required generated artifact from preflight, not a hand-authored policy source.

@@ -1,17 +1,17 @@
 {
   "metadata": {
     "id": "canonical-ruleset",
-    "version": "2026-02-22.06",
+    "version": "2026-02-24.04",
     "description": "Canonical governance rule catalog used for policy and drift checks.",
     "generated_from": [
       ".agents-config/policies/agent-governance.json",
       ".agents-config/docs/AGENT_RULES.md"
     ],
     "lineage": {
-      "policy_required_ids_sha256": "08cbc3e51d109a9115e26192052751e413bba519a2e2df2278c3119aa336d3e2",
-      "policy_orchestrator_rules_sha256": "a31ce819cfd0b80dcafe5e2a98b01ec459980d725e5566dce3759214e3ee913f",
-      "rules_doc_catalog_sha256": "8fc33f6a5c40e2ab53eecda95d8622b78f7b9ff7db1050a5063a40b8ab01ad66",
-      "canonical_rules_sha256": "d6fa0e87009ca98dfdb54479af0048bed877bcfe95c2e249f00f812798152573"
+      "policy_required_ids_sha256": "e15dbde56df0b1223550666f90dde1d2583657404e0f3b645936fa098842226d",
+      "policy_orchestrator_rules_sha256": "2ed533f4959dde7409cf7030d0b6d5853d160632f172488a2a04810ac21fef99",
+      "rules_doc_catalog_sha256": "4b0041c0b8fa5fe0ecc6ab773b7abdf5709627e0c0d626325a0cb716afb94a15",
+      "canonical_rules_sha256": "ebcd2380abcf9bea02cdd30ce2d7a490cfdfafbad0615ec37d54f1b91773351b"
     }
   },
   "rules": [
@@ -67,6 +67,14 @@
       "id": "rule_queue_archive_on_complete",
       "statement": "Move completed task/feature work from hot queue into feature-sharded archive artifacts.",
       "category": "execution",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_plan_machine_contract_required",
+      "statement": "Maintain machine-readable plan lifecycle metadata in `PLAN.json` for each active/deferred/archived feature plan directory.",
+      "category": "governance",
       "severity": "error",
       "overrideable": false,
       "source": "docs.ruleCatalog"
@@ -169,7 +177,7 @@
     },
     {
       "id": "rule_worktree_root_required",
-      "statement": "Keep all non-primary Git worktrees under `.worktrees`.",
+      "statement": "Keep all non-primary Git worktrees under `../<repo-name>.worktrees`.",
       "category": "execution",
       "severity": "error",
       "overrideable": false,
@@ -281,7 +289,15 @@
     },
     {
       "id": "orch_operator_subagent_default",
-      "statement": "Default to operator/subagent delegation for non-trivial work; direct single-agent execution is allowed only for trivial tasks.",
+      "statement": "All non-trivial work must be delegated to subagents; direct single-agent execution is restricted to trivial tasks.",
+      "category": "orchestration",
+      "severity": "error",
+      "overrideable": false,
+      "source": "policy.orchestratorSubagent.rules"
+    },
+    {
+      "id": "orch_non_trivial_subagent_mandatory",
+      "statement": "Treat subagent delegation for non-trivial work as mandatory and non-optional to preserve orchestrator context budget.",
       "category": "orchestration",
       "severity": "error",
       "overrideable": false,
@@ -314,6 +330,14 @@
     {
       "id": "orch_orchestrator_coordination_only",
       "statement": "Limit orchestrator direct execution to coordination/meta tasks; if delegation is infeasible, record explicit rationale first.",
+      "category": "orchestration",
+      "severity": "error",
+      "overrideable": false,
+      "source": "policy.orchestratorSubagent.rules"
+    },
+    {
+      "id": "orch_release_idle_subagents_required",
+      "statement": "Release idle subagents as soon as they are no longer actively executing delegated work.",
       "category": "orchestration",
       "severity": "error",
       "overrideable": false,

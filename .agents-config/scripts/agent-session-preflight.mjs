@@ -340,6 +340,12 @@ function isPathWithin(candidatePath, parentPath) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function resolveCanonicalWorktreesRoot(canonicalRepoRoot) {
+  const canonicalRepoRootResolved = path.resolve(canonicalRepoRoot);
+  const repoName = path.basename(canonicalRepoRootResolved);
+  return path.resolve(canonicalRepoRootResolved, "..", `${repoName}.worktrees`);
+}
+
 function ensureWorktreeAgentsSymlink({
   repoRoot,
   canonicalRepoRoot,
@@ -353,6 +359,8 @@ function ensureWorktreeAgentsSymlink({
   const canonicalRepoRootResolved = path.resolve(canonicalRepoRoot);
   const canonicalAgentsRootResolved = path.resolve(canonicalAgentsRoot);
   const worktreesRootResolved = path.resolve(worktreesRoot);
+  const expectedWorktreesRootResolved =
+    resolveCanonicalWorktreesRoot(canonicalRepoRootResolved);
 
   const inCanonicalRoot = repoRootResolved === canonicalRepoRootResolved;
   const inConfiguredWorktree = isPathWithin(repoRootResolved, worktreesRootResolved);
@@ -362,9 +370,9 @@ function ensureWorktreeAgentsSymlink({
     );
   }
 
-  if (worktreesRootResolved !== path.resolve(canonicalRepoRootResolved, ".worktrees")) {
+  if (worktreesRootResolved !== expectedWorktreesRootResolved) {
     throw new Error(
-      `workspaceLayout.worktreesRoot must resolve to ${path.resolve(canonicalRepoRootResolved, ".worktrees")}.`,
+      `workspaceLayout.worktreesRoot must resolve to ${expectedWorktreesRootResolved}.`,
     );
   }
 
@@ -684,6 +692,231 @@ function readPlanHeading(planFileAbs) {
   return null;
 }
 
+function readPlanDisplayTitle(planFileAbs) {
+  if (!fs.existsSync(planFileAbs)) {
+    return null;
+  }
+
+  if (planFileAbs.endsWith(".json")) {
+    const parsed = readJsonSafeFromDisk(planFileAbs);
+    if (!parsed.error && parsed.data && typeof parsed.data === "object") {
+      return (
+        toNonEmptyString(parsed.data.feature_title) ??
+        toNonEmptyString(parsed.data.title) ??
+        null
+      );
+    }
+    return null;
+  }
+
+  return readPlanHeading(planFileAbs);
+}
+
+function toLegacyPlanMarkdownRef(planRef) {
+  const normalizedPlanRef = (toNonEmptyString(planRef) ?? "").replace(/\\/g, "/");
+  if (!normalizedPlanRef) {
+    return null;
+  }
+  const planDir = path.posix.dirname(normalizedPlanRef);
+  return `${planDir}/PLAN.md`;
+}
+
+function defaultPlanLifecycleStatus(rootPath) {
+  if (rootPath.endsWith("/deferred")) {
+    return "deferred";
+  }
+  if (rootPath.endsWith("/archived")) {
+    return "archived";
+  }
+  return "draft";
+}
+
+function defaultPlanStageState(rootPath) {
+  if (rootPath.endsWith("/archived")) {
+    return "complete";
+  }
+  return "pending";
+}
+
+function normalizePlanMachineStatus({
+  currentStatus,
+  allowedStatusesForRoot,
+  defaultStatus,
+}) {
+  const normalizedCurrent = toNonEmptyString(currentStatus);
+  if (
+    normalizedCurrent &&
+    Array.isArray(allowedStatusesForRoot) &&
+    allowedStatusesForRoot.includes(normalizedCurrent)
+  ) {
+    return normalizedCurrent;
+  }
+  return defaultStatus;
+}
+
+function buildPlanMachineTemplate({
+  schemaVersion,
+  featureId,
+  featureTitle,
+  planRef,
+  rootPath,
+  now,
+  requiredPlanningStages,
+  allowedStatusByRoot,
+}) {
+  const defaultStatus = defaultPlanLifecycleStatus(rootPath);
+  const allowedStatusesForRoot = allowedStatusByRoot[rootPath] ?? [defaultStatus];
+  const stageState = defaultPlanStageState(rootPath);
+  const planningStages = {};
+  for (const stage of requiredPlanningStages) {
+    planningStages[stage] = stageState;
+  }
+
+  return {
+    schema_version: schemaVersion,
+    feature_id: featureId,
+    feature_title: featureTitle,
+    plan_ref: planRef,
+    status: normalizePlanMachineStatus({
+      currentStatus: defaultStatus,
+      allowedStatusesForRoot,
+      defaultStatus,
+    }),
+    updated_at: now,
+    planning_stages: planningStages,
+    subagent: {
+      requirement: "optional",
+      primary_agent: null,
+      execution_agents: [],
+      last_executor: null,
+    },
+  };
+}
+
+function readJsonSafeFromDisk(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    return { data: JSON.parse(raw), error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
+function normalizePlanMachineDocument({
+  rawData,
+  schemaVersion,
+  featureId,
+  featureTitle,
+  planRef,
+  rootPath,
+  now,
+  requiredPlanningStages,
+  allowedPlanningStageStates,
+  allowedSubagentRequirements,
+  requiredSubagentFields,
+  statusesRequiringLastExecutor,
+  allowedStatusByRoot,
+}) {
+  const template = buildPlanMachineTemplate({
+    schemaVersion,
+    featureId,
+    featureTitle,
+    planRef,
+    rootPath,
+    now,
+    requiredPlanningStages,
+    allowedStatusByRoot,
+  });
+
+  const value =
+    rawData && typeof rawData === "object" && !Array.isArray(rawData)
+      ? { ...rawData }
+      : {};
+
+  let changed = false;
+  const setIfDifferent = (fieldName, nextValue) => {
+    if (JSON.stringify(value[fieldName]) !== JSON.stringify(nextValue)) {
+      value[fieldName] = nextValue;
+      changed = true;
+    }
+  };
+
+  setIfDifferent("schema_version", schemaVersion);
+  setIfDifferent("feature_id", featureId);
+  setIfDifferent("plan_ref", planRef);
+
+  const normalizedFeatureTitle = toNonEmptyString(value.feature_title) ?? featureTitle;
+  setIfDifferent("feature_title", normalizedFeatureTitle);
+
+  const defaultStatus = defaultPlanLifecycleStatus(rootPath);
+  const allowedStatusesForRoot = allowedStatusByRoot[rootPath] ?? [defaultStatus];
+  const normalizedStatus = normalizePlanMachineStatus({
+    currentStatus: value.status,
+    allowedStatusesForRoot,
+    defaultStatus,
+  });
+  setIfDifferent("status", normalizedStatus);
+
+  const planningStages =
+    value.planning_stages &&
+    typeof value.planning_stages === "object" &&
+    !Array.isArray(value.planning_stages)
+      ? { ...value.planning_stages }
+      : {};
+  const defaultStageState = defaultPlanStageState(rootPath);
+  for (const stage of requiredPlanningStages) {
+    const currentStageState = toNonEmptyString(planningStages[stage]);
+    planningStages[stage] =
+      currentStageState && allowedPlanningStageStates.includes(currentStageState)
+        ? currentStageState
+        : defaultStageState;
+  }
+  setIfDifferent("planning_stages", planningStages);
+
+  const subagent =
+    value.subagent && typeof value.subagent === "object" && !Array.isArray(value.subagent)
+      ? { ...value.subagent }
+      : {};
+  const requiredSubagentFieldSet = new Set(requiredSubagentFields);
+  const statusesRequiringLastExecutorSet = new Set(statusesRequiringLastExecutor);
+
+  const requirement = toNonEmptyString(subagent.requirement);
+  const normalizedRequirement =
+    requirement && allowedSubagentRequirements.includes(requirement)
+      ? requirement
+      : template.subagent.requirement;
+  if (requiredSubagentFieldSet.has("requirement") || "requirement" in subagent) {
+    subagent.requirement = normalizedRequirement;
+  }
+
+  const primaryAgent = toNonEmptyString(subagent.primary_agent);
+  if (requiredSubagentFieldSet.has("primary_agent") || "primary_agent" in subagent) {
+    subagent.primary_agent = primaryAgent ?? null;
+  }
+
+  const executionAgents = normalizeStringArray(subagent.execution_agents);
+  if (requiredSubagentFieldSet.has("execution_agents") || "execution_agents" in subagent) {
+    subagent.execution_agents = executionAgents;
+  }
+
+  let lastExecutor = toNonEmptyString(subagent.last_executor);
+  if (!lastExecutor && statusesRequiringLastExecutorSet.has(normalizedStatus)) {
+    lastExecutor = primaryAgent ?? executionAgents[0] ?? "orchestrator";
+  }
+  if (requiredSubagentFieldSet.has("last_executor") || "last_executor" in subagent) {
+    subagent.last_executor = lastExecutor ?? null;
+  }
+  setIfDifferent("subagent", subagent);
+
+  if (!isValidIsoDate(value.updated_at)) {
+    setIfDifferent("updated_at", now);
+  } else if (changed) {
+    setIfDifferent("updated_at", now);
+  }
+
+  return { data: value, changed };
+}
+
 function listFeaturePlanDirectories(rootAbs) {
   if (!fs.existsSync(rootAbs)) {
     return [];
@@ -879,7 +1112,7 @@ function main() {
   };
   const worktreesRoot =
     toNonEmptyString(workspaceLayout.worktreesRoot) ??
-    path.resolve(canonicalRepoRoot, ".worktrees");
+    resolveCanonicalWorktreesRoot(canonicalRepoRoot);
   let workspaceLayoutInfo;
   try {
     workspaceLayoutInfo = ensureWorktreeAgentsSymlink({
@@ -911,7 +1144,7 @@ function main() {
 
   const planQueueSyncEnabled = sessionArtifacts.planQueueSyncEnabled !== false;
   const planQueueSyncPlanFileName =
-    toNonEmptyString(sessionArtifacts.planQueueSyncPlanFileName) ?? "PLAN.md";
+    toNonEmptyString(sessionArtifacts.planQueueSyncPlanFileName) ?? "PLAN.json";
   const planQueueSyncRoots = normalizeArray(
     sessionArtifacts.planQueueSyncRoots ?? [
       ".agents/plans/current",
@@ -942,11 +1175,74 @@ function main() {
     toNonEmptyString(sessionArtifacts.planQueueSyncDefaultItemType) ?? "task";
   const planQueueSyncDefaultSubscope =
     toNonEmptyString(sessionArtifacts.planQueueSyncDefaultSubscope) ?? "plan-track";
+  const planMachineContractEnabled =
+    sessionArtifacts.planMachineContractEnabled !== false;
+  const planMachineFileName =
+    toNonEmptyString(sessionArtifacts.planMachineFileName) ?? "PLAN.json";
+  const planMachineSchemaVersion =
+    toNonEmptyString(sessionArtifacts.planMachineSchemaVersion) ?? "1.0";
+  const planMachineRoots = normalizeArray(
+    sessionArtifacts.planMachineRoots ?? [
+      ".agents/plans/current",
+      ".agents/plans/deferred",
+      ".agents/plans/archived",
+    ],
+  ).filter((value) => typeof value === "string" && value.trim().length > 0);
+  const planMachineRequiredPlanningStages = normalizeStringArray(
+    sessionArtifacts.planMachineRequiredPlanningStages ?? [
+      "spec_outline",
+      "refined_spec",
+      "implementation_plan",
+    ],
+  );
+  const planMachineAllowedPlanningStageStates = normalizeStringArray(
+    sessionArtifacts.planMachineAllowedPlanningStageStates ?? [
+      "pending",
+      "in_progress",
+      "complete",
+    ],
+  );
+  const planMachineAllowedSubagentRequirements = normalizeStringArray(
+    sessionArtifacts.planMachineAllowedSubagentRequirements ?? [
+      "required",
+      "recommended",
+      "optional",
+      "none",
+    ],
+  );
+  const planMachineRequiredSubagentFields = normalizeStringArray(
+    sessionArtifacts.planMachineRequiredSubagentFields ?? [
+      "requirement",
+      "primary_agent",
+      "execution_agents",
+      "last_executor",
+    ],
+  );
+  const planMachineStatusesRequiringLastExecutor = normalizeStringArray(
+    sessionArtifacts.planMachineStatusesRequiringLastExecutor ?? [
+      "in_progress",
+      "complete",
+    ],
+  );
+  const rawPlanMachineAllowedStatusByRoot =
+    sessionArtifacts.planMachineAllowedStatusByRoot &&
+    typeof sessionArtifacts.planMachineAllowedStatusByRoot === "object"
+      ? sessionArtifacts.planMachineAllowedStatusByRoot
+      : {};
+  const planMachineAllowedStatusByRoot = {};
+  for (const rootPath of planMachineRoots) {
+    const requestedStates = normalizeStringArray(rawPlanMachineAllowedStatusByRoot[rootPath]);
+    if (requestedStates.length > 0) {
+      planMachineAllowedStatusByRoot[rootPath] = requestedStates;
+      continue;
+    }
+    planMachineAllowedStatusByRoot[rootPath] = [defaultPlanLifecycleStatus(rootPath)];
+  }
   const archivedPlanSyncEnabled = sessionArtifacts.archivedPlanSyncEnabled !== false;
   const archivedPlanRoot =
     toNonEmptyString(sessionArtifacts.archivedPlanRoot) ?? ".agents/plans/archived";
   const archivedPlanFileName =
-    toNonEmptyString(sessionArtifacts.archivedPlanFileName) ?? "PLAN.md";
+    toNonEmptyString(sessionArtifacts.archivedPlanFileName) ?? "PLAN.json";
   const archivedPlanCanonicalHandoffFileName =
     toNonEmptyString(sessionArtifacts.archivedPlanCanonicalHandoffFileName) ?? "HANDOFF.md";
   const archivedPlanLegacyHandoffFileNames = normalizeStringArray(
@@ -1310,6 +1606,17 @@ function main() {
     missing_plan_files: [],
     synced_plan_refs: [],
   };
+  const planMachineSummary = {
+    enabled: planMachineContractEnabled,
+    machine_file_name: planMachineFileName,
+    schema_version: planMachineSchemaVersion,
+    roots: planMachineRoots,
+    created_machine_files: [],
+    normalized_machine_files: [],
+    migrated_from_legacy_plan_md_refs: [],
+    missing_machine_files: [],
+    invalid_machine_files: [],
+  };
 
   if (planQueueSyncEnabled) {
     const existingPlanRefToIndices = new Map();
@@ -1339,9 +1646,105 @@ function main() {
       for (const featureDir of featureDirs) {
         const planRef = `${rootPath}/${featureDir}/${planQueueSyncPlanFileName}`;
         const planAbs = resolveArtifactPath(planRef);
+        const legacyPlanMarkdownRef = toLegacyPlanMarkdownRef(planRef);
+        const legacyPlanMarkdownAbs = legacyPlanMarkdownRef
+          ? resolveArtifactPath(legacyPlanMarkdownRef)
+          : null;
+        const legacyPlanMarkdownTitle =
+          legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+            ? readPlanHeading(legacyPlanMarkdownAbs)
+            : null;
+        if (!fs.existsSync(planAbs)) {
+          if (
+            planMachineContractEnabled &&
+            planMachineRoots.includes(rootPath) &&
+            planQueueSyncPlanFileName === planMachineFileName
+          ) {
+            const featureTitle =
+              legacyPlanMarkdownTitle ?? `Plan Track: ${toFeatureTitleFromSlug(featureDir)}`;
+            const template = buildPlanMachineTemplate({
+              schemaVersion: planMachineSchemaVersion,
+              featureId: featureDir,
+              featureTitle,
+              planRef,
+              rootPath,
+              now,
+              requiredPlanningStages: planMachineRequiredPlanningStages,
+              allowedStatusByRoot: planMachineAllowedStatusByRoot,
+            });
+            writeJson(planAbs, template);
+            if (!planMachineSummary.created_machine_files.includes(planRef)) {
+              planMachineSummary.created_machine_files.push(planRef);
+            }
+            if (
+              rootPath !== archivedPlanRoot &&
+              legacyPlanMarkdownRef &&
+              fs.existsSync(legacyPlanMarkdownAbs)
+            ) {
+              if (!planMachineSummary.migrated_from_legacy_plan_md_refs.includes(legacyPlanMarkdownRef)) {
+                planMachineSummary.migrated_from_legacy_plan_md_refs.push(legacyPlanMarkdownRef);
+              }
+            }
+          }
+        }
         if (!fs.existsSync(planAbs)) {
           planQueueSyncSummary.missing_plan_files.push(planRef);
           continue;
+        }
+
+        const planTitle = readPlanDisplayTitle(planAbs);
+        const featureTitle =
+          planTitle ?? legacyPlanMarkdownTitle ?? `Plan Track: ${toFeatureTitleFromSlug(featureDir)}`;
+        const planMachineRef = `${rootPath}/${featureDir}/${planMachineFileName}`;
+        const planMachineAbs = resolveArtifactPath(planMachineRef);
+
+        if (planMachineContractEnabled && planMachineRoots.includes(rootPath)) {
+          if (!fs.existsSync(planMachineAbs)) {
+            const template = buildPlanMachineTemplate({
+              schemaVersion: planMachineSchemaVersion,
+              featureId: featureDir,
+              featureTitle,
+              planRef,
+              rootPath,
+              now,
+              requiredPlanningStages: planMachineRequiredPlanningStages,
+              allowedStatusByRoot: planMachineAllowedStatusByRoot,
+            });
+            writeJson(planMachineAbs, template);
+            planMachineSummary.created_machine_files.push(planMachineRef);
+          }
+
+          if (!fs.existsSync(planMachineAbs)) {
+            planMachineSummary.missing_machine_files.push(planMachineRef);
+          } else {
+            const parsedMachine = readJsonSafeFromDisk(planMachineAbs);
+            if (parsedMachine.error) {
+              planMachineSummary.invalid_machine_files.push({
+                ref: planMachineRef,
+                error: parsedMachine.error.message,
+              });
+            } else {
+              const normalizedMachine = normalizePlanMachineDocument({
+                rawData: parsedMachine.data,
+                schemaVersion: planMachineSchemaVersion,
+                featureId: featureDir,
+                featureTitle,
+                planRef,
+                rootPath,
+                now,
+                requiredPlanningStages: planMachineRequiredPlanningStages,
+                allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
+                allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
+                requiredSubagentFields: planMachineRequiredSubagentFields,
+                statusesRequiringLastExecutor: planMachineStatusesRequiringLastExecutor,
+                allowedStatusByRoot: planMachineAllowedStatusByRoot,
+              });
+              if (normalizedMachine.changed) {
+                writeJson(planMachineAbs, normalizedMachine.data);
+                planMachineSummary.normalized_machine_files.push(planMachineRef);
+              }
+            }
+          }
         }
 
         planQueueSyncSummary.discovered_plan_tracks += 1;
@@ -1366,17 +1769,34 @@ function main() {
               }
             }
           }
+          if (planMachineContractEnabled && planMachineRoots.includes(rootPath)) {
+            for (const existingIndex of existingIndices) {
+              const existingItem = executionQueue.items[existingIndex];
+              if (!existingItem || typeof existingItem !== "object") {
+                continue;
+              }
+              if (!Array.isArray(existingItem.references)) {
+                existingItem.references = [planRef];
+                queueMutated = true;
+                planQueueSyncSummary.normalized_existing_items += 1;
+              }
+              if (!existingItem.references.includes(planMachineRef)) {
+                existingItem.references.push(planMachineRef);
+                queueMutated = true;
+                planQueueSyncSummary.normalized_existing_items += 1;
+              }
+            }
+          }
           continue;
         }
 
         const featureToken = toQueueToken(featureDir, "feature");
-        const planHeading = readPlanHeading(planAbs);
         const newItem = {
           id: `plan-${rootToken}-${featureToken}`,
           idempotency_key: `plan-sync:${rootToken}:${featureToken}`,
           feature_id: featureDir,
           subscope: planQueueSyncDefaultSubscope,
-          title: planHeading ?? `Plan Track: ${toFeatureTitleFromSlug(featureDir)}`,
+          title: featureTitle,
           type: planQueueSyncDefaultItemType,
           state: defaultRootState,
           created_at: now,
@@ -1390,7 +1810,13 @@ function main() {
           constraints: [
             `Keep scope aligned to ${planRef} and avoid unrelated work.`,
           ],
-          references: [planRef],
+          references: (() => {
+            const refs = new Set([planRef]);
+            if (planMachineContractEnabled && planMachineRoots.includes(rootPath)) {
+              refs.add(planMachineRef);
+            }
+            return [...refs];
+          })(),
           depends_on: [],
           plan_ref: planRef,
           execution_started_at: null,
@@ -1440,9 +1866,95 @@ function main() {
       const featureDirectoryRef = `${archivedPlanRoot}/${featureDir}`;
       const planRef = `${featureDirectoryRef}/${archivedPlanFileName}`;
       const planAbs = resolveArtifactPath(planRef);
+      const legacyPlanMarkdownRef = toLegacyPlanMarkdownRef(planRef);
+      const legacyPlanMarkdownAbs = legacyPlanMarkdownRef
+        ? resolveArtifactPath(legacyPlanMarkdownRef)
+        : null;
+      const legacyPlanMarkdownTitle =
+        legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+          ? readPlanHeading(legacyPlanMarkdownAbs)
+          : null;
+      if (!fs.existsSync(planAbs)) {
+        if (
+          planMachineContractEnabled &&
+          planMachineRoots.includes(archivedPlanRoot) &&
+          archivedPlanFileName === planMachineFileName
+        ) {
+          const featureTitle =
+            legacyPlanMarkdownTitle ?? `Archived Plan: ${toFeatureTitleFromSlug(featureDir)}`;
+          const template = buildPlanMachineTemplate({
+            schemaVersion: planMachineSchemaVersion,
+            featureId: featureDir,
+            featureTitle,
+            planRef,
+            rootPath: archivedPlanRoot,
+            now,
+            requiredPlanningStages: planMachineRequiredPlanningStages,
+            allowedStatusByRoot: planMachineAllowedStatusByRoot,
+          });
+          writeJson(planAbs, template);
+          if (!planMachineSummary.created_machine_files.includes(planRef)) {
+            planMachineSummary.created_machine_files.push(planRef);
+          }
+        }
+      }
       if (!fs.existsSync(planAbs)) {
         archivedPlanSyncSummary.missing_plan_files.push(planRef);
         continue;
+      }
+
+      const planHeading =
+        readPlanDisplayTitle(planAbs) ??
+        legacyPlanMarkdownTitle ??
+        `Archived Plan: ${toFeatureTitleFromSlug(featureDir)}`;
+      const planMachineRef = `${featureDirectoryRef}/${planMachineFileName}`;
+      const planMachineAbs = resolveArtifactPath(planMachineRef);
+      if (planMachineContractEnabled && planMachineRoots.includes(archivedPlanRoot)) {
+        if (!fs.existsSync(planMachineAbs)) {
+          const template = buildPlanMachineTemplate({
+            schemaVersion: planMachineSchemaVersion,
+            featureId: featureDir,
+            featureTitle: planHeading,
+            planRef,
+            rootPath: archivedPlanRoot,
+            now,
+            requiredPlanningStages: planMachineRequiredPlanningStages,
+            allowedStatusByRoot: planMachineAllowedStatusByRoot,
+          });
+          writeJson(planMachineAbs, template);
+          planMachineSummary.created_machine_files.push(planMachineRef);
+        }
+        if (!fs.existsSync(planMachineAbs)) {
+          planMachineSummary.missing_machine_files.push(planMachineRef);
+        } else {
+          const parsedMachine = readJsonSafeFromDisk(planMachineAbs);
+          if (parsedMachine.error) {
+            planMachineSummary.invalid_machine_files.push({
+              ref: planMachineRef,
+              error: parsedMachine.error.message,
+            });
+          } else {
+            const normalizedMachine = normalizePlanMachineDocument({
+              rawData: parsedMachine.data,
+              schemaVersion: planMachineSchemaVersion,
+              featureId: featureDir,
+              featureTitle: planHeading,
+              planRef,
+              rootPath: archivedPlanRoot,
+              now,
+              requiredPlanningStages: planMachineRequiredPlanningStages,
+              allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
+              allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
+              requiredSubagentFields: planMachineRequiredSubagentFields,
+              statusesRequiringLastExecutor: planMachineStatusesRequiringLastExecutor,
+              allowedStatusByRoot: planMachineAllowedStatusByRoot,
+            });
+            if (normalizedMachine.changed) {
+              writeJson(planMachineAbs, normalizedMachine.data);
+              planMachineSummary.normalized_machine_files.push(planMachineRef);
+            }
+          }
+        }
       }
 
       archivedPlanSyncSummary.synced_feature_ids.push(featureDir);
@@ -1486,6 +1998,10 @@ function main() {
             source: "archived-plan-sync",
             feature_directory: featureDirectoryRef,
             plan_ref: planRef,
+            plan_machine_ref:
+              planMachineContractEnabled && fs.existsSync(planMachineAbs)
+                ? planMachineRef
+                : null,
             handoff_ref: handoffRef,
             prompt_history_ref: fs.existsSync(resolveArtifactPath(promptHistoryRef))
               ? promptHistoryRef
@@ -1496,7 +2012,6 @@ function main() {
         archivedPlanSyncSummary.added_shard_records += 1;
       }
 
-      const planHeading = readPlanHeading(planAbs) ?? `Archived Plan: ${toFeatureTitleFromSlug(featureDir)}`;
       const archiveIndexEntryDefaults = {
         archive_key: archiveKey,
         kind: archivedPlanIndexKind,
@@ -1508,6 +2023,10 @@ function main() {
         archived_at: now,
         archive_ref: archiveRef,
         plan_ref: planRef,
+        plan_machine_ref:
+          planMachineContractEnabled && fs.existsSync(planMachineAbs)
+            ? planMachineRef
+            : null,
         task_id: `archived-plan:${featureDir}`,
         objective: planHeading,
       };
@@ -2013,7 +2532,48 @@ function main() {
       for (const featureDir of featureDirs) {
         const planRef = `${rootPath}/${featureDir}/${planQueueSyncPlanFileName}`;
         const planAbs = resolveArtifactPath(planRef);
+        const legacyPlanMarkdownRef = toLegacyPlanMarkdownRef(planRef);
+        const legacyPlanMarkdownAbs = legacyPlanMarkdownRef
+          ? resolveArtifactPath(legacyPlanMarkdownRef)
+          : null;
+        const legacyPlanMarkdownTitle =
+          legacyPlanMarkdownAbs && fs.existsSync(legacyPlanMarkdownAbs)
+            ? readPlanHeading(legacyPlanMarkdownAbs)
+            : null;
 
+        if (!fs.existsSync(planAbs)) {
+          if (
+            planMachineContractEnabled &&
+            planMachineRoots.includes(rootPath) &&
+            planQueueSyncPlanFileName === planMachineFileName
+          ) {
+            const featureTitle =
+              legacyPlanMarkdownTitle ?? `Plan Track: ${toFeatureTitleFromSlug(featureDir)}`;
+            const template = buildPlanMachineTemplate({
+              schemaVersion: planMachineSchemaVersion,
+              featureId: featureDir,
+              featureTitle,
+              planRef,
+              rootPath,
+              now,
+              requiredPlanningStages: planMachineRequiredPlanningStages,
+              allowedStatusByRoot: planMachineAllowedStatusByRoot,
+            });
+            writeJson(planAbs, template);
+            if (!planMachineSummary.created_machine_files.includes(planRef)) {
+              planMachineSummary.created_machine_files.push(planRef);
+            }
+            if (
+              rootPath !== archivedPlanRoot &&
+              legacyPlanMarkdownRef &&
+              fs.existsSync(legacyPlanMarkdownAbs)
+            ) {
+              if (!planMachineSummary.migrated_from_legacy_plan_md_refs.includes(legacyPlanMarkdownRef)) {
+                planMachineSummary.migrated_from_legacy_plan_md_refs.push(legacyPlanMarkdownRef);
+              }
+            }
+          }
+        }
         if (!fs.existsSync(planAbs)) {
           if (!planQueueSyncSummary.missing_plan_files.includes(planRef)) {
             planQueueSyncSummary.missing_plan_files.push(planRef);
@@ -2025,18 +2585,78 @@ function main() {
           planQueueSyncSummary.synced_plan_refs.push(planRef);
         }
 
+        const planHeading = readPlanDisplayTitle(planAbs);
+        const featureTitle =
+          planHeading ?? legacyPlanMarkdownTitle ?? `Plan Track: ${toFeatureTitleFromSlug(featureDir)}`;
+        const planMachineRef = `${rootPath}/${featureDir}/${planMachineFileName}`;
+        const planMachineAbs = resolveArtifactPath(planMachineRef);
+        if (planMachineContractEnabled && planMachineRoots.includes(rootPath)) {
+          if (!fs.existsSync(planMachineAbs)) {
+            const template = buildPlanMachineTemplate({
+              schemaVersion: planMachineSchemaVersion,
+              featureId: featureDir,
+              featureTitle,
+              planRef,
+              rootPath,
+              now,
+              requiredPlanningStages: planMachineRequiredPlanningStages,
+              allowedStatusByRoot: planMachineAllowedStatusByRoot,
+            });
+            writeJson(planMachineAbs, template);
+            if (!planMachineSummary.created_machine_files.includes(planMachineRef)) {
+              planMachineSummary.created_machine_files.push(planMachineRef);
+            }
+          }
+          if (!fs.existsSync(planMachineAbs)) {
+            if (!planMachineSummary.missing_machine_files.includes(planMachineRef)) {
+              planMachineSummary.missing_machine_files.push(planMachineRef);
+            }
+          } else {
+            const parsedMachine = readJsonSafeFromDisk(planMachineAbs);
+            if (parsedMachine.error) {
+              if (!planMachineSummary.invalid_machine_files.some((entry) => entry.ref === planMachineRef)) {
+                planMachineSummary.invalid_machine_files.push({
+                  ref: planMachineRef,
+                  error: parsedMachine.error.message,
+                });
+              }
+            } else {
+              const normalizedMachine = normalizePlanMachineDocument({
+                rawData: parsedMachine.data,
+                schemaVersion: planMachineSchemaVersion,
+                featureId: featureDir,
+                featureTitle,
+                planRef,
+                rootPath,
+                now,
+                requiredPlanningStages: planMachineRequiredPlanningStages,
+                allowedPlanningStageStates: planMachineAllowedPlanningStageStates,
+                allowedSubagentRequirements: planMachineAllowedSubagentRequirements,
+                requiredSubagentFields: planMachineRequiredSubagentFields,
+                statusesRequiringLastExecutor: planMachineStatusesRequiringLastExecutor,
+                allowedStatusByRoot: planMachineAllowedStatusByRoot,
+              });
+              if (normalizedMachine.changed) {
+                writeJson(planMachineAbs, normalizedMachine.data);
+                if (!planMachineSummary.normalized_machine_files.includes(planMachineRef)) {
+                  planMachineSummary.normalized_machine_files.push(planMachineRef);
+                }
+              }
+            }
+          }
+        }
+
         if (existingPlanRefs.has(planRef)) {
           continue;
         }
 
         const featureToken = toQueueToken(featureDir, "feature");
-        const planHeading = readPlanHeading(planAbs);
         executionQueue.items.push({
           id: `plan-${rootToken}-${featureToken}`,
           idempotency_key: `plan-sync:${rootToken}:${featureToken}`,
           feature_id: featureDir,
           subscope: planQueueSyncDefaultSubscope,
-          title: planHeading ?? `Plan Track: ${toFeatureTitleFromSlug(featureDir)}`,
+          title: featureTitle,
           type: planQueueSyncDefaultItemType,
           state: defaultRootState,
           created_at: now,
@@ -2050,7 +2670,13 @@ function main() {
           constraints: [
             `Keep scope aligned to ${planRef} and avoid unrelated work.`,
           ],
-          references: [planRef],
+          references: (() => {
+            const refs = new Set([planRef]);
+            if (planMachineContractEnabled && planMachineRoots.includes(rootPath)) {
+              refs.add(planMachineRef);
+            }
+            return [...refs];
+          })(),
           depends_on: [],
           plan_ref: planRef,
           execution_started_at: null,
@@ -2287,6 +2913,31 @@ function main() {
       `Create missing ${planQueueSyncPlanFileName} files for ${planQueueSyncSummary.missing_plan_files.length} plan track(s) or remove stale directories`,
     );
   }
+  if (planMachineSummary.created_machine_files.length > 0) {
+    nextActions.push(
+      `Plan machine contract created ${planMachineSummary.created_machine_files.length} ${planMachineFileName} file(s); fill status/planning/subagent metadata before implementation`,
+    );
+  }
+  if (planMachineSummary.normalized_machine_files.length > 0) {
+    nextActions.push(
+      `Plan machine contract normalized ${planMachineSummary.normalized_machine_files.length} ${planMachineFileName} file(s) to canonical schema`,
+    );
+  }
+  if (planMachineSummary.migrated_from_legacy_plan_md_refs.length > 0) {
+    nextActions.push(
+      `Converted ${planMachineSummary.migrated_from_legacy_plan_md_refs.length} legacy PLAN.md artifact(s) into authoritative ${planMachineFileName}`,
+    );
+  }
+  if (planMachineSummary.missing_machine_files.length > 0) {
+    nextActions.push(
+      `Add missing ${planMachineFileName} files for ${planMachineSummary.missing_machine_files.length} plan track(s)`,
+    );
+  }
+  if (planMachineSummary.invalid_machine_files.length > 0) {
+    nextActions.push(
+      `Fix invalid ${planMachineFileName} JSON in ${planMachineSummary.invalid_machine_files.length} plan track(s)`,
+    );
+  }
   if (archivedPlanSyncSummary.missing_plan_files.length > 0) {
     nextActions.push(
       `Add missing ${archivedPlanFileName} files for ${archivedPlanSyncSummary.missing_plan_files.length} archived plan track(s) under ${archivedPlanRoot}`,
@@ -2444,6 +3095,17 @@ function main() {
       normalized_existing_items: planQueueSyncSummary.normalized_existing_items,
       missing_plan_files: planQueueSyncSummary.missing_plan_files,
     },
+    plan_machine_contract: {
+      enabled: planMachineSummary.enabled,
+      machine_file_name: planMachineSummary.machine_file_name,
+      schema_version: planMachineSummary.schema_version,
+      roots: planMachineSummary.roots,
+      created_machine_files: planMachineSummary.created_machine_files,
+      normalized_machine_files: planMachineSummary.normalized_machine_files,
+      migrated_from_legacy_plan_md_refs: planMachineSummary.migrated_from_legacy_plan_md_refs,
+      missing_machine_files: planMachineSummary.missing_machine_files,
+      invalid_machine_files: planMachineSummary.invalid_machine_files,
+    },
     archived_plan_sync: {
       enabled: archivedPlanSyncSummary.enabled,
       archived_root: archivedPlanSyncSummary.archived_root,
@@ -2495,6 +3157,17 @@ function main() {
   ) {
     console.error(
       `Preflight failed: ${stalePlanReferenceSummary.missing_reference_count} stale .agents/plans reference(s) detected.`,
+    );
+    process.exit(1);
+  }
+
+  if (planMachineContractEnabled && planMachineSummary.invalid_machine_files.length > 0) {
+    const sample = planMachineSummary.invalid_machine_files
+      .slice(0, 5)
+      .map((entry) => `${entry.ref}: ${entry.error}`)
+      .join(" | ");
+    console.error(
+      `Preflight failed: invalid ${planMachineFileName} documents detected (${planMachineSummary.invalid_machine_files.length}). ${sample}`,
     );
     process.exit(1);
   }
