@@ -747,112 +747,183 @@ function normalizePlanNarrativeStepStatus(value, allowedStepStatuses) {
   return allowedStepStatuses[0] ?? "pending";
 }
 
-function normalizePlanNarrativeSteps(
+function normalizePlanNarrativeObjectList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized = [];
+  for (const entry of value) {
+    if (!isPlainObject(entry)) {
+      const textEntry = toNonEmptyString(entry);
+      if (textEntry) {
+        normalized.push({ text: textEntry });
+      }
+      continue;
+    }
+    normalized.push({ ...entry });
+  }
+
+  return normalized;
+}
+
+function normalizeImplementationCompletionSummary(
+  value,
+  fallbackDeliveredText = null,
+  requiredFields = [
+    "delivered",
+    "files_functions_hooks_touched",
+    "verification_testing",
+  ],
+) {
+  const completionSummary = isPlainObject(value) ? { ...value } : {};
+  const fallbackDelivered = toNonEmptyString(fallbackDeliveredText);
+  const normalizedRequiredFields = normalizeStringArray(requiredFields);
+  const output = {};
+
+  for (const fieldName of normalizedRequiredFields) {
+    let sourceValue = completionSummary[fieldName];
+    if (fieldName === "files_functions_hooks_touched") {
+      sourceValue =
+        completionSummary.files_functions_hooks_touched ??
+        completionSummary.files_functions_hooks ??
+        completionSummary.files_touched;
+    }
+    if (fieldName === "verification_testing") {
+      sourceValue =
+        completionSummary.verification_testing ??
+        completionSummary.verification ??
+        completionSummary.testing;
+    }
+    const normalizedArray = normalizeStringArray(sourceValue);
+    if (fieldName === "delivered" && normalizedArray.length === 0 && fallbackDelivered) {
+      normalizedArray.push(fallbackDelivered);
+    }
+    output[fieldName] = normalizedArray;
+  }
+
+  return output;
+}
+
+function normalizeImplementationPlanSteps(
   value,
   {
     allowedStepStatuses = ["pending", "in_progress", "complete", "blocked"],
-    requiredStepFields = ["id", "title", "status"],
-    optionalStepFields = ["notes"],
+    completionSummaryRequiredFields = [
+      "delivered",
+      "files_functions_hooks_touched",
+      "verification_testing",
+    ],
   } = {},
 ) {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const usedIds = new Set();
   const normalized = [];
-  const requiredFieldSet = new Set(normalizeStringArray(requiredStepFields));
-  const optionalFieldSet = new Set(normalizeStringArray(optionalStepFields));
-
   for (const [index, entry] of value.entries()) {
-    if (!isPlainObject(entry)) {
-      continue;
-    }
-
-    const titleFallback =
-      toNonEmptyString(entry.title) ??
-      toNonEmptyString(entry.name) ??
-      toNonEmptyString(entry.summary) ??
+    const entryObject = isPlainObject(entry) ? entry : {};
+    const fallbackDeliverable =
+      toNonEmptyString(entryObject.deliverable) ??
+      toNonEmptyString(entryObject.title) ??
+      toNonEmptyString(entryObject.name) ??
+      toNonEmptyString(entryObject.summary) ??
+      toNonEmptyString(entryObject.id) ??
+      toNonEmptyString(entry) ??
       `Step ${index + 1}`;
-    const normalizedIdSeed =
-      toQueueToken(toNonEmptyString(entry.id) ?? titleFallback, `step-${index + 1}`)
-        .replace(/-/g, "_");
-    const normalizedId = ensureUniqueValue(
-      normalizedIdSeed,
-      usedIds,
-      "step",
-      index,
-    );
-    const normalizedStatus = normalizePlanNarrativeStepStatus(
-      entry.status,
+    const status = normalizePlanNarrativeStepStatus(
+      entryObject.status,
       allowedStepStatuses,
     );
+    const references = normalizeStringArray(
+      entryObject.references ?? entryObject.refs ?? entryObject.reference,
+    );
+    const completionSummary = normalizeImplementationCompletionSummary(
+      entryObject.completion_summary,
+      normalizeNarrativeText(entryObject.notes),
+      completionSummaryRequiredFields,
+    );
 
-    const step = {};
-    if (requiredFieldSet.has("id") || "id" in entry) {
-      step.id = normalizedId;
-    }
-    if (requiredFieldSet.has("title") || "title" in entry) {
-      step.title = titleFallback;
-    }
-    if (requiredFieldSet.has("status") || "status" in entry) {
-      step.status = normalizedStatus;
-    }
-    if (optionalFieldSet.has("notes") || "notes" in entry) {
-      const notes = normalizeNarrativeText(entry.notes);
-      if (notes) {
-        step.notes = notes;
-      }
-    }
-    if (requiredFieldSet.has("id") && !toNonEmptyString(step.id)) {
-      step.id = ensureUniqueValue(`step_${index + 1}`, usedIds, "step", index);
-    }
-    if (requiredFieldSet.has("title") && !toNonEmptyString(step.title)) {
-      step.title = `Step ${index + 1}`;
-    }
-    if (requiredFieldSet.has("status") && !toNonEmptyString(step.status)) {
-      step.status = normalizePlanNarrativeStepStatus(null, allowedStepStatuses);
-    }
-    normalized.push(step);
+    normalized.push({
+      status,
+      deliverable: fallbackDeliverable,
+      references,
+      completion_summary: completionSummary,
+    });
   }
 
   return normalized;
 }
 
-function normalizePlanNarrativeSection(
+function normalizeSpecOrRefinedNarrativeSection(
   value,
   fallbackSummary,
-  {
-    allowedStepStatuses = ["pending", "in_progress", "complete", "blocked"],
-    requiredStepFields = ["id", "title", "status"],
-    optionalStepFields = ["notes"],
-  } = {},
+  listFieldName,
 ) {
   const fallbackSummaryText = normalizeNarrativeText(fallbackSummary) ?? "";
+  const normalizedListFieldName = toNonEmptyString(listFieldName) ?? "steps";
 
   if (typeof value === "string") {
     return {
       summary: normalizeNarrativeText(value) ?? fallbackSummaryText,
-      steps: [],
+      [normalizedListFieldName]: [],
     };
   }
 
   if (!isPlainObject(value)) {
     return {
       summary: fallbackSummaryText,
-      steps: [],
+      [normalizedListFieldName]: [],
     };
   }
 
   const summary = normalizeNarrativeText(value.summary) ?? fallbackSummaryText;
-  const steps = normalizePlanNarrativeSteps(value.steps, {
-    allowedStepStatuses,
-    requiredStepFields,
-    optionalStepFields,
-  });
-  return { summary, steps };
+  const listEntries = normalizePlanNarrativeObjectList(
+    Array.isArray(value[normalizedListFieldName]) ? value[normalizedListFieldName] : value.steps,
+  );
+  return { summary, [normalizedListFieldName]: listEntries };
 }
 
+function normalizeImplementationNarrativeSection(
+  value,
+  fallbackSummary,
+  {
+    allowedStepStatuses = ["pending", "in_progress", "complete", "blocked"],
+    stepsFieldName = "steps",
+    completionSummaryRequiredFields = [
+      "delivered",
+      "files_functions_hooks_touched",
+      "verification_testing",
+    ],
+  } = {},
+) {
+  const fallbackSummaryText = normalizeNarrativeText(fallbackSummary) ?? "";
+  const normalizedStepsFieldName = toNonEmptyString(stepsFieldName) ?? "steps";
+
+  if (typeof value === "string") {
+    return {
+      summary: normalizeNarrativeText(value) ?? fallbackSummaryText,
+      [normalizedStepsFieldName]: [],
+    };
+  }
+
+  if (!isPlainObject(value)) {
+    return {
+      summary: fallbackSummaryText,
+      [normalizedStepsFieldName]: [],
+    };
+  }
+
+  const summary = normalizeNarrativeText(value.summary) ?? fallbackSummaryText;
+  const normalizedSteps = normalizeImplementationPlanSteps(
+    Array.isArray(value[normalizedStepsFieldName]) ? value[normalizedStepsFieldName] : value.steps,
+    {
+      allowedStepStatuses,
+      completionSummaryRequiredFields,
+    },
+  );
+  return { summary, [normalizedStepsFieldName]: normalizedSteps };
+}
 function readLegacyPlanNarrativeSections(planFileAbs, requiredNarrativeFields) {
   const output = {};
   const requiredFields = normalizeStringArray(requiredNarrativeFields);
@@ -1045,13 +1116,21 @@ function buildPlanMachineTemplate({
   preSpecOutlineRequiredFields,
   legacyNarrativeSections,
   legacyPreSpecOutline,
+  specOutlineListFieldName,
+  refinedSpecListFieldName,
+  implementationStepsFieldName,
   allowedNarrativeStepStatuses,
-  narrativeStepRequiredFields,
-  narrativeStepOptionalFields,
+  implementationCompletionSummaryRequiredFields,
   allowedStatusByRoot,
 }) {
   const defaultStatus = defaultPlanLifecycleStatus(rootPath);
   const allowedStatusesForRoot = allowedStatusByRoot[rootPath] ?? [defaultStatus];
+  const normalizedSpecOutlineListFieldName =
+    toNonEmptyString(specOutlineListFieldName) ?? "full_spec_outline";
+  const normalizedRefinedSpecListFieldName =
+    toNonEmptyString(refinedSpecListFieldName) ?? "full_refined_spec";
+  const normalizedImplementationStepsFieldName =
+    toNonEmptyString(implementationStepsFieldName) ?? "steps";
   const stageState = defaultPlanStageState(rootPath);
   const planningStages = {};
   for (const stage of requiredPlanningStages) {
@@ -1064,14 +1143,40 @@ function buildPlanMachineTemplate({
       ? legacyNarrativeSections
       : {};
   for (const fieldName of normalizedNarrativeFields) {
-    narrative[fieldName] = normalizePlanNarrativeSection(
+    if (fieldName === "spec_outline") {
+      narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
+        null,
+        legacyNarrative[fieldName],
+        normalizedSpecOutlineListFieldName,
+      );
+      continue;
+    }
+    if (fieldName === "refined_spec") {
+      narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
+        null,
+        legacyNarrative[fieldName],
+        normalizedRefinedSpecListFieldName,
+      );
+      continue;
+    }
+    if (fieldName === "implementation_plan") {
+      narrative[fieldName] = normalizeImplementationNarrativeSection(
+        null,
+        legacyNarrative[fieldName],
+        {
+          allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
+          stepsFieldName: normalizedImplementationStepsFieldName,
+          completionSummaryRequiredFields: normalizeStringArray(
+            implementationCompletionSummaryRequiredFields,
+          ),
+        },
+      );
+      continue;
+    }
+    narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
       null,
       legacyNarrative[fieldName],
-      {
-        allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
-        requiredStepFields: normalizeStringArray(narrativeStepRequiredFields),
-        optionalStepFields: normalizeStringArray(narrativeStepOptionalFields),
-      },
+      "steps",
     );
   }
   const normalizedPreSpecOutlineFields = normalizeStringArray(preSpecOutlineRequiredFields);
@@ -1139,15 +1244,23 @@ function normalizePlanMachineDocument({
   preSpecOutlineRequiredFields,
   legacyNarrativeSections,
   legacyPreSpecOutline,
+  specOutlineListFieldName,
+  refinedSpecListFieldName,
+  implementationStepsFieldName,
   allowedNarrativeStepStatuses,
-  narrativeStepRequiredFields,
-  narrativeStepOptionalFields,
+  implementationCompletionSummaryRequiredFields,
   allowedPlanningStageStates,
   allowedSubagentRequirements,
   requiredSubagentFields,
   statusesRequiringLastExecutor,
   allowedStatusByRoot,
 }) {
+  const normalizedSpecOutlineListFieldName =
+    toNonEmptyString(specOutlineListFieldName) ?? "full_spec_outline";
+  const normalizedRefinedSpecListFieldName =
+    toNonEmptyString(refinedSpecListFieldName) ?? "full_refined_spec";
+  const normalizedImplementationStepsFieldName =
+    toNonEmptyString(implementationStepsFieldName) ?? "steps";
   const template = buildPlanMachineTemplate({
     schemaVersion,
     featureId,
@@ -1160,9 +1273,11 @@ function normalizePlanMachineDocument({
     preSpecOutlineRequiredFields,
     legacyNarrativeSections,
     legacyPreSpecOutline,
+    specOutlineListFieldName: normalizedSpecOutlineListFieldName,
+    refinedSpecListFieldName: normalizedRefinedSpecListFieldName,
+    implementationStepsFieldName: normalizedImplementationStepsFieldName,
     allowedNarrativeStepStatuses,
-    narrativeStepRequiredFields,
-    narrativeStepOptionalFields,
+    implementationCompletionSummaryRequiredFields,
     allowedStatusByRoot,
   });
 
@@ -1218,14 +1333,40 @@ function normalizePlanMachineDocument({
       ? legacyNarrativeSections
       : {};
   for (const fieldName of normalizedNarrativeFields) {
-    narrative[fieldName] = normalizePlanNarrativeSection(
+    if (fieldName === "spec_outline") {
+      narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
+        narrative[fieldName],
+        legacyNarrative[fieldName],
+        normalizedSpecOutlineListFieldName,
+      );
+      continue;
+    }
+    if (fieldName === "refined_spec") {
+      narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
+        narrative[fieldName],
+        legacyNarrative[fieldName],
+        normalizedRefinedSpecListFieldName,
+      );
+      continue;
+    }
+    if (fieldName === "implementation_plan") {
+      narrative[fieldName] = normalizeImplementationNarrativeSection(
+        narrative[fieldName],
+        legacyNarrative[fieldName],
+        {
+          allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
+          stepsFieldName: normalizedImplementationStepsFieldName,
+          completionSummaryRequiredFields: normalizeStringArray(
+            implementationCompletionSummaryRequiredFields,
+          ),
+        },
+      );
+      continue;
+    }
+    narrative[fieldName] = normalizeSpecOrRefinedNarrativeSection(
       narrative[fieldName],
       legacyNarrative[fieldName],
-      {
-        allowedStepStatuses: normalizeStringArray(allowedNarrativeStepStatuses),
-        requiredStepFields: normalizeStringArray(narrativeStepRequiredFields),
-        optionalStepFields: normalizeStringArray(narrativeStepOptionalFields),
-      },
+      "steps",
     );
   }
   const normalizedPreSpecOutlineFields = normalizeStringArray(preSpecOutlineRequiredFields);
@@ -1606,6 +1747,15 @@ function main() {
     sessionArtifacts.planMachineNarrativeMinSteps >= 0
       ? sessionArtifacts.planMachineNarrativeMinSteps
       : 1;
+  const planMachineSpecOutlineListFieldName =
+    toNonEmptyString(sessionArtifacts.planMachineSpecOutlineListFieldName) ??
+    "full_spec_outline";
+  const planMachineRefinedSpecListFieldName =
+    toNonEmptyString(sessionArtifacts.planMachineRefinedSpecListFieldName) ??
+    "full_refined_spec";
+  const planMachineImplementationStepsFieldName =
+    toNonEmptyString(sessionArtifacts.planMachineImplementationStepsFieldName) ??
+    "steps";
   const planMachineAllowedNarrativeStepStatuses = normalizeStringArray(
     sessionArtifacts.planMachineAllowedNarrativeStepStatuses ?? [
       "pending",
@@ -1616,13 +1766,21 @@ function main() {
   );
   const planMachineNarrativeStepRequiredFields = normalizeStringArray(
     sessionArtifacts.planMachineNarrativeStepRequiredFields ?? [
-      "id",
-      "title",
       "status",
+      "deliverable",
+      "references",
+      "completion_summary",
     ],
   );
   const planMachineNarrativeStepOptionalFields = normalizeStringArray(
-    sessionArtifacts.planMachineNarrativeStepOptionalFields ?? ["notes"],
+    sessionArtifacts.planMachineNarrativeStepOptionalFields ?? [],
+  );
+  const planMachineImplementationCompletionSummaryRequiredFields = normalizeStringArray(
+    sessionArtifacts.planMachineImplementationCompletionSummaryRequiredFields ?? [
+      "delivered",
+      "files_functions_hooks_touched",
+      "verification_testing",
+    ],
   );
   const planMachineAllowedPlanningStageStates = normalizeStringArray(
     sessionArtifacts.planMachineAllowedPlanningStageStates ?? [
@@ -2046,9 +2204,14 @@ function main() {
     narrative_min_length: planMachineNarrativeMinLength,
     pre_spec_outline_min_length: planMachinePreSpecOutlineMinLength,
     narrative_min_steps: planMachineNarrativeMinSteps,
+    spec_outline_list_field_name: planMachineSpecOutlineListFieldName,
+    refined_spec_list_field_name: planMachineRefinedSpecListFieldName,
+    implementation_steps_field_name: planMachineImplementationStepsFieldName,
     allowed_narrative_step_statuses: planMachineAllowedNarrativeStepStatuses,
     narrative_step_required_fields: planMachineNarrativeStepRequiredFields,
     narrative_step_optional_fields: planMachineNarrativeStepOptionalFields,
+    implementation_completion_summary_required_fields:
+      planMachineImplementationCompletionSummaryRequiredFields,
     created_machine_files: [],
     normalized_machine_files: [],
     migrated_from_legacy_plan_md_refs: [],
@@ -2126,6 +2289,10 @@ function main() {
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
+              specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+              refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+              implementationStepsFieldName: planMachineImplementationStepsFieldName,
+              implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2171,6 +2338,10 @@ function main() {
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
+              specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+              refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+              implementationStepsFieldName: planMachineImplementationStepsFieldName,
+              implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2203,6 +2374,10 @@ function main() {
                 preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
                 legacyNarrativeSections,
                 legacyPreSpecOutline,
+                specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+                refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+                implementationStepsFieldName: planMachineImplementationStepsFieldName,
+                implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2381,6 +2556,10 @@ function main() {
             preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
             legacyNarrativeSections,
             legacyPreSpecOutline,
+            specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+            refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+            implementationStepsFieldName: planMachineImplementationStepsFieldName,
+            implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2417,6 +2596,10 @@ function main() {
             preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
             legacyNarrativeSections,
             legacyPreSpecOutline,
+            specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+            refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+            implementationStepsFieldName: planMachineImplementationStepsFieldName,
+            implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2448,6 +2631,10 @@ function main() {
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
+              specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+              refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+              implementationStepsFieldName: planMachineImplementationStepsFieldName,
+              implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3083,6 +3270,10 @@ function main() {
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
+              specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+              refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+              implementationStepsFieldName: planMachineImplementationStepsFieldName,
+              implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3133,6 +3324,10 @@ function main() {
               preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
               legacyNarrativeSections,
               legacyPreSpecOutline,
+              specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+              refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+              implementationStepsFieldName: planMachineImplementationStepsFieldName,
+              implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3170,6 +3365,10 @@ function main() {
                 preSpecOutlineRequiredFields: planMachinePreSpecOutlineRequiredFields,
                 legacyNarrativeSections,
                 legacyPreSpecOutline,
+                specOutlineListFieldName: planMachineSpecOutlineListFieldName,
+                refinedSpecListFieldName: planMachineRefinedSpecListFieldName,
+                implementationStepsFieldName: planMachineImplementationStepsFieldName,
+                implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3650,12 +3849,17 @@ function main() {
       narrative_min_length: planMachineSummary.narrative_min_length,
       pre_spec_outline_min_length: planMachineSummary.pre_spec_outline_min_length,
       narrative_min_steps: planMachineSummary.narrative_min_steps,
+      spec_outline_list_field_name: planMachineSummary.spec_outline_list_field_name,
+      refined_spec_list_field_name: planMachineSummary.refined_spec_list_field_name,
+      implementation_steps_field_name: planMachineSummary.implementation_steps_field_name,
       allowed_narrative_step_statuses:
         planMachineSummary.allowed_narrative_step_statuses,
       narrative_step_required_fields:
         planMachineSummary.narrative_step_required_fields,
       narrative_step_optional_fields:
         planMachineSummary.narrative_step_optional_fields,
+      implementation_completion_summary_required_fields:
+        planMachineSummary.implementation_completion_summary_required_fields,
       created_machine_files: planMachineSummary.created_machine_files,
       normalized_machine_files: planMachineSummary.normalized_machine_files,
       migrated_from_legacy_plan_md_refs: planMachineSummary.migrated_from_legacy_plan_md_refs,

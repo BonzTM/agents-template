@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-02-24.07",
+    "version": "2026-02-24.08",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
@@ -276,6 +276,9 @@
       "planMachineNarrativeMinLength": 24,
       "planMachinePreSpecOutlineMinLength": 24,
       "planMachineNarrativeMinSteps": 1,
+      "planMachineSpecOutlineListFieldName": "full_spec_outline",
+      "planMachineRefinedSpecListFieldName": "full_refined_spec",
+      "planMachineImplementationStepsFieldName": "steps",
       "planMachineAllowedNarrativeStepStatuses": [
         "pending",
         "in_progress",
@@ -283,12 +286,16 @@
         "blocked"
       ],
       "planMachineNarrativeStepRequiredFields": [
-        "id",
-        "title",
-        "status"
+        "status",
+        "deliverable",
+        "references",
+        "completion_summary"
       ],
-      "planMachineNarrativeStepOptionalFields": [
-        "notes"
+      "planMachineNarrativeStepOptionalFields": [],
+      "planMachineImplementationCompletionSummaryRequiredFields": [
+        "delivered",
+        "files_functions_hooks_touched",
+        "verification_testing"
       ],
       "planMachineAllowedPlanningStageStates": [
         "pending",
