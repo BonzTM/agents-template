@@ -832,6 +832,8 @@ function normalizeImplementationPlanSteps(
     fallbackReference = null,
     fallbackSummary = null,
     implementationStepDeliverableDenyPatterns = [],
+    implementationStepAcceptanceCriteriaMinCount = 1,
+    stepStatusesRequiringAcceptanceCriteria = ["in_progress", "complete"],
     stepStatusesRequiringNonEmptyCompletionSummary = ["complete"],
     completionSummaryRequiredFields = [
       "delivered",
@@ -848,6 +850,14 @@ function normalizeImplementationPlanSteps(
   const fallbackSummaryText = normalizeNarrativeText(fallbackSummary) ?? "";
   const deliverableDenyRegexes = compileRegexPatternList(
     implementationStepDeliverableDenyPatterns,
+  );
+  const acceptanceCriteriaMinCount =
+    Number.isInteger(implementationStepAcceptanceCriteriaMinCount) &&
+    implementationStepAcceptanceCriteriaMinCount >= 1
+      ? implementationStepAcceptanceCriteriaMinCount
+      : 1;
+  const statusesRequiringAcceptanceCriteriaSet = new Set(
+    normalizeStringArray(stepStatusesRequiringAcceptanceCriteria),
   );
   const completeStepStatuses = new Set(
     normalizeStringArray(stepStatusesRequiringNonEmptyCompletionSummary),
@@ -867,7 +877,7 @@ function normalizeImplementationPlanSteps(
     const fallbackSummaryDeliverable = fallbackSummaryText
       ? `Implement: ${fallbackSummaryText.split(/\n+/)[0]?.trim() ?? fallbackSummaryText}`
       : null;
-    const deliverableCandidates = [
+    const explicitDeliverableCandidates = [
       entryObject.deliverable,
       entryObject.title,
       entryObject.name,
@@ -875,6 +885,11 @@ function normalizeImplementationPlanSteps(
       stepNotes,
       entryObject.id,
       entry,
+    ]
+      .map((candidate) => normalizeDeliverableCandidate(candidate))
+      .filter(Boolean);
+    const deliverableCandidates = [
+      ...explicitDeliverableCandidates,
       fallbackSummaryDeliverable,
       `Step ${index + 1}`,
     ]
@@ -924,6 +939,43 @@ function normalizeImplementationPlanSteps(
       stepNotes,
       completionSummaryRequiredFields,
     );
+    const acceptanceCriteria = normalizeStringArray(
+      entryObject.acceptance_criteria ??
+        entryObject.acceptanceCriteria ??
+        entryObject.success_criteria ??
+        entryObject.criteria ??
+        entryObject.done_when ??
+        entryObject.definition_of_done,
+    );
+    if (acceptanceCriteria.length === 0) {
+      acceptanceCriteria.push(
+        ...normalizeStringArray(
+          entryObject.verification_testing ??
+            entryObject.verification ??
+            entryObject.testing ??
+            entryObject.tests ??
+            completionSummaryObject.verification_testing ??
+            completionSummaryObject.verification ??
+            completionSummaryObject.testing,
+        ),
+      );
+    }
+    if (acceptanceCriteria.length === 0) {
+      const explicitStepContext = explicitDeliverableCandidates[0] ?? fallbackSummaryDeliverable;
+      if (isNonEmptyString(explicitStepContext)) {
+        acceptanceCriteria.push(`Complete deliverable: ${explicitStepContext}`);
+      }
+    }
+    if (
+      statusesRequiringAcceptanceCriteriaSet.has(status) &&
+      acceptanceCriteria.length === 0 &&
+      acceptanceCriteriaMinCount >= 1
+    ) {
+      const statusScopedStepContext = explicitDeliverableCandidates[0] ?? fallbackSummaryDeliverable;
+      if (isNonEmptyString(statusScopedStepContext)) {
+        acceptanceCriteria.push(`Complete deliverable: ${statusScopedStepContext}`);
+      }
+    }
     if (completeStepStatuses.has(status)) {
       if (
         Array.isArray(completionSummary.delivered) &&
@@ -951,6 +1003,7 @@ function normalizeImplementationPlanSteps(
     normalized.push({
       status,
       deliverable: fallbackDeliverable,
+      acceptance_criteria: [...new Set(acceptanceCriteria)],
       references: [...new Set(references)],
       completion_summary: completionSummary,
     });
@@ -996,6 +1049,8 @@ function normalizeImplementationNarrativeSection(
     stepsFieldName = "steps",
     fallbackReference = null,
     implementationStepDeliverableDenyPatterns = [],
+    implementationStepAcceptanceCriteriaMinCount = 1,
+    stepStatusesRequiringAcceptanceCriteria = ["in_progress", "complete"],
     stepStatusesRequiringNonEmptyCompletionSummary = ["complete"],
     completionSummaryRequiredFields = [
       "delivered",
@@ -1029,6 +1084,8 @@ function normalizeImplementationNarrativeSection(
       fallbackReference,
       fallbackSummary: summary,
       implementationStepDeliverableDenyPatterns,
+      implementationStepAcceptanceCriteriaMinCount,
+      stepStatusesRequiringAcceptanceCriteria,
       stepStatusesRequiringNonEmptyCompletionSummary,
       completionSummaryRequiredFields,
     },
@@ -1232,6 +1289,8 @@ function buildPlanMachineTemplate({
   implementationStepsFieldName,
   allowedNarrativeStepStatuses,
   implementationStepDeliverableDenyPatterns,
+  implementationStepAcceptanceCriteriaMinCount,
+  stepStatusesRequiringAcceptanceCriteria,
   stepStatusesRequiringNonEmptyCompletionSummary,
   implementationCompletionSummaryRequiredFields,
   allowedStatusByRoot,
@@ -1282,6 +1341,10 @@ function buildPlanMachineTemplate({
           fallbackReference: planRef,
           implementationStepDeliverableDenyPatterns: normalizeStringArray(
             implementationStepDeliverableDenyPatterns,
+          ),
+          implementationStepAcceptanceCriteriaMinCount,
+          stepStatusesRequiringAcceptanceCriteria: normalizeStringArray(
+            stepStatusesRequiringAcceptanceCriteria,
           ),
           stepStatusesRequiringNonEmptyCompletionSummary: normalizeStringArray(
             stepStatusesRequiringNonEmptyCompletionSummary,
@@ -1369,6 +1432,8 @@ function normalizePlanMachineDocument({
   implementationStepsFieldName,
   allowedNarrativeStepStatuses,
   implementationStepDeliverableDenyPatterns,
+  implementationStepAcceptanceCriteriaMinCount,
+  stepStatusesRequiringAcceptanceCriteria,
   stepStatusesRequiringNonEmptyCompletionSummary,
   implementationCompletionSummaryRequiredFields,
   allowedPlanningStageStates,
@@ -1400,6 +1465,8 @@ function normalizePlanMachineDocument({
     implementationStepsFieldName: normalizedImplementationStepsFieldName,
     allowedNarrativeStepStatuses,
     implementationStepDeliverableDenyPatterns,
+    implementationStepAcceptanceCriteriaMinCount,
+    stepStatusesRequiringAcceptanceCriteria,
     stepStatusesRequiringNonEmptyCompletionSummary,
     implementationCompletionSummaryRequiredFields,
     allowedStatusByRoot,
@@ -1483,6 +1550,10 @@ function normalizePlanMachineDocument({
           fallbackReference: planRef,
           implementationStepDeliverableDenyPatterns: normalizeStringArray(
             implementationStepDeliverableDenyPatterns,
+          ),
+          implementationStepAcceptanceCriteriaMinCount,
+          stepStatusesRequiringAcceptanceCriteria: normalizeStringArray(
+            stepStatusesRequiringAcceptanceCriteria,
           ),
           stepStatusesRequiringNonEmptyCompletionSummary: normalizeStringArray(
             stepStatusesRequiringNonEmptyCompletionSummary,
@@ -1905,6 +1976,7 @@ function main() {
     sessionArtifacts.planMachineNarrativeStepRequiredFields ?? [
       "status",
       "deliverable",
+      "acceptance_criteria",
       "references",
       "completion_summary",
     ],
@@ -1917,6 +1989,17 @@ function main() {
       "^\\s*(todo|tbd|placeholder|n\\/?a|none|unknown)\\s*$",
       "^\\s*(step|task|item|deliverable)\\s*\\d+\\s*$",
       "^\\s*<[^>]+>\\s*$",
+    ],
+  );
+  const planMachineImplementationStepAcceptanceCriteriaMinCount =
+    Number.isInteger(sessionArtifacts.planMachineImplementationStepAcceptanceCriteriaMinCount) &&
+    sessionArtifacts.planMachineImplementationStepAcceptanceCriteriaMinCount >= 1
+      ? sessionArtifacts.planMachineImplementationStepAcceptanceCriteriaMinCount
+      : 1;
+  const planMachineStepStatusesRequiringAcceptanceCriteria = normalizeStringArray(
+    sessionArtifacts.planMachineStepStatusesRequiringAcceptanceCriteria ?? [
+      "in_progress",
+      "complete",
     ],
   );
   const planMachineStepStatusesRequiringNonEmptyCompletionSummary = normalizeStringArray(
@@ -2382,6 +2465,10 @@ function main() {
     narrative_step_optional_fields: planMachineNarrativeStepOptionalFields,
     implementation_step_deliverable_deny_patterns:
       planMachineImplementationStepDeliverableDenyPatterns,
+    implementation_step_acceptance_criteria_min_count:
+      planMachineImplementationStepAcceptanceCriteriaMinCount,
+    step_statuses_requiring_acceptance_criteria:
+      planMachineStepStatusesRequiringAcceptanceCriteria,
     step_statuses_requiring_non_empty_completion_summary:
       planMachineStepStatusesRequiringNonEmptyCompletionSummary,
     implementation_completion_summary_required_fields:
@@ -2470,6 +2557,8 @@ function main() {
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+              stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
               stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2521,6 +2610,8 @@ function main() {
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+              stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
               stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2559,6 +2650,8 @@ function main() {
                 implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
                 implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+                implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+                stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
                 stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2743,6 +2836,8 @@ function main() {
             implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
             implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+            implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+            stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
             stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2785,6 +2880,8 @@ function main() {
             implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
             allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
             implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+            implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+            stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
             stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
             narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
             narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -2822,6 +2919,8 @@ function main() {
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+              stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
               stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3463,6 +3562,8 @@ function main() {
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+              stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
               stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3519,6 +3620,8 @@ function main() {
               implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
               allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
               implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+              implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+              stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
               stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
               narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
               narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -3562,6 +3665,8 @@ function main() {
                 implementationCompletionSummaryRequiredFields: planMachineImplementationCompletionSummaryRequiredFields,
                 allowedNarrativeStepStatuses: planMachineAllowedNarrativeStepStatuses,
                 implementationStepDeliverableDenyPatterns: planMachineImplementationStepDeliverableDenyPatterns,
+                implementationStepAcceptanceCriteriaMinCount: planMachineImplementationStepAcceptanceCriteriaMinCount,
+                stepStatusesRequiringAcceptanceCriteria: planMachineStepStatusesRequiringAcceptanceCriteria,
                 stepStatusesRequiringNonEmptyCompletionSummary: planMachineStepStatusesRequiringNonEmptyCompletionSummary,
                 narrativeStepRequiredFields: planMachineNarrativeStepRequiredFields,
                 narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
@@ -4051,6 +4156,10 @@ function main() {
         planMachineSummary.narrative_step_required_fields,
       narrative_step_optional_fields:
         planMachineSummary.narrative_step_optional_fields,
+      implementation_step_acceptance_criteria_min_count:
+        planMachineSummary.implementation_step_acceptance_criteria_min_count,
+      step_statuses_requiring_acceptance_criteria:
+        planMachineSummary.step_statuses_requiring_acceptance_criteria,
       implementation_completion_summary_required_fields:
         planMachineSummary.implementation_completion_summary_required_fields,
       created_machine_files: planMachineSummary.created_machine_files,

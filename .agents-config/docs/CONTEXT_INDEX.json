@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-24.09",
+    "version": "2026-02-24.10",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
@@ -141,6 +141,7 @@
       "narrativeStepRequiredFields": [
         "status",
         "deliverable",
+        "acceptance_criteria",
         "references",
         "completion_summary"
       ],
@@ -149,6 +150,11 @@
         "^\\s*(todo|tbd|placeholder|n\\/?a|none|unknown)\\s*$",
         "^\\s*(step|task|item|deliverable)\\s*\\d+\\s*$",
         "^\\s*<[^>]+>\\s*$"
+      ],
+      "implementationStepAcceptanceCriteriaMinCount": 1,
+      "stepStatusesRequiringAcceptanceCriteria": [
+        "in_progress",
+        "complete"
       ],
       "stepStatusesRequiringNonEmptyCompletionSummary": [
         "complete"

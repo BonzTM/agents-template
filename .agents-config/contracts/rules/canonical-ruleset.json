@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "canonical-ruleset",
-    "version": "2026-02-24.09",
+    "version": "2026-02-24.10",
     "description": "Canonical governance rule catalog used for policy and drift checks.",
     "generated_from": [
       ".agents-config/policies/agent-governance.json",

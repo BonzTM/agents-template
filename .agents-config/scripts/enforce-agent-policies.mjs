@@ -833,6 +833,8 @@ function validatePlanMachineDocument({
   narrativeStepRequiredFields,
   narrativeStepOptionalFields,
   implementationStepDeliverableDenyPatternRegexes,
+  implementationStepAcceptanceCriteriaMinCount,
+  stepStatusesRequiringAcceptanceCriteria,
   stepStatusesRequiringNonEmptyCompletionSummary,
   implementationCompletionSummaryRequiredFields,
   statusCoherence,
@@ -912,6 +914,14 @@ function validatePlanMachineDocument({
     const completionSummaryRequiredFieldSet = new Set(
       implementationCompletionSummaryRequiredFields,
     );
+    const acceptanceCriteriaMinCount =
+      Number.isInteger(implementationStepAcceptanceCriteriaMinCount) &&
+      implementationStepAcceptanceCriteriaMinCount >= 1
+        ? implementationStepAcceptanceCriteriaMinCount
+        : 1;
+    const stepStatusesRequiringAcceptanceCriteriaSet = new Set(
+      normalizeStringArray(stepStatusesRequiringAcceptanceCriteria),
+    );
     const stepStatusesRequiringNonEmptyCompletionSummarySet = new Set(
       normalizeStringArray(stepStatusesRequiringNonEmptyCompletionSummary),
     );
@@ -948,6 +958,25 @@ function validatePlanMachineDocument({
             `${stepPath}.completion_summary.${fieldName} must be non-empty when status is ${stepStatus}.`,
           );
         }
+      }
+    };
+    const validateAcceptanceCriteria = (acceptanceCriteria, stepPath, stepStatus) => {
+      if (!Array.isArray(acceptanceCriteria)) {
+        addFailure(`${stepPath}.acceptance_criteria must be an array.`);
+        return;
+      }
+      const normalizedValues = acceptanceCriteria.filter((entry) => isNonEmptyString(entry));
+      if (normalizedValues.length !== acceptanceCriteria.length) {
+        addFailure(`${stepPath}.acceptance_criteria must contain non-empty string values.`);
+      }
+      if (
+        stepStatus &&
+        stepStatusesRequiringAcceptanceCriteriaSet.has(stepStatus) &&
+        normalizedValues.length < acceptanceCriteriaMinCount
+      ) {
+        addFailure(
+          `${stepPath}.acceptance_criteria must include at least ${acceptanceCriteriaMinCount} non-empty entr${acceptanceCriteriaMinCount === 1 ? "y" : "ies"} when status is ${stepStatus}.`,
+        );
       }
     };
 
@@ -1029,6 +1058,14 @@ function validatePlanMachineDocument({
         }
 
         for (const stepField of requiredStepFieldSet) {
+          if (!(stepField in step)) {
+            addFailure(`${stepPath}.${stepField} is required.`);
+            continue;
+          }
+          if (stepField === "acceptance_criteria") {
+            validateAcceptanceCriteria(step.acceptance_criteria, stepPath, stepStatus);
+            continue;
+          }
           if (stepField === "references") {
             if (!Array.isArray(step.references)) {
               addFailure(`${stepPath}.references must be an array.`);
@@ -1088,9 +1125,16 @@ function validatePlanMachineDocument({
         if ("completion_summary" in step && !requiredStepFieldSet.has("completion_summary")) {
           validateCompletionSummary(step.completion_summary, stepPath, stepStatus);
         }
+        if ("acceptance_criteria" in step && !requiredStepFieldSet.has("acceptance_criteria")) {
+          validateAcceptanceCriteria(step.acceptance_criteria, stepPath, stepStatus);
+        }
 
         for (const optionalField of optionalStepFieldSet) {
           if (!(optionalField in step)) {
+            continue;
+          }
+          if (optionalField === "acceptance_criteria") {
+            validateAcceptanceCriteria(step.acceptance_criteria, stepPath, stepStatus);
             continue;
           }
           if (optionalField === "references") {
@@ -1120,6 +1164,16 @@ function validatePlanMachineDocument({
           ) {
             addFailure(`${stepPath}.deliverable must not match placeholder deny patterns.`);
           }
+        }
+
+        if (
+          !("acceptance_criteria" in step) &&
+          stepStatus &&
+          stepStatusesRequiringAcceptanceCriteriaSet.has(stepStatus)
+        ) {
+          addFailure(
+            `${stepPath}.acceptance_criteria must include at least ${acceptanceCriteriaMinCount} non-empty entr${acceptanceCriteriaMinCount === 1 ? "y" : "ies"} when status is ${stepStatus}.`,
+          );
         }
       }
     }
@@ -1725,6 +1779,8 @@ function checkContextIndexContract(config) {
         "narrativeStepRequiredFields",
         "narrativeStepOptionalFields",
         "implementationStepDeliverableDenyPatterns",
+        "implementationStepAcceptanceCriteriaMinCount",
+        "stepStatusesRequiringAcceptanceCriteria",
         "stepStatusesRequiringNonEmptyCompletionSummary",
         "implementationCompletionSummaryRequiredFields",
         "allowedPlanningStageStates",
@@ -1897,6 +1953,27 @@ function checkContextIndexContract(config) {
           sessionArtifactsContract.planMachineImplementationStepDeliverableDenyPatterns,
         ),
         pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.implementationStepDeliverableDenyPatterns`,
+      });
+      const expectedAcceptanceCriteriaMinCount =
+        Number.isInteger(sessionArtifactsContract.planMachineImplementationStepAcceptanceCriteriaMinCount) &&
+        sessionArtifactsContract.planMachineImplementationStepAcceptanceCriteriaMinCount >= 1
+          ? sessionArtifactsContract.planMachineImplementationStepAcceptanceCriteriaMinCount
+          : 1;
+      if (
+        !Number.isInteger(planMachineContract.implementationStepAcceptanceCriteriaMinCount) ||
+        planMachineContract.implementationStepAcceptanceCriteriaMinCount !==
+          expectedAcceptanceCriteriaMinCount
+      ) {
+        addFailure(
+          `${contract.indexFile}.sessionArtifacts.planMachineContract.implementationStepAcceptanceCriteriaMinCount must equal contracts.sessionArtifacts.planMachineImplementationStepAcceptanceCriteriaMinCount.`,
+        );
+      }
+      checkExactOrderedArray({
+        value: planMachineContract.stepStatusesRequiringAcceptanceCriteria,
+        expected: normalizeStringArray(
+          sessionArtifactsContract.planMachineStepStatusesRequiringAcceptanceCriteria,
+        ),
+        pathName: `${contract.indexFile}.sessionArtifacts.planMachineContract.stepStatusesRequiringAcceptanceCriteria`,
       });
       checkExactOrderedArray({
         value: planMachineContract.stepStatusesRequiringNonEmptyCompletionSummary,
@@ -4087,6 +4164,20 @@ function checkSessionArtifactsContract(config) {
       `${contractPath}.planMachineImplementationStepDeliverableDenyPatterns must compile to at least one valid regex.`,
     );
   }
+  const planMachineImplementationStepAcceptanceCriteriaMinCount =
+    Number.isInteger(contract.planMachineImplementationStepAcceptanceCriteriaMinCount) &&
+    contract.planMachineImplementationStepAcceptanceCriteriaMinCount >= 1
+      ? contract.planMachineImplementationStepAcceptanceCriteriaMinCount
+      : null;
+  if (planMachineImplementationStepAcceptanceCriteriaMinCount === null) {
+    addFailure(
+      `${contractPath}.planMachineImplementationStepAcceptanceCriteriaMinCount must be an integer >= 1.`,
+    );
+  }
+  const planMachineStepStatusesRequiringAcceptanceCriteria = validateStringArray(
+    contract.planMachineStepStatusesRequiringAcceptanceCriteria,
+    `${contractPath}.planMachineStepStatusesRequiringAcceptanceCriteria`,
+  );
   const planMachineStepStatusesRequiringNonEmptyCompletionSummary = validateStringArray(
     contract.planMachineStepStatusesRequiringNonEmptyCompletionSummary,
     `${contractPath}.planMachineStepStatusesRequiringNonEmptyCompletionSummary`,
@@ -4205,7 +4296,13 @@ function checkSessionArtifactsContract(config) {
   checkRequiredFieldList({
     fieldName: "planMachineNarrativeStepRequiredFields",
     actualFields: contract.planMachineNarrativeStepRequiredFields,
-    requiredFields: ["status", "deliverable", "references", "completion_summary"],
+    requiredFields: [
+      "status",
+      "deliverable",
+      "acceptance_criteria",
+      "references",
+      "completion_summary",
+    ],
     contractPath,
   });
   checkRequiredFieldList({
@@ -4219,6 +4316,12 @@ function checkSessionArtifactsContract(config) {
       `${contractPath}.planMachineImplementationStepDeliverableDenyPatterns must contain at least one regex pattern.`,
     );
   }
+  checkRequiredFieldList({
+    fieldName: "planMachineStepStatusesRequiringAcceptanceCriteria",
+    actualFields: contract.planMachineStepStatusesRequiringAcceptanceCriteria,
+    requiredFields: ["in_progress", "complete"],
+    contractPath,
+  });
   checkRequiredFieldList({
     fieldName: "planMachineStepStatusesRequiringNonEmptyCompletionSummary",
     actualFields: contract.planMachineStepStatusesRequiringNonEmptyCompletionSummary,
@@ -4511,6 +4614,13 @@ function checkSessionArtifactsContract(config) {
     }
   }
   const allowedNarrativeStepStatusSet = new Set(planMachineAllowedNarrativeStepStatuses);
+  for (const stepStatus of planMachineStepStatusesRequiringAcceptanceCriteria) {
+    if (!allowedNarrativeStepStatusSet.has(stepStatus)) {
+      addFailure(
+        `${contractPath}.planMachineStepStatusesRequiringAcceptanceCriteria contains unknown step status ${stepStatus}.`,
+      );
+    }
+  }
   for (const stepStatus of planMachineStepStatusesRequiringNonEmptyCompletionSummary) {
     if (!allowedNarrativeStepStatusSet.has(stepStatus)) {
       addFailure(
@@ -4753,6 +4863,10 @@ function checkSessionArtifactsContract(config) {
           narrativeStepOptionalFields: planMachineNarrativeStepOptionalFields,
           implementationStepDeliverableDenyPatternRegexes:
             planMachineImplementationStepDeliverableDenyPatternRegexes,
+          implementationStepAcceptanceCriteriaMinCount:
+            planMachineImplementationStepAcceptanceCriteriaMinCount,
+          stepStatusesRequiringAcceptanceCriteria:
+            planMachineStepStatusesRequiringAcceptanceCriteria,
           stepStatusesRequiringNonEmptyCompletionSummary:
             planMachineStepStatusesRequiringNonEmptyCompletionSummary,
           implementationCompletionSummaryRequiredFields:
