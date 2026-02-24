@@ -335,6 +335,38 @@ function resolveRepoRoot() {
   return findRepoRootByGitDir(process.cwd());
 }
 
+function resolveGitCommonDir(repoRoot) {
+  const commonDirProbe = runCommandSafe("git", ["rev-parse", "--git-common-dir"]);
+  if (!commonDirProbe.ok || commonDirProbe.stdout.length === 0) {
+    return null;
+  }
+
+  const commonDir = commonDirProbe.stdout;
+  if (path.isAbsolute(commonDir)) {
+    return path.resolve(commonDir);
+  }
+  return path.resolve(repoRoot, commonDir);
+}
+
+function resolvePrimaryRepoRoot(repoRoot) {
+  const commonDir = resolveGitCommonDir(repoRoot);
+  if (commonDir && path.basename(commonDir) === ".git") {
+    return path.resolve(commonDir, "..");
+  }
+  return path.resolve(repoRoot);
+}
+
+function resolvePathFromBase(targetPath, basePath) {
+  const normalized = toNonEmptyString(targetPath);
+  if (!normalized) {
+    return path.resolve(basePath);
+  }
+  if (path.isAbsolute(normalized)) {
+    return path.resolve(normalized);
+  }
+  return path.resolve(basePath, normalized);
+}
+
 function isPathWithin(candidatePath, parentPath) {
   const relative = path.relative(parentPath, candidatePath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -2068,12 +2100,14 @@ function main() {
   const documentationModel = policy?.contracts?.documentationModel ?? {};
   const sessionArtifacts = policy?.contracts?.sessionArtifacts ?? {};
   const workspaceLayout = policy?.contracts?.workspaceLayout ?? {};
+  const workspaceLayoutBaseRepoRoot = resolvePrimaryRepoRoot(repoRoot);
 
-  const canonicalRepoRoot =
-    toNonEmptyString(workspaceLayout.canonicalRepoRoot) ?? repoRoot;
-  const canonicalAgentsRoot =
-    toNonEmptyString(workspaceLayout.canonicalAgentsRoot) ??
-    path.resolve(canonicalRepoRoot, ".agents");
+  const canonicalRepoRoot = toNonEmptyString(workspaceLayout.canonicalRepoRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalRepoRoot, workspaceLayoutBaseRepoRoot)
+    : path.resolve(repoRoot);
+  const canonicalAgentsRoot = toNonEmptyString(workspaceLayout.canonicalAgentsRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalAgentsRoot, canonicalRepoRoot)
+    : path.resolve(canonicalRepoRoot, ".agents");
   const resolveArtifactPath = (targetPath) => {
     const normalized = toNonEmptyString(targetPath) ?? "";
     if (normalized === ".agents") {
@@ -2084,9 +2118,9 @@ function main() {
     }
     return path.resolve(repoRoot, normalized);
   };
-  const worktreesRoot =
-    toNonEmptyString(workspaceLayout.worktreesRoot) ??
-    resolveCanonicalWorktreesRoot(canonicalRepoRoot);
+  const worktreesRoot = toNonEmptyString(workspaceLayout.worktreesRoot)
+    ? resolvePathFromBase(workspaceLayout.worktreesRoot, canonicalRepoRoot)
+    : resolveCanonicalWorktreesRoot(canonicalRepoRoot);
   let workspaceLayoutInfo;
   try {
     workspaceLayoutInfo = ensureWorktreeAgentsSymlink({

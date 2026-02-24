@@ -52,6 +52,36 @@ function resolveRepoRoot(startDir) {
   return path.resolve(startDir);
 }
 
+function resolveGitCommonDir(repoRoot) {
+  const commonDir = runCommandSafe("git", ["rev-parse", "--git-common-dir"], repoRoot);
+  if (!commonDir.ok || !commonDir.stdout) {
+    return null;
+  }
+  if (path.isAbsolute(commonDir.stdout)) {
+    return path.resolve(commonDir.stdout);
+  }
+  return path.resolve(repoRoot, commonDir.stdout);
+}
+
+function resolvePrimaryRepoRoot(repoRoot) {
+  const commonDir = resolveGitCommonDir(repoRoot);
+  if (commonDir && path.basename(commonDir) === ".git") {
+    return path.resolve(commonDir, "..");
+  }
+  return path.resolve(repoRoot);
+}
+
+function resolvePathFromBase(targetPath, basePath) {
+  const normalized = toNonEmptyString(targetPath);
+  if (!normalized) {
+    return path.resolve(basePath);
+  }
+  if (path.isAbsolute(normalized)) {
+    return path.resolve(normalized);
+  }
+  return path.resolve(basePath, normalized);
+}
+
 function parseArgs(argv) {
   const parsed = {
     write: false,
@@ -206,11 +236,13 @@ function resolveQueueLocation(repoRoot, policy) {
       : {};
   const queuePathLabel =
     toNonEmptyString(sessionArtifacts.executionQueueFile) ?? DEFAULT_QUEUE_PATH;
-  const canonicalRepoRoot =
-    toNonEmptyString(workspaceLayout.canonicalRepoRoot) ?? repoRoot;
-  const canonicalAgentsRoot =
-    toNonEmptyString(workspaceLayout.canonicalAgentsRoot) ??
-    path.resolve(canonicalRepoRoot, ".agents");
+  const workspaceLayoutBaseRepoRoot = resolvePrimaryRepoRoot(repoRoot);
+  const canonicalRepoRoot = toNonEmptyString(workspaceLayout.canonicalRepoRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalRepoRoot, workspaceLayoutBaseRepoRoot)
+    : path.resolve(repoRoot);
+  const canonicalAgentsRoot = toNonEmptyString(workspaceLayout.canonicalAgentsRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalAgentsRoot, canonicalRepoRoot)
+    : path.resolve(canonicalRepoRoot, ".agents");
 
   if (queuePathLabel === ".agents") {
     return path.resolve(canonicalAgentsRoot);

@@ -38,6 +38,36 @@ function resolveRepoRoot(startDir) {
   return path.resolve(startDir);
 }
 
+function resolveGitCommonDir(repoRoot) {
+  const commonDir = runCommandSafe("git", ["rev-parse", "--git-common-dir"]);
+  if (!commonDir.ok || !commonDir.stdout) {
+    return null;
+  }
+  if (path.isAbsolute(commonDir.stdout)) {
+    return path.resolve(commonDir.stdout);
+  }
+  return path.resolve(repoRoot, commonDir.stdout);
+}
+
+function resolvePrimaryRepoRoot(repoRoot) {
+  const commonDir = resolveGitCommonDir(repoRoot);
+  if (commonDir && path.basename(commonDir) === ".git") {
+    return path.resolve(commonDir, "..");
+  }
+  return path.resolve(repoRoot);
+}
+
+function resolvePathFromBase(targetPath, basePath) {
+  const normalized = toNonEmptyString(targetPath);
+  if (!normalized) {
+    return path.resolve(basePath);
+  }
+  if (path.isAbsolute(normalized)) {
+    return path.resolve(normalized);
+  }
+  return path.resolve(basePath, normalized);
+}
+
 function toNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -240,14 +270,16 @@ function resolveQueueLocation(repoRoot) {
   const sessionArtifacts = policy?.contracts?.sessionArtifacts ?? {};
   const queuePathLabel =
     toNonEmptyString(sessionArtifacts.executionQueueFile) ?? QUEUE_PATH;
-  const canonicalRepoRoot =
-    toNonEmptyString(workspaceLayout.canonicalRepoRoot) ?? repoRoot;
-  const canonicalAgentsRoot =
-    toNonEmptyString(workspaceLayout.canonicalAgentsRoot) ??
-    path.resolve(canonicalRepoRoot, ".agents");
-  const worktreesRoot =
-    toNonEmptyString(workspaceLayout.worktreesRoot) ??
-    resolveCanonicalWorktreesRoot(canonicalRepoRoot);
+  const workspaceLayoutBaseRepoRoot = resolvePrimaryRepoRoot(repoRoot);
+  const canonicalRepoRoot = toNonEmptyString(workspaceLayout.canonicalRepoRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalRepoRoot, workspaceLayoutBaseRepoRoot)
+    : path.resolve(repoRoot);
+  const canonicalAgentsRoot = toNonEmptyString(workspaceLayout.canonicalAgentsRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalAgentsRoot, canonicalRepoRoot)
+    : path.resolve(canonicalRepoRoot, ".agents");
+  const worktreesRoot = toNonEmptyString(workspaceLayout.worktreesRoot)
+    ? resolvePathFromBase(workspaceLayout.worktreesRoot, canonicalRepoRoot)
+    : resolveCanonicalWorktreesRoot(canonicalRepoRoot);
 
   const repoRootResolved = path.resolve(repoRoot);
   const canonicalRepoRootResolved = path.resolve(canonicalRepoRoot);

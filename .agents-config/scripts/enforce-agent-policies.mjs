@@ -83,6 +83,37 @@ function resolveRepoRoot() {
   return findRepoRootByGitDir(process.cwd());
 }
 
+function resolveGitCommonDir(repoRoot) {
+  const result = runCommandSafe("git", ["rev-parse", "--git-common-dir"]);
+  if (!result.ok || !result.stdout) {
+    return null;
+  }
+
+  if (path.isAbsolute(result.stdout)) {
+    return path.resolve(result.stdout);
+  }
+  return path.resolve(repoRoot, result.stdout);
+}
+
+function resolvePrimaryRepoRoot(repoRoot) {
+  const commonDir = resolveGitCommonDir(repoRoot);
+  if (commonDir && path.basename(commonDir) === ".git") {
+    return path.resolve(commonDir, "..");
+  }
+  return path.resolve(repoRoot);
+}
+
+function resolvePathFromBase(targetPath, basePath) {
+  const normalized = toNonEmptyString(targetPath);
+  if (!normalized) {
+    return path.resolve(basePath);
+  }
+  if (path.isAbsolute(normalized)) {
+    return path.resolve(normalized);
+  }
+  return path.resolve(basePath, normalized);
+}
+
 function isPathWithin(candidatePath, parentPath) {
   const relative = path.relative(parentPath, candidatePath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -1442,7 +1473,7 @@ function validatePlanMachineDocument({
   }
 }
 
-function checkWorkspaceLayoutContract(config, runtimeRepoRoot) {
+function checkWorkspaceLayoutContract(config, runtimeRepoRoot, workspaceLayoutBaseRepoRoot) {
   const contractPath = "contracts.workspaceLayout";
   const contract = config?.contracts?.workspaceLayout;
   if (!contract || typeof contract !== "object") {
@@ -1478,9 +1509,15 @@ function checkWorkspaceLayoutContract(config, runtimeRepoRoot) {
     return;
   }
 
-  const canonicalRepoRootResolved = path.resolve(canonicalRepoRoot);
-  const canonicalAgentsRootResolved = path.resolve(canonicalAgentsRoot);
-  const worktreesRootResolved = path.resolve(worktreesRoot);
+  const canonicalRepoRootResolved = resolvePathFromBase(
+    canonicalRepoRoot,
+    workspaceLayoutBaseRepoRoot ?? runtimeRepoRoot,
+  );
+  const canonicalAgentsRootResolved = resolvePathFromBase(
+    canonicalAgentsRoot,
+    canonicalRepoRootResolved,
+  );
+  const worktreesRootResolved = resolvePathFromBase(worktreesRoot, canonicalRepoRootResolved);
   const runtimeRepoRootResolved = path.resolve(runtimeRepoRoot);
   const localAgentsPath = toNonEmptyString(contract.localAgentsPath) ?? ".agents";
   const normalizedLocalAgentsPath = localAgentsPath.replace(/\\/g, "/");
@@ -6952,15 +6989,20 @@ function checkPolicyRuleQuality(config) {
 function runPolicyChecks(activeConfigPath = configPath) {
   const repoRoot = resolveRepoRoot();
   process.chdir(repoRoot);
+  const workspaceLayoutBaseRepoRoot = resolvePrimaryRepoRoot(repoRoot);
 
   failures.length = 0;
   warnings.length = 0;
 
   const absoluteConfigPath = path.resolve(repoRoot, activeConfigPath);
   const config = readJson(absoluteConfigPath);
-  const canonicalAgentsRoot =
-    toNonEmptyString(config?.contracts?.workspaceLayout?.canonicalAgentsRoot) ??
-    path.resolve(repoRoot, ".agents");
+  const workspaceLayout = config?.contracts?.workspaceLayout ?? {};
+  const canonicalRepoRoot = toNonEmptyString(workspaceLayout.canonicalRepoRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalRepoRoot, workspaceLayoutBaseRepoRoot)
+    : path.resolve(repoRoot);
+  const canonicalAgentsRoot = toNonEmptyString(workspaceLayout.canonicalAgentsRoot)
+    ? resolvePathFromBase(workspaceLayout.canonicalAgentsRoot, canonicalRepoRoot)
+    : path.resolve(canonicalRepoRoot, ".agents");
   agentsAwareReadResolver = (targetPath) =>
     resolveAgentsAwarePath({
       repoRoot,
@@ -6970,7 +7012,7 @@ function runPolicyChecks(activeConfigPath = configPath) {
   const { files: trackedFiles, reliable: trackedFilesReliable } = listTrackedFiles();
 
   checkPolicyMetadata(config);
-  checkWorkspaceLayoutContract(config, repoRoot);
+  checkWorkspaceLayoutContract(config, repoRoot, workspaceLayoutBaseRepoRoot);
   checkDocumentationModelContract(config);
   checkContextIndexContract(config);
   checkReleaseNotesContract(config);
