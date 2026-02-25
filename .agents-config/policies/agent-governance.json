@@ -646,6 +646,7 @@
         "orch_concise_subagent_briefs",
         "orch_spec_refined_plan_verbosity",
         "orch_codex_model_default",
+        "orch_claude_model_default",
         "rule_route_map_required",
         "rule_domain_readmes_required",
         "rule_jsdoc_coverage_required"
@@ -708,6 +709,20 @@
           "node .agents-config/scripts/enforce-agent-policies.mjs"
         ],
         "requiredEvidencePrefix": "verify:"
+      },
+      "claudeModelRouting": {
+        "orchestrator": "claude-opus-4-6",
+        "subagent": "claude-opus-4-6",
+        "alternativeSubagent": "claude-sonnet-4-6",
+        "lowRiskLoop": "claude-haiku-4-5"
+      },
+      "claudeDelegationToCodex": {
+        "preferredMethod": "codex_exec",
+        "methods": {
+          "codex_exec": "codex exec -p \"<prompt>\"",
+          "codex_interactive": "codex"
+        },
+        "guidance": "Use codex exec for fire-and-forget atomic tasks; use interactive codex session only when iterative conversation is needed."
       },
       "defaultCliRouting": {
         "codex": "codex",
@@ -785,6 +800,10 @@
         {
           "id": "orch_codex_model_default",
           "statement": "Default model routing is role/risk-based: orchestrator uses `gpt-5.3-codex` with `xhigh`, subagents use `gpt-5.3-codex` with `high`, and Spark is reserved for low-risk loops with explicit verification commands."
+        },
+        {
+          "id": "orch_claude_model_default",
+          "statement": "Claude model routing is role/risk-based: orchestrator uses `claude-opus-4-6`, subagents use `claude-opus-4-6` (or `claude-sonnet-4-6` for lighter tasks), and `claude-haiku-4-5` is reserved for low-risk loops. Claude orchestrators may delegate to Codex subagents via `codex exec`."
         }
       ]
     },

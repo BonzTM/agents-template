@@ -2710,6 +2710,43 @@ function checkContextIndexContract(config) {
     }
 
     if (
+      !index.orchestratorSubagent.claudeModelRouting ||
+      typeof index.orchestratorSubagent.claudeModelRouting !== "object"
+    ) {
+      addFailure(`${contract.indexFile}.orchestratorSubagent.claudeModelRouting must be an object.`);
+    } else {
+      const expectedClaudeRouting = {
+        orchestrator: "claude-opus-4-6",
+        subagent: "claude-opus-4-6",
+        alternativeSubagent: "claude-sonnet-4-6",
+        lowRiskLoop: "claude-haiku-4-5",
+      };
+      const policyClaudeRouting =
+        policyOrchestratorSubagent && typeof policyOrchestratorSubagent === "object"
+          ? policyOrchestratorSubagent.claudeModelRouting
+          : null;
+
+      for (const [fieldName, expectedValue] of Object.entries(expectedClaudeRouting)) {
+        const indexValue = toNonEmptyString(index.orchestratorSubagent.claudeModelRouting[fieldName]);
+        if (indexValue !== expectedValue) {
+          addFailure(
+            `${contract.indexFile}.orchestratorSubagent.claudeModelRouting.${fieldName} must equal "${expectedValue}".`,
+          );
+        }
+
+        const policyValue =
+          policyClaudeRouting && typeof policyClaudeRouting === "object"
+            ? toNonEmptyString(policyClaudeRouting[fieldName])
+            : null;
+        if (policyValue && indexValue !== policyValue) {
+          addFailure(
+            `${contract.indexFile}.orchestratorSubagent.claudeModelRouting.${fieldName} must equal contracts.orchestratorSubagent.claudeModelRouting.${fieldName}.`,
+          );
+        }
+      }
+    }
+
+    if (
       !index.orchestratorSubagent.lowRiskSparkPolicy ||
       typeof index.orchestratorSubagent.lowRiskSparkPolicy !== "object"
     ) {
@@ -6821,6 +6858,42 @@ function checkOrchestratorSubagentContracts(config) {
     }
   }
 
+  if (
+    !contract.claudeModelRouting ||
+    typeof contract.claudeModelRouting !== "object"
+  ) {
+    addFailure(`${contractPath}.claudeModelRouting must be an object.`);
+  } else {
+    const expectedClaudeModelRouting = {
+      orchestrator: "claude-opus-4-6",
+      subagent: "claude-opus-4-6",
+      alternativeSubagent: "claude-sonnet-4-6",
+      lowRiskLoop: "claude-haiku-4-5",
+    };
+    for (const [fieldName, expectedModel] of Object.entries(expectedClaudeModelRouting)) {
+      const actualModel = toNonEmptyString(contract.claudeModelRouting[fieldName]);
+      if (actualModel !== expectedModel) {
+        addFailure(
+          `${contractPath}.claudeModelRouting.${fieldName} must equal "${expectedModel}".`,
+        );
+      }
+    }
+  }
+
+  if (
+    !contract.claudeDelegationToCodex ||
+    typeof contract.claudeDelegationToCodex !== "object"
+  ) {
+    addFailure(`${contractPath}.claudeDelegationToCodex must be an object.`);
+  } else {
+    const preferredMethod = toNonEmptyString(contract.claudeDelegationToCodex.preferredMethod);
+    if (preferredMethod !== "codex_exec") {
+      addFailure(
+        `${contractPath}.claudeDelegationToCodex.preferredMethod must equal "codex_exec".`,
+      );
+    }
+  }
+
   if (!contract.lowRiskSparkPolicy || typeof contract.lowRiskSparkPolicy !== "object") {
     addFailure(`${contractPath}.lowRiskSparkPolicy must be an object.`);
   } else {
@@ -6884,6 +6957,7 @@ function checkOrchestratorSubagentContracts(config) {
     "orch_concise_subagent_briefs",
     "orch_spec_refined_plan_verbosity",
     "orch_codex_model_default",
+    "orch_claude_model_default",
   ];
 
   const seenRuleIds = new Set();

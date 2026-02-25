@@ -14,6 +14,7 @@ Canonical enforceable source: `.agents-config/policies/agent-governance.json` at
 - Use machine-readable payloads as authority with concise human nuance addenda.
 - Return dual-channel results: machine-readable envelope plus concise human summary.
 - Follow default CLI routing unless user-overridden: Codex agents via `codex` CLI, Claude agents via `claude` CLI.
+- Claude-to-Codex delegation: prefer `codex exec -p "<prompt>"` for atomic tasks.
 - Respect policy verbosity budgets for subagent briefs/spec/refined-spec/plan sections.
 - Ensure completed queue-item evidence includes explicit verification entries prefixed `verify:`.
 

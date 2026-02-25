@@ -143,6 +143,7 @@ Policy-canonical rule IDs:
 - `orch_concise_subagent_briefs`
 - `orch_spec_refined_plan_verbosity`
 - `orch_codex_model_default`
+- `orch_claude_model_default`
 
 Single-orchestrator topology is required: one orchestrator agent owns cross-task coordination/context and subagents execute delegated atomic tasks only.
 Operator/subagent execution is mandatory for non-trivial work; direct single-agent execution is allowed only for trivial tasks.
@@ -152,6 +153,11 @@ Default model routing is policy-defined by role/risk:
 - orchestrator: `gpt-5.3-codex` with `xhigh` reasoning effort
 - subagents: `gpt-5.3-codex` with `high` reasoning effort
 - low-risk fast loops only: `gpt-5.3-codex-spark` with explicit verification commands
+Claude model routing is policy-defined by role/risk:
+- orchestrator: `claude-opus-4-6`
+- subagents: `claude-opus-4-6` (or `claude-sonnet-4-6` for lighter tasks)
+- low-risk fast loops only: `claude-haiku-4-5`
+Claude-to-Codex delegation: prefer `codex exec` for atomic tasks; use interactive `codex` for iterative work.
 Default CLI routing is policy-defined in `contracts.orchestratorSubagent.defaultCliRouting`:
 - Codex agents: `codex`
 - Claude agents: `claude`

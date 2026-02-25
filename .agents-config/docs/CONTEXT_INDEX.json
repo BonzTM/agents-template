@@ -326,6 +326,16 @@
       "subagent": "high",
       "lowRiskLoop": "medium"
     },
+    "claudeModelRouting": {
+      "orchestrator": "claude-opus-4-6",
+      "subagent": "claude-opus-4-6",
+      "alternativeSubagent": "claude-sonnet-4-6",
+      "lowRiskLoop": "claude-haiku-4-5"
+    },
+    "claudeDelegationToCodex": {
+      "preferredMethod": "codex_exec",
+      "guidance": "Use codex exec for fire-and-forget atomic tasks; use interactive codex session only when iterative conversation is needed."
+    },
     "lowRiskSparkPolicy": {
       "allowedTaskClasses": [
         "single_file_edit",

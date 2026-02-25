@@ -52,6 +52,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `orch_release_idle_subagents_required`: Idle subagents must be released once they are no longer actively executing work.
 - `orch_concise_subagent_briefs`: Enforce concise subagent payload/addendum shape with explicit verbosity budgets.
 - `orch_spec_refined_plan_verbosity`: Enforce concise spec outline/refined spec/implementation-plan verbosity ladder.
+- `orch_claude_model_default`: Claude model routing is role/risk-based: orchestrator uses `claude-opus-4-6`, subagents use `claude-opus-4-6` (or `claude-sonnet-4-6` for lighter tasks), and `claude-haiku-4-5` is reserved for low-risk loops. Claude orchestrators may delegate to Codex subagents via `codex exec`.
 
 ## Global Operating Agreements (All LLMs)
 
@@ -203,6 +204,7 @@ At task start, explicitly determine:
   - `orch_concise_subagent_briefs`
   - `orch_spec_refined_plan_verbosity`
   - `orch_codex_model_default`
+  - `orch_claude_model_default`
 
 Machine vs human guidance split for orchestration:
 
@@ -217,6 +219,11 @@ Machine vs human guidance split for orchestration:
   - orchestrator: `gpt-5.3-codex` with `xhigh` reasoning effort,
   - subagents: `gpt-5.3-codex` with `high` reasoning effort,
   - low-risk loops only (`single-file edits`, `grep/triage`, `draft rewrites`): `gpt-5.3-codex-spark`.
+- Claude model routing defaults are role/risk specific:
+  - orchestrator: `claude-opus-4-6`,
+  - subagents: `claude-opus-4-6` (or `claude-sonnet-4-6` for lighter tasks),
+  - low-risk loops only: `claude-haiku-4-5`.
+- Claude orchestrators may delegate to Codex subagents via `codex exec` (preferred) or interactive `codex` session.
 - Default CLI routing is policy-defined: Codex agents via `codex` CLI and Claude agents via `claude` CLI unless user-overridden.
 - Spark low-risk loops require explicit verification commands in the delegated payload/result workflow.
 

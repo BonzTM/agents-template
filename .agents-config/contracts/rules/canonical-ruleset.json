@@ -8,10 +8,10 @@
       ".agents-config/docs/AGENT_RULES.md"
     ],
     "lineage": {
-      "policy_required_ids_sha256": "d500972825993e32998b5bfbff2efdf0848a5d8a8fbd14d35471aaeeb1f1bc81",
-      "policy_orchestrator_rules_sha256": "2ed533f4959dde7409cf7030d0b6d5853d160632f172488a2a04810ac21fef99",
-      "rules_doc_catalog_sha256": "8fc23673bea4896fed5182478bdfc4900f402c91ef7ff0d5e13183fb8094a701",
-      "canonical_rules_sha256": "17e42b1f97f0032b4755a5b95963ea8fe85e9367fb920d4bf058ec91163eb0a6"
+      "policy_required_ids_sha256": "dc57239439d317a34802c4516df694e08eea2f970ea0e56886816e336e6bcd16",
+      "policy_orchestrator_rules_sha256": "2a54c2e96e0c2741edfdc99037d721fd62a508da9eeef079c0328e17a3c3a253",
+      "rules_doc_catalog_sha256": "5631e86b21704e79d7bff824b7fd5510733f0cf985e5b32d395735865e7fb7dc",
+      "canonical_rules_sha256": "5b8c673bf08de7f27ca7f9b921d93dc596ae8ddaedf6941a32528286d57094d9"
     }
   },
   "rules": [
@@ -437,6 +437,14 @@
       "category": "orchestration",
       "severity": "error",
       "overrideable": true,
+      "source": "policy.orchestratorSubagent.rules"
+    },
+    {
+      "id": "orch_claude_model_default",
+      "statement": "Claude model routing is role/risk-based: orchestrator uses `claude-opus-4-6`, subagents use `claude-opus-4-6` (or `claude-sonnet-4-6` for lighter tasks), and `claude-haiku-4-5` is reserved for low-risk loops. Claude orchestrators may delegate to Codex subagents via `codex exec`.",
+      "category": "orchestration",
+      "severity": "error",
+      "overrideable": false,
       "source": "policy.orchestratorSubagent.rules"
     },
     {
