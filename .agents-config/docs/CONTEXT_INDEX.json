@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-24.11",
+    "version": "2026-02-26.02",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
@@ -312,8 +312,8 @@
     "policyPath": "contracts.orchestratorSubagent",
     "singleOrchestratorOnly": true,
     "allowSubagentDelegation": false,
-    "defaultPattern": "operator_subagent_required_non_trivial",
-    "nonTrivialSubagentDelegationRequired": true,
+    "defaultPattern": "operator_subagent_required_when_possible",
+    "subagentDelegationRequiredWhenPossible": true,
     "idleSubagentReleaseRequired": true,
     "idleSubagentMaxIdleMinutes": 15,
     "modelRouting": {
@@ -356,7 +356,11 @@
       "specOutlineMaxWords": 220,
       "refinedSpecMaxWords": 420,
       "implementationTaskMaxWords": 160
-    }
+    },
+    "delegationForDiscoveryRequiredWhenPossible": true,
+    "delegationForImplementationRequiredWhenPossible": true,
+    "strictAtomicTaskBriefsRequired": true,
+    "closeSubagentOnCompletionRequired": true
   },
   "rulesSections": [
     {
@@ -485,7 +489,9 @@
     "canonicalRulesSync": "npm run rules:canonical:sync",
     "agentManaged": "npm run agent:managed -- --mode check",
     "templateImpactCheck": "npm run agent:template-impact:check -- --base-ref origin/<base-branch>",
-    "agentManagedFix": "npm run agent:managed -- --fix --recheck"
+    "agentManagedFix": "npm run agent:managed -- --fix --recheck",
+    "policyCheckCi": "node .agents-config/scripts/enforce-agent-policies.mjs --ci",
+    "releaseContractCheck": "node .agents-config/scripts/release-contract-check.mjs"
   },
   "profiles": {
     "availableProfiles": [

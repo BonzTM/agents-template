@@ -23,11 +23,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Enforce agent policies
-        run: node .agents-config/scripts/enforce-agent-policies.mjs
+      - name: Enforce agent policies (CI profile)
+        run: npm run policy:check:ci
 
       - name: Check managed workflow drift
         run: npm run agent:managed -- --mode check
+
+      - name: Verify repository index readiness
+        run: |
+          npm run index:build
+          npm run index:verify
+
+      - name: Verify release runtime contract
+        run: npm run release:contract:check
 
       - name: Enforce template-impact declaration
         if: github.event_name == 'pull_request'

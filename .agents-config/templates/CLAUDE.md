@@ -9,7 +9,7 @@ After every context compaction, treat it as a fresh startup and re-run the full 
 Canonical enforceable source: `.agents-config/policies/agent-governance.json` at `contracts.orchestratorSubagent`.
 
 - Use single-orchestrator topology: one orchestrator owns cross-task coordination/context; subagents execute delegated atomic tasks only.
-- Default to the operator/subagent pattern for non-trivial work; direct single-agent execution is allowed only for trivial tasks.
+- Default to the operator/subagent pattern whenever delegation is feasible; direct single-agent execution is allowed only for trivial tasks.
 - Keep delegated tasks single-objective with explicit `atomic_scope` boundaries.
 - Use machine-readable payloads as authority with concise human nuance addenda.
 - Return dual-channel results: machine-readable envelope plus concise human summary.

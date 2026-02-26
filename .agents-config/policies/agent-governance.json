@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-02-24.11",
+    "version": "2026-02-26.02",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
@@ -85,7 +85,9 @@
         "canonicalRulesSync",
         "agentManaged",
         "agentManagedFix",
-        "templateImpactCheck"
+        "templateImpactCheck",
+        "policyCheckCi",
+        "releaseContractCheck"
       ]
     },
     "releaseNotes": {
@@ -633,7 +635,7 @@
         "orch_machine_payload_authoritative",
         "orch_delegate_substantive_work",
         "orch_operator_subagent_default",
-        "orch_non_trivial_subagent_mandatory",
+        "orch_subagent_delegation_required_when_possible",
         "orch_human_nuance_addendum",
         "orch_atomic_task_delegation",
         "orch_dual_channel_result_envelope",
@@ -676,7 +678,7 @@
         "singleOrchestratorOnly": true,
         "allowSubagentDelegation": false
       },
-      "nonTrivialSubagentDelegationRequired": true,
+      "subagentDelegationRequiredWhenPossible": true,
       "idleSubagentReleaseRequired": true,
       "idleSubagentMaxIdleMinutes": 15,
       "verbosityBudgets": {
@@ -743,15 +745,15 @@
         },
         {
           "id": "orch_delegate_substantive_work",
-          "statement": "Preserve orchestrator context by delegating substantive implementation/investigation tasks whenever delegation is available."
+          "statement": "Preserve orchestrator context by delegating substantive discovery/investigation and implementation tasks whenever delegation is feasible."
         },
         {
           "id": "orch_operator_subagent_default",
-          "statement": "All non-trivial work must be delegated to subagents; direct single-agent execution is restricted to trivial tasks."
+          "statement": "Whenever possible, delegate discovery and implementation work to subagents; direct single-agent execution is restricted to trivial coordination/meta tasks."
         },
         {
-          "id": "orch_non_trivial_subagent_mandatory",
-          "statement": "Treat subagent delegation for non-trivial work as mandatory and non-optional to preserve orchestrator context budget."
+          "id": "orch_subagent_delegation_required_when_possible",
+          "statement": "Treat subagent delegation as mandatory whenever delegation is feasible, including investigation/discovery and implementation execution."
         },
         {
           "id": "orch_human_nuance_addendum",
@@ -759,7 +761,7 @@
         },
         {
           "id": "orch_atomic_task_delegation",
-          "statement": "Delegate work in atomic task slices so each subagent context remains narrow and auditable."
+          "statement": "Delegate work in strict atomic task slices so each subagent receives a concrete objective with explicit inputs, acceptance criteria, and verification steps."
         },
         {
           "id": "orch_dual_channel_result_envelope",
@@ -771,7 +773,7 @@
         },
         {
           "id": "orch_release_idle_subagents_required",
-          "statement": "Release idle subagents as soon as they are no longer actively executing delegated work."
+          "statement": "Release/close subagents immediately once they are complete or no longer actively executing delegated work."
         },
         {
           "id": "orch_default_cli_routing",
@@ -805,7 +807,11 @@
           "id": "orch_claude_model_default",
           "statement": "Claude model routing is role/risk-based: orchestrator uses `claude-opus-4-6`, subagents use `claude-opus-4-6` (or `claude-sonnet-4-6` for lighter tasks), and `claude-haiku-4-5` is reserved for low-risk loops. Claude orchestrators may delegate to Codex subagents via `codex exec`."
         }
-      ]
+      ],
+      "delegationForDiscoveryRequiredWhenPossible": true,
+      "delegationForImplementationRequiredWhenPossible": true,
+      "strictAtomicTaskBriefsRequired": true,
+      "closeSubagentOnCompletionRequired": true
     },
     "routeMap": {
       "file": ".agents-config/docs/ROUTE_MAP.md",
@@ -858,7 +864,9 @@
       "profiles": [
         "node-web"
       ],
-      "enabled": true
+      "enabled": true,
+      "minimumTotalCoveragePercent": 100,
+      "maximumMissingExportedSymbols": 0
     },
     "loggingStandards": {
       "standardsFile": ".agents-config/docs/LOGGING_STANDARDS.md",
@@ -970,7 +978,10 @@
           ".agents-config/docs/TEST_MATRIX.md",
           ".agents-config/docs/ROUTE_MAP.md",
           ".agents-config/docs/JSDOC_COVERAGE.md",
-          ".agents-config/docs/LOGGING_STANDARDS.md"
+          ".agents-config/docs/LOGGING_STANDARDS.md",
+          "must delegate discovery and implementation work to subagents whenever possible",
+          "Subagent assignments must be strict and atomic with clear objective, context, acceptance criteria, and verification expectations.",
+          "Release/close subagents immediately once they are complete or no longer actively executing delegated work."
         ]
       },
       {
@@ -989,7 +1000,10 @@
           "### Session Artifact Contracts (Required)",
           "### CONTINUITY.md Contract (Required)",
           "### Post-Compaction Startup Checklist (Required)",
-          "### Definition of Done"
+          "### Definition of Done",
+          "strict atomic subagent tasks with explicit objective, inputs, acceptance criteria, and verification",
+          "Idle or completed subagents must be released/closed immediately",
+          "Delegate discovery and implementation work to subagents whenever possible"
         ]
       },
       {
@@ -1053,7 +1067,7 @@
         "file": ".github/workflows/pr-checks.yml",
         "snippets": [
           "Policy as Code",
-          "node .agents-config/scripts/enforce-agent-policies.mjs"
+          "npm run policy:check:ci"
         ]
       },
       {
@@ -1076,7 +1090,9 @@
           "\"jsdoc-coverage:generate\"",
           "\"jsdoc-coverage:verify\"",
           "\"logging:compliance:generate\"",
-          "\"logging:compliance:verify\""
+          "\"logging:compliance:verify\"",
+          "\"policy:check:ci\"",
+          "\"release:contract:check\""
         ]
       }
     ],
@@ -1277,6 +1293,20 @@
       {
         "prefix": ".worktrees/",
         "message": ".worktrees/** is deprecated legacy workspace location; use ../<repo-name>.worktrees."
+      }
+    ],
+    "forbiddenTextPatterns": [
+      {
+        "id": "forbid_private_key_material",
+        "pattern": "-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----",
+        "message": "Private key material must not be committed to the repository.",
+        "excludePaths": []
+      },
+      {
+        "id": "forbid_github_pat_token",
+        "pattern": "gh[pousr]_[A-Za-z0-9]{30,255}",
+        "message": "Potential GitHub token detected in tracked content; remove secrets from source control.",
+        "excludePaths": []
       }
     ]
   }

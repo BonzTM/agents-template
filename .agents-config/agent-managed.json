@@ -60,7 +60,7 @@
       ]
     },
     {
-      "path": ".agents-config/templates/claude/CLAUDE.md",
+      "path": ".agents-config/templates/CLAUDE.md",
       "profiles": [
         "base"
       ],
@@ -152,6 +152,12 @@
     },
     {
       "path": ".agents-config/scripts/release-version-sync.mjs",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/scripts/release-contract-check.mjs",
       "profiles": [
         "base"
       ]
@@ -344,7 +350,7 @@
       ]
     },
     {
-      "path": ".agents-config/templates/claude/CLAUDE.md",
+      "path": ".agents-config/templates/CLAUDE.md",
       "profiles": [
         "base"
       ]
@@ -429,6 +435,12 @@
     },
     {
       "path": ".agents-config/scripts/release-version-sync.mjs",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/scripts/release-contract-check.mjs",
       "profiles": [
         "base"
       ]

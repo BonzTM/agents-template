@@ -12,14 +12,10 @@ Scope:
 | --- | --- | --- | --- | --- | --- |
 | Backend other | 1 | 0 | 0 | 0 | 100.0% |
 | Backend routes | 1 | 0 | 0 | 0 | 100.0% |
-| Backend services | 1 | 1 | 0 | 1 | 0.0% |
-| Frontend other | 2 | 2 | 0 | 2 | 0.0% |
-| **Total** | **5** | **3** | **0** | **3** | **0.0%** |
+| Backend services | 1 | 1 | 1 | 0 | 100.0% |
+| Frontend other | 2 | 2 | 2 | 0 | 100.0% |
+| **Total** | **5** | **3** | **3** | **0** | **100.0%** |
 
 ## Missing Exported Symbols (Top 250)
 
-| Area | Exported Symbol | File |
-| --- | --- | --- |
-| Backend services | isServiceHealthy | backend/src/services/healthService.ts:1 |
-| Frontend other | GET | frontend/app/api/health/route.ts:1 |
-| Frontend other | Page | frontend/app/page.tsx:1 |
+_No missing exported-symbol JSDoc detected._

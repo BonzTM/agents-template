@@ -10,8 +10,8 @@ This template provides policy-as-code enforcement, startup/preflight contracts, 
 - Downstream projects can choose local AGENTS mode by filename:
 - `AGENTS.replace.md` for replacement mode.
 - `AGENTS.override.md` for additive mode (read after canonical `AGENTS.md`).
-- `.agents-config/templates/claude/CLAUDE.md` is the downstream Claude bootstrap source and is synced as downstream `.claude/CLAUDE.md`.
-- `AGENTS.md` and `.claude/CLAUDE.md` are repository-local maintainer instructions for `agents-template` itself.
+- `.agents-config/templates/CLAUDE.md` is the downstream Claude bootstrap source and is synced as downstream `CLAUDE.md`.
+- `AGENTS.md` and `CLAUDE.md` are repository-local maintainer instructions for `agents-template` itself.
 
 ## One-Command Bootstrap (Recommended)
 
@@ -134,5 +134,5 @@ For this `agents-template` repository itself:
 
 - use `.agents -> ../agents-workfiles/agents-template` for local template-maintainer context
 - keep `.agents-config/templates/agents/` as the tracked scaffold used by bootstrap to seed downstream `.agents` structure
-- keep template-maintainer-only guidance in local `AGENTS.md` and local `.claude/CLAUDE.md`
+- keep template-maintainer-only guidance in local `AGENTS.md` and local `CLAUDE.md`
 - do not target this repository when running `npm run bootstrap`

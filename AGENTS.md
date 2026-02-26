@@ -20,16 +20,16 @@ Read these in order before non-trivial work:
 Read downstream template sources only when intentionally changing downstream contract content:
 
 - `.agents-config/AGENTS_TEMPLATE.md`
-- `.agents-config/templates/claude/CLAUDE.md`
+- `.agents-config/templates/CLAUDE.md`
 
 ## Local vs Downstream Contract
 
 - Local-only maintainer instructions live in:
   - `AGENTS.md`
-  - `.claude/CLAUDE.md`
+  - `CLAUDE.md`
 - Downstream template sources live in:
   - `.agents-config/AGENTS_TEMPLATE.md` -> downstream `AGENTS.md`
-  - `.agents-config/templates/claude/CLAUDE.md` -> downstream `.claude/CLAUDE.md`
+  - `.agents-config/templates/CLAUDE.md` -> downstream `CLAUDE.md`
 - Do not place template-maintainer-only instructions in downstream template sources.
 
 ## Repository-Local Rules
@@ -38,6 +38,7 @@ Read downstream template sources only when intentionally changing downstream con
 - Keep `.agents` pointed at external workfiles (`../agents-workfiles/agents-template`) for local runtime state.
 - Keep `.agents-config/templates/agents/` as tracked downstream scaffold content only.
 - Keep local runtime `.agents/**` state untracked.
+- For maintenance tasks, orchestrators must delegate discovery and implementation work to subagents whenever possible, assign strict atomic task briefs, and close subagents immediately when complete.
 
 ## Maintainer Commands
 

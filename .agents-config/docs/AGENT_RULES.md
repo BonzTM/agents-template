@@ -47,8 +47,8 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_release_notes_template_required`: Enforce canonical release-notes template + generator workflow, section order, and plain-English non-jargon summaries through policy checks.
 - `rule_release_notes_changelog_source_required`: Treat `CHANGELOG.md` as release-notes source of truth and rotate `Unreleased` during `release:prepare`.
 - `orch_single_orchestrator_authority`: Enforce exactly one orchestrator context owner per session; subagents do not orchestrate.
-- `orch_operator_subagent_default`: All non-trivial work must be delegated to subagents; direct single-agent execution is only for trivial tasks.
-- `orch_non_trivial_subagent_mandatory`: Subagent delegation for non-trivial work is mandatory and non-optional.
+- `orch_operator_subagent_default`: Delegate discovery and implementation work to subagents whenever possible; orchestrators retain decision authority and coordination only.
+- `orch_subagent_delegation_required_when_possible`: Subagent delegation is mandatory whenever delegation is feasible, including both investigation/discovery and implementation execution.
 - `orch_release_idle_subagents_required`: Idle subagents must be released once they are no longer actively executing work.
 - `orch_concise_subagent_briefs`: Enforce concise subagent payload/addendum shape with explicit verbosity budgets.
 - `orch_spec_refined_plan_verbosity`: Enforce concise spec outline/refined spec/implementation-plan verbosity ladder.
@@ -165,7 +165,7 @@ At task start, explicitly determine:
 ### CLI Worktree Parallelism (Required)
 
 - When operating in an agent CLI (for example Codex CLI or Claude Code CLI), prefer Git worktrees for non-trivial parallelizable tasks instead of stacking unrelated edits in one working tree.
-- For non-trivial work, prefer operator/subagent execution and parallel agents/subagents for independent task slices when available.
+- Whenever delegation is feasible, prefer operator/subagent execution and parallel agents/subagents for independent task slices when available.
 - Bootstrap defaults to external workfiles mode: `.agents` is a symlink to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`).
 - Local `.agents` directory mode is allowed only when bootstrap is explicitly set to `--agents-mode local`.
 - Treat `.agents/**` as shared multi-writer state; reconcile concurrent edits using semantic merges instead of blind overwrite.
@@ -191,7 +191,7 @@ At task start, explicitly determine:
   - `orch_machine_payload_authoritative`
   - `orch_delegate_substantive_work`
   - `orch_operator_subagent_default`
-  - `orch_non_trivial_subagent_mandatory`
+  - `orch_subagent_delegation_required_when_possible`
   - `orch_human_nuance_addendum`
   - `orch_atomic_task_delegation`
   - `orch_dual_channel_result_envelope`
@@ -211,8 +211,9 @@ Machine vs human guidance split for orchestration:
 - Machine-readable payload/config drives execution and validation.
 - Human-readable addendum captures nuance, rationale, and caveats not encoded in schema fields.
 - One orchestrator agent owns cross-task coordination/context in a session; subagents execute delegated atomic tasks and do not recursively orchestrate.
-- Operator/subagent delegation is mandatory for non-trivial work; direct single-agent execution is only for trivial tasks.
-- Idle subagents must be released as soon as they are no longer actively executing delegated work.
+- Operator/subagent delegation is mandatory whenever possible for both discovery and implementation work; direct single-agent execution is only for trivial coordination/meta steps or explicit infeasibility cases.
+- Orchestrators make complex decisions, then delegate investigation and implementation as strict atomic subagent tasks with explicit objective, inputs, acceptance criteria, and verification.
+- Idle or completed subagents must be released/closed immediately once they are no longer actively executing delegated work.
 - Subagent payload brevity is mandatory: one concrete objective, bounded context input, bounded completion summary.
 - Spec outline, refined spec, and detailed implementation plan sections must follow policy-defined verbosity budgets.
 - Model routing defaults are role/risk specific:
@@ -234,6 +235,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Policy manifest (canonical enforceable contracts + checks): `.agents-config/policies/agent-governance.json`
 - Enforcement runner: `.agents-config/scripts/enforce-agent-policies.mjs`
 - Local command: `node .agents-config/scripts/enforce-agent-policies.mjs`
+- CI-safe policy command: `npm run policy:check:ci`
 - Session preflight command: `npm run agent:preflight`
 - Canonical ruleset verify command: `npm run rules:canonical:verify`
 - Canonical ruleset sync command: `npm run rules:canonical:sync`
@@ -242,7 +244,8 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
 - Template-impact declaration gate: `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Logging compliance command: `npm run logging:compliance:verify`
-- CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (runs before frontend lint/docker build checks)
+- Release runtime contract command: `npm run release:contract:check`
+- CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + index readiness + release-runtime checks)
 - CI template gate: meaningful workflow-path changes require `Template-Impact` PR metadata (`yes` + `Template-Ref`, or `none` + `Template-Impact-Reason`).
 
 When policy expectations change, update all relevant governance artifacts in the same change set:

@@ -1,17 +1,17 @@
 {
   "metadata": {
     "id": "canonical-ruleset",
-    "version": "2026-02-24.11",
+    "version": "2026-02-26.02",
     "description": "Canonical governance rule catalog used for policy and drift checks.",
     "generated_from": [
       ".agents-config/policies/agent-governance.json",
       ".agents-config/docs/AGENT_RULES.md"
     ],
     "lineage": {
-      "policy_required_ids_sha256": "dc57239439d317a34802c4516df694e08eea2f970ea0e56886816e336e6bcd16",
-      "policy_orchestrator_rules_sha256": "2a54c2e96e0c2741edfdc99037d721fd62a508da9eeef079c0328e17a3c3a253",
-      "rules_doc_catalog_sha256": "5631e86b21704e79d7bff824b7fd5510733f0cf985e5b32d395735865e7fb7dc",
-      "canonical_rules_sha256": "5b8c673bf08de7f27ca7f9b921d93dc596ae8ddaedf6941a32528286d57094d9"
+      "policy_required_ids_sha256": "81025f13b94af64df694c7332be8f273058c67542a4182e8ce64483199b9e217",
+      "policy_orchestrator_rules_sha256": "5d6bae98890860e9cc1118216be111b377a40c9e3553f4e457eac8e2d29888d2",
+      "rules_doc_catalog_sha256": "29cb2a49afd4a877ba12c5146fd3d079f43698058d3df68be38e17e68204f469",
+      "canonical_rules_sha256": "0409127b147d3591deccec2cdf9b598cf3a594cb2600b349d9da8f6f98149782"
     }
   },
   "rules": [
@@ -321,7 +321,7 @@
     },
     {
       "id": "orch_delegate_substantive_work",
-      "statement": "Preserve orchestrator context by delegating substantive implementation/investigation tasks whenever delegation is available.",
+      "statement": "Preserve orchestrator context by delegating substantive discovery/investigation and implementation tasks whenever delegation is feasible.",
       "category": "orchestration",
       "severity": "error",
       "overrideable": false,
@@ -329,15 +329,15 @@
     },
     {
       "id": "orch_operator_subagent_default",
-      "statement": "All non-trivial work must be delegated to subagents; direct single-agent execution is restricted to trivial tasks.",
+      "statement": "Whenever possible, delegate discovery and implementation work to subagents; direct single-agent execution is restricted to trivial coordination/meta tasks.",
       "category": "orchestration",
       "severity": "error",
       "overrideable": false,
       "source": "policy.orchestratorSubagent.rules"
     },
     {
-      "id": "orch_non_trivial_subagent_mandatory",
-      "statement": "Treat subagent delegation for non-trivial work as mandatory and non-optional to preserve orchestrator context budget.",
+      "id": "orch_subagent_delegation_required_when_possible",
+      "statement": "Treat subagent delegation as mandatory whenever delegation is feasible, including investigation/discovery and implementation execution.",
       "category": "orchestration",
       "severity": "error",
       "overrideable": false,
@@ -353,7 +353,7 @@
     },
     {
       "id": "orch_atomic_task_delegation",
-      "statement": "Delegate work in atomic task slices so each subagent context remains narrow and auditable.",
+      "statement": "Delegate work in strict atomic task slices so each subagent receives a concrete objective with explicit inputs, acceptance criteria, and verification steps.",
       "category": "orchestration",
       "severity": "error",
       "overrideable": false,
@@ -377,7 +377,7 @@
     },
     {
       "id": "orch_release_idle_subagents_required",
-      "statement": "Release idle subagents as soon as they are no longer actively executing delegated work.",
+      "statement": "Release/close subagents immediately once they are complete or no longer actively executing delegated work.",
       "category": "orchestration",
       "severity": "error",
       "overrideable": false,

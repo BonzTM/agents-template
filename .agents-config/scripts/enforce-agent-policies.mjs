@@ -6,10 +6,49 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { verifyCanonicalRuleset } from "../tools/rules/verify-canonical-ruleset.mjs";
 
-const configPath = process.argv[2] ?? ".agents-config/policies/agent-governance.json";
+const DEFAULT_CONFIG_PATH = ".agents-config/policies/agent-governance.json";
+
+function parseCliArgs(argv) {
+  const parsed = {
+    configPath: DEFAULT_CONFIG_PATH,
+    ci: false,
+  };
+  const positional = [];
+
+  for (const token of argv) {
+    if (token === "--ci") {
+      parsed.ci = true;
+      continue;
+    }
+
+    if (token.startsWith("--")) {
+      console.error(`Unknown option: ${token}`);
+      process.exit(1);
+    }
+
+    positional.push(token);
+  }
+
+  if (positional.length > 1) {
+    console.error(
+      `Unexpected positional args: ${positional.join(" ")}. Expected at most one config path.`,
+    );
+    process.exit(1);
+  }
+
+  if (positional.length === 1) {
+    parsed.configPath = positional[0];
+  }
+
+  return parsed;
+}
+
+const cliArgs = parseCliArgs(process.argv.slice(2));
+const configPath = cliArgs.configPath;
 const failures = [];
 const warnings = [];
 let agentsAwareReadResolver = (value) => value;
+let activeRunOptions = { ci: cliArgs.ci };
 
 function addFailure(message) {
   failures.push(message);
@@ -1541,11 +1580,32 @@ function checkWorkspaceLayoutContract(config, runtimeRepoRoot, workspaceLayoutBa
   const localAgentsPath = toNonEmptyString(contract.localAgentsPath) ?? ".agents";
   const normalizedLocalAgentsPath = localAgentsPath.replace(/\\/g, "/");
   const expectedWorktreesRootResolved = resolveCanonicalWorktreesRoot(canonicalRepoRootResolved);
+  const ciMode = activeRunOptions.ci === true;
 
   if (worktreesRootResolved !== expectedWorktreesRootResolved) {
     addFailure(
       `${contractPath}.worktreesRoot must equal ${expectedWorktreesRootResolved}.`,
     );
+  }
+
+  const gitignoreContent = readFileIfPresent(".gitignore");
+  if (gitignoreContent !== null) {
+    for (const snippet of [
+      normalizedLocalAgentsPath,
+      `${normalizedLocalAgentsPath}/`,
+      `${normalizedLocalAgentsPath}/**`,
+    ]) {
+      if (!gitignoreContent.includes(snippet)) {
+        addFailure(`.gitignore must include ${snippet} for local-context hygiene.`);
+      }
+    }
+  }
+
+  if (ciMode) {
+    addWarning(
+      "CI mode enabled; skipping workspace symlink/worktree runtime checks for .agents state.",
+    );
+    return;
   }
 
   const inCanonicalRoot = runtimeRepoRootResolved === canonicalRepoRootResolved;
@@ -1599,19 +1659,6 @@ function checkWorkspaceLayoutContract(config, runtimeRepoRoot, workspaceLayoutBa
             );
           }
         }
-      }
-    }
-  }
-
-  const gitignoreContent = readFileIfPresent(".gitignore");
-  if (gitignoreContent !== null) {
-    for (const snippet of [
-      normalizedLocalAgentsPath,
-      `${normalizedLocalAgentsPath}/`,
-      `${normalizedLocalAgentsPath}/**`,
-    ]) {
-      if (!gitignoreContent.includes(snippet)) {
-        addFailure(`.gitignore must include ${snippet} for local-context hygiene.`);
       }
     }
   }
@@ -2602,14 +2649,34 @@ function checkContextIndexContract(config) {
       );
     }
     const defaultPattern = toNonEmptyString(index.orchestratorSubagent.defaultPattern);
-    if (defaultPattern !== "operator_subagent_required_non_trivial") {
+    if (defaultPattern !== "operator_subagent_required_when_possible") {
       addFailure(
-        `${contract.indexFile}.orchestratorSubagent.defaultPattern must equal "operator_subagent_required_non_trivial".`,
+        `${contract.indexFile}.orchestratorSubagent.defaultPattern must equal "operator_subagent_required_when_possible".`,
       );
     }
-    if (index.orchestratorSubagent.nonTrivialSubagentDelegationRequired !== true) {
+    if (index.orchestratorSubagent.subagentDelegationRequiredWhenPossible !== true) {
       addFailure(
-        `${contract.indexFile}.orchestratorSubagent.nonTrivialSubagentDelegationRequired must be true.`,
+        `${contract.indexFile}.orchestratorSubagent.subagentDelegationRequiredWhenPossible must be true.`,
+      );
+    }
+    if (index.orchestratorSubagent.delegationForDiscoveryRequiredWhenPossible !== true) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.delegationForDiscoveryRequiredWhenPossible must be true.`,
+      );
+    }
+    if (index.orchestratorSubagent.delegationForImplementationRequiredWhenPossible !== true) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.delegationForImplementationRequiredWhenPossible must be true.`,
+      );
+    }
+    if (index.orchestratorSubagent.strictAtomicTaskBriefsRequired !== true) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.strictAtomicTaskBriefsRequired must be true.`,
+      );
+    }
+    if (index.orchestratorSubagent.closeSubagentOnCompletionRequired !== true) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.closeSubagentOnCompletionRequired must be true.`,
       );
     }
     if (index.orchestratorSubagent.idleSubagentReleaseRequired !== true) {
@@ -2630,6 +2697,58 @@ function checkContextIndexContract(config) {
     if (Number.isInteger(policyIdleMax) && idleSubagentMaxIdleMinutes !== policyIdleMax) {
       addFailure(
         `${contract.indexFile}.orchestratorSubagent.idleSubagentMaxIdleMinutes must equal contracts.orchestratorSubagent.idleSubagentMaxIdleMinutes.`,
+      );
+    }
+    const policyDiscoveryDelegationRequired =
+      policyOrchestratorSubagent && typeof policyOrchestratorSubagent === "object"
+        ? policyOrchestratorSubagent.delegationForDiscoveryRequiredWhenPossible
+        : undefined;
+    if (
+      typeof policyDiscoveryDelegationRequired === "boolean" &&
+      index.orchestratorSubagent.delegationForDiscoveryRequiredWhenPossible !==
+        policyDiscoveryDelegationRequired
+    ) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.delegationForDiscoveryRequiredWhenPossible must equal contracts.orchestratorSubagent.delegationForDiscoveryRequiredWhenPossible.`,
+      );
+    }
+    const policyImplementationDelegationRequired =
+      policyOrchestratorSubagent && typeof policyOrchestratorSubagent === "object"
+        ? policyOrchestratorSubagent.delegationForImplementationRequiredWhenPossible
+        : undefined;
+    if (
+      typeof policyImplementationDelegationRequired === "boolean" &&
+      index.orchestratorSubagent.delegationForImplementationRequiredWhenPossible !==
+        policyImplementationDelegationRequired
+    ) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.delegationForImplementationRequiredWhenPossible must equal contracts.orchestratorSubagent.delegationForImplementationRequiredWhenPossible.`,
+      );
+    }
+    const policyStrictAtomicTaskBriefsRequired =
+      policyOrchestratorSubagent && typeof policyOrchestratorSubagent === "object"
+        ? policyOrchestratorSubagent.strictAtomicTaskBriefsRequired
+        : undefined;
+    if (
+      typeof policyStrictAtomicTaskBriefsRequired === "boolean" &&
+      index.orchestratorSubagent.strictAtomicTaskBriefsRequired !==
+        policyStrictAtomicTaskBriefsRequired
+    ) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.strictAtomicTaskBriefsRequired must equal contracts.orchestratorSubagent.strictAtomicTaskBriefsRequired.`,
+      );
+    }
+    const policyCloseSubagentOnCompletionRequired =
+      policyOrchestratorSubagent && typeof policyOrchestratorSubagent === "object"
+        ? policyOrchestratorSubagent.closeSubagentOnCompletionRequired
+        : undefined;
+    if (
+      typeof policyCloseSubagentOnCompletionRequired === "boolean" &&
+      index.orchestratorSubagent.closeSubagentOnCompletionRequired !==
+        policyCloseSubagentOnCompletionRequired
+    ) {
+      addFailure(
+        `${contract.indexFile}.orchestratorSubagent.closeSubagentOnCompletionRequired must equal contracts.orchestratorSubagent.closeSubagentOnCompletionRequired.`,
       );
     }
 
@@ -3581,6 +3700,24 @@ function checkJSDocCoverageContract(config) {
     }
   }
 
+  if (
+    !Number.isFinite(contract.minimumTotalCoveragePercent) ||
+    Number(contract.minimumTotalCoveragePercent) < 0 ||
+    Number(contract.minimumTotalCoveragePercent) > 100
+  ) {
+    addFailure(
+      `${contractPath}.minimumTotalCoveragePercent must be a number between 0 and 100.`,
+    );
+  }
+  if (
+    !Number.isInteger(contract.maximumMissingExportedSymbols) ||
+    contract.maximumMissingExportedSymbols < 0
+  ) {
+    addFailure(
+      `${contractPath}.maximumMissingExportedSymbols must be an integer greater than or equal to 0.`,
+    );
+  }
+
   const jsdocCoverageFile = toNonEmptyString(contract.file);
   const jsdocContent = jsdocCoverageFile ? readFileIfPresent(jsdocCoverageFile) : null;
   if (jsdocContent !== null) {
@@ -3602,6 +3739,45 @@ function checkJSDocCoverageContract(config) {
         continue;
       }
       cursor = index + section.length;
+    }
+
+    const totalRowMatch = jsdocContent.match(
+      /^\|\s*\*\*Total\*\*\s*\|\s*\*\*(\d+)\*\*\s*\|\s*\*\*(\d+)\*\*\s*\|\s*\*\*(\d+)\*\*\s*\|\s*\*\*(\d+)\*\*\s*\|\s*\*\*([0-9]+(?:\.[0-9]+)?)%\*\*\s*\|/m,
+    );
+    if (!totalRowMatch) {
+      addFailure(
+        `${jsdocCoverageFile} must include a parseable **Total** summary row in the Coverage Summary table.`,
+      );
+    } else {
+      const missingExportedSymbols = Number.parseInt(totalRowMatch[4], 10);
+      const totalCoveragePercent = Number.parseFloat(totalRowMatch[5]);
+      const minimumTotalCoveragePercent = Number.isFinite(
+        contract.minimumTotalCoveragePercent,
+      )
+        ? Number(contract.minimumTotalCoveragePercent)
+        : null;
+      const maximumMissingExportedSymbols = Number.isInteger(
+        contract.maximumMissingExportedSymbols,
+      )
+        ? Number(contract.maximumMissingExportedSymbols)
+        : null;
+
+      if (
+        minimumTotalCoveragePercent !== null &&
+        totalCoveragePercent < minimumTotalCoveragePercent
+      ) {
+        addFailure(
+          `${jsdocCoverageFile} total coverage ${totalCoveragePercent}% is below minimum ${minimumTotalCoveragePercent}%.`,
+        );
+      }
+      if (
+        maximumMissingExportedSymbols !== null &&
+        missingExportedSymbols > maximumMissingExportedSymbols
+      ) {
+        addFailure(
+          `${jsdocCoverageFile} missing exported symbols ${missingExportedSymbols} exceeds maximum ${maximumMissingExportedSymbols}.`,
+        );
+      }
     }
   }
 
@@ -5127,6 +5303,13 @@ function checkSessionArtifactsContract(config) {
     }
   }
 
+  if (activeRunOptions.ci === true) {
+    addWarning(
+      "CI mode enabled; skipping runtime .agents session-artifact state validation checks.",
+    );
+    return;
+  }
+
   const topLevelArrayFields = [
     "in_scope",
     "out_of_scope",
@@ -6643,6 +6826,141 @@ function checkCanonicalRulesContract(config, repoRoot, activeConfigPath) {
   }
 }
 
+const POLICY_ENFORCEMENT_CHECK_IDS = new Set([
+  "checkDocumentationModelContract",
+  "checkContextIndexContract",
+  "checkReleaseNotesContract",
+  "checkFeatureIndexContract",
+  "checkTestMatrixContract",
+  "checkRouteMapContract",
+  "checkDomainReadmesContract",
+  "checkJSDocCoverageContract",
+  "checkLoggingStandardsContract",
+  "checkSessionArtifactsContract",
+  "checkManagedFilesCanonicalContract",
+  "checkCanonicalRulesContract",
+  "checkRuleCatalogContract",
+  "checkOrchestratorSubagentContracts",
+  "checkWorkspaceLayoutContract",
+  "checkRequiredTextSnippets",
+  "checkRequiredMarkdownSections",
+  "checkRequiredSequenceSnippets",
+  "checkContinuityEntryFormat",
+  "checkForbiddenTextPatterns",
+  "checkDisallowedTrackedPathPrefixes",
+  "checkPolicyRuleQuality",
+]);
+
+function inferRuleEnforcementChecks(ruleId) {
+  if (!isNonEmptyString(ruleId)) {
+    return [];
+  }
+
+  if (ruleId.startsWith("orch_")) {
+    return ["checkOrchestratorSubagentContracts"];
+  }
+
+  if (
+    [
+      "rule_execution_queue_required",
+      "rule_queue_plan_before_execution",
+      "rule_queue_single_source_of_truth",
+      "rule_queue_scoped_context_read",
+      "rule_queue_archive_on_complete",
+      "rule_plan_machine_contract_required",
+      "rule_plan_step_reference_required",
+      "rule_plan_non_goals_status_gate",
+      "rule_plan_placeholder_deliverables_forbidden",
+      "rule_plan_complete_step_summary_required",
+      "rule_plan_status_coherence_required",
+      "rule_continuity_required",
+      "rule_post_compaction_rebootstrap",
+      "rule_repo_index_preflight_gate",
+    ].includes(ruleId)
+  ) {
+    return ["checkSessionArtifactsContract"];
+  }
+
+  if (ruleId === "rule_startup_read_order") {
+    return ["checkDocumentationModelContract"];
+  }
+
+  if (["rule_context_index_usage", "rule_context_index_drift_guard"].includes(ruleId)) {
+    return ["checkContextIndexContract"];
+  }
+
+  if (
+    [
+      "rule_canonical_ruleset_contract_required",
+      "rule_local_rule_overrides_contract_required",
+    ].includes(ruleId)
+  ) {
+    return ["checkCanonicalRulesContract"];
+  }
+
+  if (
+    [
+      "rule_managed_files_known_overrides_only",
+      "rule_managed_files_canonical_contract_required",
+    ].includes(ruleId)
+  ) {
+    return ["checkManagedFilesCanonicalContract"];
+  }
+
+  if (
+    [
+      "rule_canonical_agents_root",
+      "rule_worktree_root_required",
+      "rule_agents_semantic_merge_required",
+    ].includes(ruleId)
+  ) {
+    return ["checkWorkspaceLayoutContract"];
+  }
+
+  if (
+    [
+      "rule_release_notes_template_required",
+      "rule_release_notes_changelog_source_required",
+    ].includes(ruleId)
+  ) {
+    return ["checkReleaseNotesContract"];
+  }
+
+  if (ruleId === "rule_feature_index_required") {
+    return ["checkFeatureIndexContract"];
+  }
+  if (ruleId === "rule_test_matrix_required") {
+    return ["checkTestMatrixContract"];
+  }
+  if (ruleId === "rule_route_map_required") {
+    return ["checkRouteMapContract"];
+  }
+  if (ruleId === "rule_domain_readmes_required") {
+    return ["checkDomainReadmesContract"];
+  }
+  if (ruleId === "rule_jsdoc_coverage_required") {
+    return ["checkJSDocCoverageContract"];
+  }
+  if (ruleId === "rule_logging_contract_required") {
+    return ["checkLoggingStandardsContract"];
+  }
+
+  if (
+    [
+      "rule_scope_tight_no_overbroad_refactor",
+      "rule_hybrid_machine_human_contract",
+      "rule_policy_sync_required",
+      "rule_tdd_default",
+      "rule_coverage_default_100",
+      "rule_scope_completeness_gate",
+    ].includes(ruleId)
+  ) {
+    return ["checkRequiredTextSnippets"];
+  }
+
+  return [];
+}
+
 function checkRuleCatalogContract(config) {
   const contractPath = "contracts.ruleCatalog";
   const contract = config?.contracts?.ruleCatalog;
@@ -6670,6 +6988,21 @@ function checkRuleCatalogContract(config) {
     const snippet = `\`${id}\``;
     if (!rulesContent.includes(snippet)) {
       addFailure(`${contract.file} must reference rule id ${snippet}.`);
+    }
+
+    const enforcingChecks = inferRuleEnforcementChecks(id);
+    if (enforcingChecks.length === 0) {
+      addFailure(
+        `${contractPath}.requiredIds entry ${id} has no enforcement-check mapping; update inferRuleEnforcementChecks.`,
+      );
+      continue;
+    }
+    for (const checkId of enforcingChecks) {
+      if (!POLICY_ENFORCEMENT_CHECK_IDS.has(checkId)) {
+        addFailure(
+          `${contractPath}.requiredIds entry ${id} maps to unknown enforcement check ${checkId}.`,
+        );
+      }
     }
   }
 }
@@ -6724,8 +7057,24 @@ function checkOrchestratorSubagentContracts(config) {
     }
   }
 
-  if (contract.nonTrivialSubagentDelegationRequired !== true) {
-    addFailure(`${contractPath}.nonTrivialSubagentDelegationRequired must be true.`);
+  if (contract.subagentDelegationRequiredWhenPossible !== true) {
+    addFailure(`${contractPath}.subagentDelegationRequiredWhenPossible must be true.`);
+  }
+  if (contract.delegationForDiscoveryRequiredWhenPossible !== true) {
+    addFailure(
+      `${contractPath}.delegationForDiscoveryRequiredWhenPossible must be true.`,
+    );
+  }
+  if (contract.delegationForImplementationRequiredWhenPossible !== true) {
+    addFailure(
+      `${contractPath}.delegationForImplementationRequiredWhenPossible must be true.`,
+    );
+  }
+  if (contract.strictAtomicTaskBriefsRequired !== true) {
+    addFailure(`${contractPath}.strictAtomicTaskBriefsRequired must be true.`);
+  }
+  if (contract.closeSubagentOnCompletionRequired !== true) {
+    addFailure(`${contractPath}.closeSubagentOnCompletionRequired must be true.`);
   }
   if (contract.idleSubagentReleaseRequired !== true) {
     addFailure(`${contractPath}.idleSubagentReleaseRequired must be true.`);
@@ -6944,7 +7293,7 @@ function checkOrchestratorSubagentContracts(config) {
     "orch_machine_payload_authoritative",
     "orch_delegate_substantive_work",
     "orch_operator_subagent_default",
-    "orch_non_trivial_subagent_mandatory",
+    "orch_subagent_delegation_required_when_possible",
     "orch_human_nuance_addendum",
     "orch_atomic_task_delegation",
     "orch_dual_channel_result_envelope",
@@ -7079,7 +7428,13 @@ function checkPolicyRuleQuality(config) {
   }
 }
 
-function runPolicyChecks(activeConfigPath = configPath) {
+function runPolicyChecks(activeConfigPath = configPath, options = {}) {
+  const runOptions = {
+    ci: cliArgs.ci === true,
+    ...(options && typeof options === "object" ? options : {}),
+  };
+  activeRunOptions = runOptions;
+
   const repoRoot = resolveRepoRoot();
   process.chdir(repoRoot);
   const workspaceLayoutBaseRepoRoot = resolvePrimaryRepoRoot(repoRoot);
@@ -7136,7 +7491,12 @@ function runPolicyChecks(activeConfigPath = configPath) {
 }
 
 function main() {
-  const { config, warnings: runWarnings, failures: runFailures } = runPolicyChecks();
+  const { config, warnings: runWarnings, failures: runFailures } = runPolicyChecks(
+    configPath,
+    {
+      ci: cliArgs.ci === true,
+    },
+  );
 
   if (runWarnings.length > 0) {
     console.log("Policy warnings:");

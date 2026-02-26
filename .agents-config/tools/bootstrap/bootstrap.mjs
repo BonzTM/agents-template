@@ -235,10 +235,11 @@ function entryIsActive(entry, activeProfiles) {
   return profiles.some((profile) => activeProfiles.has(profile));
 }
 
-function copyManagedFiles({ templateRoot, targetRoot, manifest, profiles }) {
+function copyManagedFiles({ templateRoot, targetRoot, manifest, profiles, mode }) {
   const activeProfiles = new Set(profiles);
   const entries = Array.isArray(manifest?.managed_files) ? manifest.managed_files : [];
   let copied = 0;
+  let preserved = 0;
 
   for (const entry of entries) {
     if (!entryIsActive(entry, activeProfiles)) {
@@ -257,12 +258,23 @@ function copyManagedFiles({ templateRoot, targetRoot, manifest, profiles }) {
     }
 
     const dstPath = path.resolve(targetRoot, targetRelativePath);
+    const preserveExistingOverride =
+      mode === "existing" &&
+      entry?.allow_override === true &&
+      fs.existsSync(dstPath) &&
+      fs.statSync(dstPath).isFile();
+
+    if (preserveExistingOverride) {
+      preserved += 1;
+      continue;
+    }
+
     ensureDir(path.dirname(dstPath));
     fs.copyFileSync(srcPath, dstPath);
     copied += 1;
   }
 
-  return copied;
+  return { copied, preserved };
 }
 
 function mergePackageScripts({ templateRoot, targetRoot, packageName }) {
@@ -481,11 +493,12 @@ function main() {
   }
   const managedManifestTemplate = readJson(managedManifestTemplatePath);
 
-  const copiedCount = copyManagedFiles({
+  const copyStats = copyManagedFiles({
     templateRoot,
     targetRoot,
     manifest: managedManifestTemplate,
     profiles,
+    mode,
   });
 
   const packageMerge = mergePackageScripts({
@@ -519,7 +532,12 @@ function main() {
   if (agentsMode === "external") {
     console.log(`- agents workfiles path: ${agentsWorkfilesPath}`);
   }
-  console.log(`- managed files copied: ${copiedCount}`);
+  console.log(`- managed files copied: ${copyStats.copied}`);
+  if (copyStats.preserved > 0) {
+    console.log(
+      `- preserved existing allowlisted managed files (existing mode): ${copyStats.preserved}`,
+    );
+  }
   if (packageMerge.created) {
     console.log("- created package.json for agent workflow scripts");
   }

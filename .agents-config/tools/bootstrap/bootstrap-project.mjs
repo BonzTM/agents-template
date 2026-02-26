@@ -87,7 +87,24 @@ function toPosixPath(filePath) {
 }
 
 function normalizeRelativePath(filePath) {
-  return toPosixPath(filePath).replace(/^\.\//, "");
+  const normalized = path.posix
+    .normalize(toPosixPath(filePath))
+    .replace(/^\.\//, "");
+  if (normalized === ".") {
+    return "";
+  }
+  return normalized;
+}
+
+function assertSafeRepoRelativePath(candidatePath, label) {
+  const normalized = normalizeRelativePath(candidatePath);
+  if (
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.split("/").includes("..")
+  ) {
+    fail(`${label} must remain inside the repository root (received: ${candidatePath}).`);
+  }
 }
 
 function resolveManagedOverrideRepoPath({ entry, targetRelativePath, overrideRoot }) {
@@ -98,12 +115,19 @@ function resolveManagedOverrideRepoPath({ entry, targetRelativePath, overrideRoo
         `Managed entry ${JSON.stringify(entry?.path ?? "<unknown>")} uses absolute override_path; use a repo-relative path.`,
       );
     }
+    assertSafeRepoRelativePath(
+      explicitOverridePath,
+      `Managed entry ${JSON.stringify(entry?.path ?? "<unknown>")} override_path`,
+    );
     return normalizeRelativePath(explicitOverridePath);
   }
 
   const normalizedOverrideRoot = toNonEmptyString(overrideRoot)
     ? normalizeRelativePath(overrideRoot)
     : "";
+  if (normalizedOverrideRoot) {
+    assertSafeRepoRelativePath(normalizedOverrideRoot, "overrideRoot");
+  }
   if (!normalizedOverrideRoot) {
     return null;
   }
@@ -792,7 +816,7 @@ function main() {
   ]);
   const downstreamDocFileReplacements = new Map([
     [".agents-config/AGENTS_TEMPLATE.md", "AGENTS.md"],
-    [".agents-config/templates/claude/CLAUDE.md", ".claude/CLAUDE.md"],
+    [".agents-config/templates/CLAUDE.md", "CLAUDE.md"],
   ]);
 
   const rewrittenPolicy = deepReplaceStrings(
@@ -950,7 +974,7 @@ function main() {
     ["../agents-workfiles/project-template", canonicalAgentsRootRel],
     ["../agent-workfiles/project-template", canonicalAgentsRootRel],
     [".agents-config/AGENTS_TEMPLATE.md", "AGENTS.md"],
-    [".agents-config/templates/claude/CLAUDE.md", ".claude/CLAUDE.md"],
+    [".agents-config/templates/CLAUDE.md", "CLAUDE.md"],
   ];
   for (const docPath of [FILES.agentsDoc, FILES.rulesDoc, FILES.contextDoc, FILES.readme]) {
     const absoluteDocPath = path.resolve(repoRoot, docPath);

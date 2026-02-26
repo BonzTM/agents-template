@@ -5,7 +5,7 @@ Before proceeding any further, follow startup order in repository-root `AGENTS.m
 For downstream contract changes, edit downstream template sources (not local-only files):
 
 - `.agents-config/AGENTS_TEMPLATE.md`
-- `.agents-config/templates/claude/CLAUDE.md`
+- `.agents-config/templates/CLAUDE.md`
 
 After every context compaction, treat it as a fresh startup and re-run:
 
