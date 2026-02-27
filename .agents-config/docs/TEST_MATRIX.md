@@ -27,6 +27,7 @@ Canonical feature-to-test map for fast, targeted verification.
 
 ```bash
 npm run feature-index:verify
+npm run openapi-coverage:verify
 npm run logging:compliance:verify
 node .agents-config/scripts/enforce-agent-policies.mjs
 ```

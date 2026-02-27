@@ -24,6 +24,8 @@
     "feature-index:verify": "node .agents-config/tools/docs/feature-index-check.mjs --strict",
     "jsdoc-coverage:generate": "node .agents-config/tools/docs/generate-jsdoc-coverage.mjs --write",
     "jsdoc-coverage:verify": "node .agents-config/tools/docs/generate-jsdoc-coverage.mjs --check",
+    "openapi-coverage:generate": "node .agents-config/tools/docs/generate-openapi-coverage.mjs --write",
+    "openapi-coverage:verify": "node .agents-config/tools/docs/generate-openapi-coverage.mjs --check",
     "logging:compliance:generate": "node .agents-config/scripts/verify-logging-compliance.mjs --write-baseline",
     "logging:compliance:verify": "node .agents-config/scripts/verify-logging-compliance.mjs --check",
     "route-map:generate": "node .agents-config/tools/docs/generate-route-map.mjs --write",

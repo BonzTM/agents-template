@@ -264,6 +264,13 @@
       "allow_override": true
     },
     {
+      "path": ".agents-config/docs/OPENAPI_COVERAGE.md",
+      "profiles": [
+        "node-web"
+      ],
+      "allow_override": true
+    },
+    {
       "path": ".agents-config/docs/LOGGING_STANDARDS.md",
       "profiles": [
         "node-web"
@@ -323,6 +330,12 @@
     },
     {
       "path": ".agents-config/tools/docs/generate-jsdoc-coverage.mjs",
+      "profiles": [
+        "node-web"
+      ]
+    },
+    {
+      "path": ".agents-config/tools/docs/generate-openapi-coverage.mjs",
       "profiles": [
         "node-web"
       ]
@@ -507,6 +520,12 @@
     },
     {
       "path": ".agents-config/docs/JSDOC_COVERAGE.md",
+      "profiles": [
+        "node-web"
+      ]
+    },
+    {
+      "path": ".agents-config/docs/OPENAPI_COVERAGE.md",
       "profiles": [
         "node-web"
       ]

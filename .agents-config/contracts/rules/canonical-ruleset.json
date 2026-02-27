@@ -8,10 +8,10 @@
       ".agents-config/docs/AGENT_RULES.md"
     ],
     "lineage": {
-      "policy_required_ids_sha256": "81025f13b94af64df694c7332be8f273058c67542a4182e8ce64483199b9e217",
+      "policy_required_ids_sha256": "9803ce4b56484f98f595889664038e2c8a02a6ef6705a81010a84467a95f2c06",
       "policy_orchestrator_rules_sha256": "5d6bae98890860e9cc1118216be111b377a40c9e3553f4e457eac8e2d29888d2",
-      "rules_doc_catalog_sha256": "29cb2a49afd4a877ba12c5146fd3d079f43698058d3df68be38e17e68204f469",
-      "canonical_rules_sha256": "0409127b147d3591deccec2cdf9b598cf3a594cb2600b349d9da8f6f98149782"
+      "rules_doc_catalog_sha256": "0b9730b55a4abfe86503d2ed35817e321efcdfa570d2927f21645e37db373cd7",
+      "canonical_rules_sha256": "beb3cd9e71fac69316712aff33e214e983f93ac076a9144ba90233b92731fb05"
     }
   },
   "rules": [
@@ -469,6 +469,14 @@
       "category": ".agents-config/docs",
       "severity": "error",
       "overrideable": true,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_openapi_endpoint_docs_required",
+      "statement": "Maintain `.agents-config/docs/OPENAPI_COVERAGE.md` as the generated OpenAPI endpoint/spec coverage drift tracker.",
+      "category": "governance",
+      "severity": "error",
+      "overrideable": false,
       "source": "docs.ruleCatalog"
     }
   ]

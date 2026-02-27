@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-26.02",
+    "version": "2026-02-27.01",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
@@ -470,6 +470,8 @@
     "domainReadmesVerify": "npm run domain-readmes:verify",
     "jsdocCoverageGenerate": "npm run jsdoc-coverage:generate",
     "jsdocCoverageVerify": "npm run jsdoc-coverage:verify",
+    "openapiCoverageGenerate": "npm run openapi-coverage:generate",
+    "openapiCoverageVerify": "npm run openapi-coverage:verify",
     "loggingComplianceGenerate": "npm run logging:compliance:generate",
     "loggingComplianceVerify": "npm run logging:compliance:verify",
     "indexQueryStrictFresh": "node .agents-config/tools/index/indexer.mjs query \"<query>\" --strict-fresh",
@@ -481,6 +483,7 @@
     "testMatrixFile": "cat .agents-config/docs/TEST_MATRIX.md",
     "routeMapFile": "cat .agents-config/docs/ROUTE_MAP.md",
     "jsdocCoverageFile": "cat .agents-config/docs/JSDOC_COVERAGE.md",
+    "openapiCoverageFile": "cat .agents-config/docs/OPENAPI_COVERAGE.md",
     "loggingStandardsFile": "cat .agents-config/docs/LOGGING_STANDARDS.md",
     "routesReadmeFile": "cat backend/src/routes/README.md",
     "servicesReadmeFile": "cat backend/src/services/README.md",

@@ -43,6 +43,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_route_map_required`: Maintain `.agents-config/docs/ROUTE_MAP.md` as the canonical generated backend/frontend route map.
 - `rule_domain_readmes_required`: Maintain per-domain start-here READMEs in `backend/src/routes`, `backend/src/services`, and `frontend/features/*`.
 - `rule_jsdoc_coverage_required`: Maintain `.agents-config/docs/JSDOC_COVERAGE.md` as the generated exported-symbol documentation drift tracker.
+- `rule_openapi_endpoint_docs_required`: Maintain `.agents-config/docs/OPENAPI_COVERAGE.md` as the generated OpenAPI endpoint/spec coverage drift tracker.
 - `rule_logging_contract_required`: Maintain `.agents-config/docs/LOGGING_STANDARDS.md` and enforce logging compliance checks across frontend/backend/python runtime code.
 - `rule_release_notes_template_required`: Enforce canonical release-notes template + generator workflow, section order, and plain-English non-jargon summaries through policy checks.
 - `rule_release_notes_changelog_source_required`: Treat `CHANGELOG.md` as release-notes source of truth and rotate `Unreleased` during `release:prepare`.
@@ -118,6 +119,7 @@ These rules are cross-agent defaults for this workspace and apply unless the use
 - Treat `.agents-config/docs/TEST_MATRIX.md` as the canonical map from feature domains to targeted test commands.
 - Treat `.agents-config/docs/ROUTE_MAP.md` as the canonical generated map for backend endpoints and frontend routes.
 - Keep `.agents-config/docs/JSDOC_COVERAGE.md` current via `npm run jsdoc-coverage:verify` whenever exported-symbol surface changes.
+- Keep `.agents-config/docs/OPENAPI_COVERAGE.md` current via `npm run openapi-coverage:verify` whenever OpenAPI spec or route surface changes.
 - Regenerate route map artifacts with `npm run route-map:generate` whenever backend route handlers, route mounts, or frontend app routes change.
 - Maintain per-domain start-here READMEs in `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md`.
 - Whenever a feature is introduced, changed significantly, or removed, update or explicitly verify the impacted entry in `.agents-config/docs/FEATURE_INDEX.json`.
@@ -244,6 +246,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
 - Template-impact declaration gate: `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Logging compliance command: `npm run logging:compliance:verify`
+- OpenAPI coverage command: `npm run openapi-coverage:verify`
 - Release runtime contract command: `npm run release:contract:check`
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + index readiness + release-runtime checks)
 - CI template gate: meaningful workflow-path changes require `Template-Impact` PR metadata (`yes` + `Template-Ref`, or `none` + `Template-Impact-Reason`).
@@ -259,9 +262,10 @@ When policy expectations change, update all relevant governance artifacts in the
 7. `.agents-config/docs/TEST_MATRIX.md` (targeted test command map, when impacted)
 8. `.agents-config/docs/ROUTE_MAP.md` (generated backend/frontend route map, when impacted)
 9. `.agents-config/docs/JSDOC_COVERAGE.md` (generated exported-symbol JSDoc coverage tracker, when impacted)
-10. `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md` (domain start-here guides, when impacted)
-11. `.agents-config/policies/agent-governance.json` (machine-readable source of truth)
-12. `.agents-config/scripts/enforce-agent-policies.mjs` (enforcement logic)
+10. `.agents-config/docs/OPENAPI_COVERAGE.md` (generated OpenAPI endpoint/spec coverage tracker, when impacted)
+11. `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md` (domain start-here guides, when impacted)
+12. `.agents-config/policies/agent-governance.json` (machine-readable source of truth)
+13. `.agents-config/scripts/enforce-agent-policies.mjs` (enforcement logic)
 
 ## LLM Continuity and Execution Discipline
 

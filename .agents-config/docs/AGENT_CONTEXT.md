@@ -74,7 +74,7 @@ For this repository, documentation updates are part of done for behavior-changin
 - Treat `CHANGELOG.md` as the release-notes source of truth.
 - Run `npm run release:prepare -- --version <X.Y.Z>` before release publication.
 - Generate release notes with `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`.
-- Keep `.agents-config/docs/FEATURE_INDEX.json`, `.agents-config/docs/TEST_MATRIX.md`, `.agents-config/docs/ROUTE_MAP.md`, `.agents-config/docs/JSDOC_COVERAGE.md`, and `.agents-config/docs/LOGGING_STANDARDS.md` current.
+- Keep `.agents-config/docs/FEATURE_INDEX.json`, `.agents-config/docs/TEST_MATRIX.md`, `.agents-config/docs/ROUTE_MAP.md`, `.agents-config/docs/JSDOC_COVERAGE.md`, `.agents-config/docs/OPENAPI_COVERAGE.md`, and `.agents-config/docs/LOGGING_STANDARDS.md` current.
 - Keep `.agents-config/contracts/rules/canonical-ruleset.json` and `.agents-config/agent-overrides/rule-overrides.schema.json` synchronized with policy/rules updates (`npm run rules:canonical:verify`).
 - Keep per-domain start-here docs current in `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/README.md`.
 - Maintain canonical continuity in `.agents/CONTINUITY.md` and queue state in `.agents/EXECUTION_QUEUE.json`.

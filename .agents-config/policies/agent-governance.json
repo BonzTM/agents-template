@@ -66,6 +66,8 @@
         "domainReadmesVerify",
         "jsdocCoverageGenerate",
         "jsdocCoverageVerify",
+        "openapiCoverageGenerate",
+        "openapiCoverageVerify",
         "loggingComplianceGenerate",
         "loggingComplianceVerify",
         "indexQueryStrictFresh",
@@ -77,6 +79,7 @@
         "testMatrixFile",
         "routeMapFile",
         "jsdocCoverageFile",
+        "openapiCoverageFile",
         "loggingStandardsFile",
         "routesReadmeFile",
         "servicesReadmeFile",
@@ -651,7 +654,8 @@
         "orch_claude_model_default",
         "rule_route_map_required",
         "rule_domain_readmes_required",
-        "rule_jsdoc_coverage_required"
+        "rule_jsdoc_coverage_required",
+        "rule_openapi_endpoint_docs_required"
       ]
     },
     "orchestratorSubagent": {
@@ -868,6 +872,29 @@
       "minimumTotalCoveragePercent": 100,
       "maximumMissingExportedSymbols": 0
     },
+    "openapiCoverage": {
+      "file": ".agents-config/docs/OPENAPI_COVERAGE.md",
+      "generatorScript": ".agents-config/tools/docs/generate-openapi-coverage.mjs",
+      "npmGenerateScriptName": "openapi-coverage:generate",
+      "npmGenerateScriptCommand": "node .agents-config/tools/docs/generate-openapi-coverage.mjs --write",
+      "npmVerifyScriptName": "openapi-coverage:verify",
+      "npmVerifyScriptCommand": "node .agents-config/tools/docs/generate-openapi-coverage.mjs --check",
+      "contextIndexGenerateCommandKey": "openapiCoverageGenerate",
+      "contextIndexVerifyCommandKey": "openapiCoverageVerify",
+      "contextIndexCoverageFileCommandKey": "openapiCoverageFile",
+      "requiredSections": [
+        "# OpenAPI Endpoint Coverage Baseline",
+        "## Coverage Summary",
+        "## Missing OpenAPI Endpoint Docs"
+      ],
+      "profiles": [
+        "node-web"
+      ],
+      "enabled": true,
+      "minimumTotalCoveragePercent": 100,
+      "maximumMissingEndpoints": 0,
+      "maximumUndocumentableEndpoints": 0
+    },
     "loggingStandards": {
       "standardsFile": ".agents-config/docs/LOGGING_STANDARDS.md",
       "verifyScript": ".agents-config/scripts/verify-logging-compliance.mjs",
@@ -978,6 +1005,7 @@
           ".agents-config/docs/TEST_MATRIX.md",
           ".agents-config/docs/ROUTE_MAP.md",
           ".agents-config/docs/JSDOC_COVERAGE.md",
+          ".agents-config/docs/OPENAPI_COVERAGE.md",
           ".agents-config/docs/LOGGING_STANDARDS.md",
           "must delegate discovery and implementation work to subagents whenever possible",
           "Subagent assignments must be strict and atomic with clear objective, context, acceptance criteria, and verification expectations.",
@@ -994,6 +1022,7 @@
           "`rule_canonical_agents_root`",
           "`rule_worktree_root_required`",
           "`rule_logging_contract_required`",
+          "`rule_openapi_endpoint_docs_required`",
           "### Accuracy, Recency, and Sourcing (Required)",
           "### Context7 MCP and Web Search Policy",
           "### Container-First Policy (Required)",
@@ -1024,7 +1053,7 @@
           "## Local Testing Bootstrap",
           "## Common Tasks",
           "Treat `CHANGELOG.md` as the release-notes source of truth.",
-          "Keep `.agents-config/docs/FEATURE_INDEX.json`, `.agents-config/docs/TEST_MATRIX.md`, `.agents-config/docs/ROUTE_MAP.md`, `.agents-config/docs/JSDOC_COVERAGE.md`, and `.agents-config/docs/LOGGING_STANDARDS.md` current."
+          "Keep `.agents-config/docs/FEATURE_INDEX.json`, `.agents-config/docs/TEST_MATRIX.md`, `.agents-config/docs/ROUTE_MAP.md`, `.agents-config/docs/JSDOC_COVERAGE.md`, `.agents-config/docs/OPENAPI_COVERAGE.md`, and `.agents-config/docs/LOGGING_STANDARDS.md` current."
         ]
       },
       {
@@ -1048,6 +1077,7 @@
           "[`TEST_MATRIX.md`](TEST_MATRIX.md)",
           "[`ROUTE_MAP.md`](ROUTE_MAP.md)",
           "[`JSDOC_COVERAGE.md`](JSDOC_COVERAGE.md)",
+          "[`OPENAPI_COVERAGE.md`](OPENAPI_COVERAGE.md)",
           "[`LOGGING_STANDARDS.md`](LOGGING_STANDARDS.md)",
           "[`../backend/src/routes/README.md`](../backend/src/routes/README.md)",
           "[`../backend/src/services/README.md`](../backend/src/services/README.md)",
@@ -1089,6 +1119,8 @@
           "\"domain-readmes:verify\"",
           "\"jsdoc-coverage:generate\"",
           "\"jsdoc-coverage:verify\"",
+          "\"openapi-coverage:generate\"",
+          "\"openapi-coverage:verify\"",
           "\"logging:compliance:generate\"",
           "\"logging:compliance:verify\"",
           "\"policy:check:ci\"",
@@ -1179,6 +1211,17 @@
           "# JSDoc Coverage Baseline",
           "## Coverage Summary",
           "## Missing Exported Symbols (Top 250)"
+        ]
+      },
+      {
+        "file": ".agents-config/docs/OPENAPI_COVERAGE.md",
+        "profiles": [
+          "node-web"
+        ],
+        "sections": [
+          "# OpenAPI Endpoint Coverage Baseline",
+          "## Coverage Summary",
+          "## Missing OpenAPI Endpoint Docs"
         ]
       },
       {

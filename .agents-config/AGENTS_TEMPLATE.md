@@ -42,6 +42,7 @@ Read these in order before non-trivial work:
 - Test matrix artifact: `.agents-config/docs/TEST_MATRIX.md`
 - Route map artifact: `.agents-config/docs/ROUTE_MAP.md`
 - JSDoc coverage artifact: `.agents-config/docs/JSDOC_COVERAGE.md`
+- OpenAPI coverage artifact: `.agents-config/docs/OPENAPI_COVERAGE.md`
 - Logging standards source of truth: `.agents-config/docs/LOGGING_STANDARDS.md`
 - Runtime logging rule: everything in project runtime code should be logged appropriately through shared logging helpers.
 - Domain start-here readmes: `backend/src/routes/README.md`, `backend/src/services/README.md`, `frontend/features/*/README.md`
@@ -188,6 +189,7 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Route map generator: `npm run route-map:generate`
 - Domain readmes generator: `npm run domain-readmes:generate`
 - JSDoc coverage verify: `npm run jsdoc-coverage:verify`
+- OpenAPI coverage verify: `npm run openapi-coverage:verify`
 - Logging compliance verify: `npm run logging:compliance:verify`
 - Logging policy requirement: runtime code paths should not ship without appropriate scoped logging coverage.
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + index readiness + release-runtime checks)
@@ -205,6 +207,7 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
   - `.agents-config/docs/TEST_MATRIX.md`
   - `.agents-config/docs/ROUTE_MAP.md`
   - `.agents-config/docs/JSDOC_COVERAGE.md`
+  - `.agents-config/docs/OPENAPI_COVERAGE.md`
   - `.agents-config/docs/LOGGING_STANDARDS.md`
   - `backend/src/routes/README.md`
   - `backend/src/services/README.md`

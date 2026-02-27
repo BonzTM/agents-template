@@ -3868,6 +3868,346 @@ function checkJSDocCoverageContract(config) {
   }
 }
 
+function checkOpenAPICoverageContract(config) {
+  const contractPath = "contracts.openapiCoverage";
+  const contract = config?.contracts?.openapiCoverage;
+  if (!isContractEnabled(config, contract)) {
+    return;
+  }
+  if (!contract || typeof contract !== "object") {
+    addFailure(`${contractPath} is required and must be an object.`);
+    return;
+  }
+
+  const requiredStrings = {
+    file: ".agents-config/docs/OPENAPI_COVERAGE.md",
+    generatorScript: ".agents-config/tools/docs/generate-openapi-coverage.mjs",
+    npmGenerateScriptName: "openapi-coverage:generate",
+    npmGenerateScriptCommand:
+      "node .agents-config/tools/docs/generate-openapi-coverage.mjs --write",
+    npmVerifyScriptName: "openapi-coverage:verify",
+    npmVerifyScriptCommand:
+      "node .agents-config/tools/docs/generate-openapi-coverage.mjs --check",
+    contextIndexGenerateCommandKey: "openapiCoverageGenerate",
+    contextIndexVerifyCommandKey: "openapiCoverageVerify",
+    contextIndexCoverageFileCommandKey: "openapiCoverageFile",
+  };
+
+  for (const [fieldName, expectedValue] of Object.entries(requiredStrings)) {
+    const actualValue = toNonEmptyString(contract[fieldName]);
+    if (!actualValue) {
+      addFailure(`${contractPath}.${fieldName} must be a non-empty string.`);
+      continue;
+    }
+    if (actualValue !== expectedValue) {
+      addFailure(
+        `${contractPath}.${fieldName} must equal "${expectedValue}" (found "${actualValue}").`,
+      );
+    }
+  }
+
+  if (
+    !Number.isFinite(contract.minimumTotalCoveragePercent) ||
+    Number(contract.minimumTotalCoveragePercent) < 0 ||
+    Number(contract.minimumTotalCoveragePercent) > 100
+  ) {
+    addFailure(
+      `${contractPath}.minimumTotalCoveragePercent must be a number between 0 and 100.`,
+    );
+  }
+  if (!Number.isInteger(contract.maximumMissingEndpoints) || contract.maximumMissingEndpoints < 0) {
+    addFailure(
+      `${contractPath}.maximumMissingEndpoints must be an integer greater than or equal to 0.`,
+    );
+  }
+  if (
+    !Number.isInteger(contract.maximumUndocumentableEndpoints) ||
+    contract.maximumUndocumentableEndpoints < 0
+  ) {
+    addFailure(
+      `${contractPath}.maximumUndocumentableEndpoints must be an integer greater than or equal to 0.`,
+    );
+  }
+
+  const openapiCoverageFile = toNonEmptyString(contract.file);
+  const openapiContent = openapiCoverageFile ? readFileIfPresent(openapiCoverageFile) : null;
+  if (openapiContent !== null) {
+    const requiredSections = validateStringArray(
+      contract.requiredSections,
+      `${contractPath}.requiredSections`,
+    );
+    let cursor = 0;
+    for (const section of requiredSections) {
+      const index = openapiContent.indexOf(section, cursor);
+      if (index === -1) {
+        if (openapiContent.includes(section)) {
+          addFailure(
+            `${openapiCoverageFile} contains section out of order relative to ${contractPath}.requiredSections: ${section}`,
+          );
+        } else {
+          addFailure(`${openapiCoverageFile} is missing required section: ${section}`);
+        }
+        continue;
+      }
+      cursor = index + section.length;
+    }
+
+    const normalizeCellValue = (value) => value.replace(/\*\*/g, "").replace(/`/g, "").trim();
+    const parseTableCells = (line) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine.startsWith("|")) {
+        return [];
+      }
+      return trimmedLine
+        .split("|")
+        .slice(1, -1)
+        .map((cell) => cell.trim());
+    };
+    const extractSectionBody = (content, heading) => {
+      const headingIndex = content.indexOf(heading);
+      if (headingIndex === -1) {
+        return null;
+      }
+      const afterHeading = content.slice(headingIndex + heading.length);
+      const nextHeadingIndex = afterHeading.search(/\n##\s+/);
+      if (nextHeadingIndex === -1) {
+        return afterHeading;
+      }
+      return afterHeading.slice(0, nextHeadingIndex);
+    };
+    const parseIntegerCell = (cellValue) => {
+      const normalized = normalizeCellValue(cellValue).replace(/,/g, "");
+      if (!/^\d+$/.test(normalized)) {
+        return null;
+      }
+      return Number.parseInt(normalized, 10);
+    };
+    const parsePercentCell = (cellValue) => {
+      const normalized = normalizeCellValue(cellValue).replace("%", "").replace(/,/g, "");
+      if (!/^\d+(?:\.\d+)?$/.test(normalized)) {
+        return null;
+      }
+      return Number.parseFloat(normalized);
+    };
+
+    const coverageSummarySection = extractSectionBody(openapiContent, "## Coverage Summary");
+    if (!coverageSummarySection) {
+      addFailure(
+        `${openapiCoverageFile} must include a Coverage Summary section to parse total metrics.`,
+      );
+    } else {
+      const lines = coverageSummarySection.split(/\r?\n/);
+      let headerCells = null;
+      let totalRowCells = null;
+
+      for (const line of lines) {
+        const cells = parseTableCells(line);
+        if (cells.length === 0) {
+          continue;
+        }
+        const isSeparatorRow = cells.every((cell) =>
+          /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")),
+        );
+        if (isSeparatorRow) {
+          continue;
+        }
+        if (!headerCells) {
+          headerCells = cells;
+          continue;
+        }
+        const rowLabel = normalizeCellValue(cells[0]).toLowerCase();
+        if (rowLabel === "total") {
+          totalRowCells = cells;
+          break;
+        }
+      }
+
+      if (!headerCells || !totalRowCells) {
+        addFailure(
+          `${openapiCoverageFile} must include a parseable **Total** summary row in the Coverage Summary table.`,
+        );
+      } else {
+        const normalizedHeaders = headerCells.map((cell) =>
+          normalizeCellValue(cell).toLowerCase(),
+        );
+        const coverageColumnIndex = normalizedHeaders.findIndex((header) =>
+          header.includes("coverage"),
+        );
+        const missingColumnIndex = normalizedHeaders.findIndex((header) =>
+          header.includes("missing"),
+        );
+        const undocumentableColumnIndex = normalizedHeaders.findIndex((header) =>
+          header.includes("undocumentable"),
+        );
+
+        const hasRequiredColumns =
+          coverageColumnIndex !== -1 &&
+          missingColumnIndex !== -1 &&
+          undocumentableColumnIndex !== -1;
+        const indexesWithinBounds =
+          hasRequiredColumns &&
+          coverageColumnIndex < totalRowCells.length &&
+          missingColumnIndex < totalRowCells.length &&
+          undocumentableColumnIndex < totalRowCells.length;
+
+        if (!hasRequiredColumns || !indexesWithinBounds) {
+          addFailure(
+            `${openapiCoverageFile} Coverage Summary table must include coverage, missing, and undocumentable columns with values in the **Total** row.`,
+          );
+        } else {
+          const totalCoveragePercent = parsePercentCell(totalRowCells[coverageColumnIndex]);
+          const missingEndpoints = parseIntegerCell(totalRowCells[missingColumnIndex]);
+          const undocumentableEndpoints = parseIntegerCell(
+            totalRowCells[undocumentableColumnIndex],
+          );
+
+          if (
+            !Number.isFinite(totalCoveragePercent) ||
+            missingEndpoints === null ||
+            undocumentableEndpoints === null
+          ) {
+            addFailure(
+              `${openapiCoverageFile} must include parseable coverage/missing/undocumentable metrics in the **Total** row.`,
+            );
+          } else {
+            const minimumTotalCoveragePercent = Number.isFinite(
+              contract.minimumTotalCoveragePercent,
+            )
+              ? Number(contract.minimumTotalCoveragePercent)
+              : null;
+            const maximumMissingEndpoints = Number.isInteger(contract.maximumMissingEndpoints)
+              ? Number(contract.maximumMissingEndpoints)
+              : null;
+            const maximumUndocumentableEndpoints = Number.isInteger(
+              contract.maximumUndocumentableEndpoints,
+            )
+              ? Number(contract.maximumUndocumentableEndpoints)
+              : null;
+
+            if (
+              minimumTotalCoveragePercent !== null &&
+              totalCoveragePercent < minimumTotalCoveragePercent
+            ) {
+              addFailure(
+                `${openapiCoverageFile} total coverage ${totalCoveragePercent}% is below minimum ${minimumTotalCoveragePercent}%.`,
+              );
+            }
+            if (maximumMissingEndpoints !== null && missingEndpoints > maximumMissingEndpoints) {
+              addFailure(
+                `${openapiCoverageFile} missing endpoints ${missingEndpoints} exceeds maximum ${maximumMissingEndpoints}.`,
+              );
+            }
+            if (
+              maximumUndocumentableEndpoints !== null &&
+              undocumentableEndpoints > maximumUndocumentableEndpoints
+            ) {
+              addFailure(
+                `${openapiCoverageFile} undocumentable endpoints ${undocumentableEndpoints} exceeds maximum ${maximumUndocumentableEndpoints}.`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const generatorScript = toNonEmptyString(contract.generatorScript);
+  if (generatorScript) {
+    readFileIfPresent(generatorScript);
+    const verifyResult = runCommandSafe("node", [generatorScript, "--check"]);
+    if (!verifyResult.ok) {
+      const details = verifyResult.stderr || verifyResult.stdout || "unknown failure";
+      addFailure(
+        `${contractPath} generator check failed. Run npm run openapi-coverage:generate. Details: ${details}`,
+      );
+    }
+  }
+
+  const packageJson = readJsonIfPresent("package.json");
+  if (!packageJson || typeof packageJson !== "object") {
+    return;
+  }
+
+  const scripts =
+    packageJson.scripts && typeof packageJson.scripts === "object"
+      ? packageJson.scripts
+      : null;
+  if (!scripts) {
+    addFailure("package.json scripts block is required for openapi-coverage wiring.");
+    return;
+  }
+
+  const generateScriptName = toNonEmptyString(contract.npmGenerateScriptName);
+  const generateScriptCommand = toNonEmptyString(contract.npmGenerateScriptCommand);
+  const verifyScriptName = toNonEmptyString(contract.npmVerifyScriptName);
+  const verifyScriptCommand = toNonEmptyString(contract.npmVerifyScriptCommand);
+
+  if (generateScriptName && generateScriptCommand) {
+    const configuredGenerate = toNonEmptyString(scripts[generateScriptName]);
+    if (!configuredGenerate) {
+      addFailure(`package.json scripts must define "${generateScriptName}".`);
+    } else if (configuredGenerate !== generateScriptCommand) {
+      addFailure(
+        `package.json scripts["${generateScriptName}"] must equal "${generateScriptCommand}" (found "${configuredGenerate}").`,
+      );
+    }
+  }
+
+  if (verifyScriptName && verifyScriptCommand) {
+    const configuredVerify = toNonEmptyString(scripts[verifyScriptName]);
+    if (!configuredVerify) {
+      addFailure(`package.json scripts must define "${verifyScriptName}".`);
+    } else if (configuredVerify !== verifyScriptCommand) {
+      addFailure(
+        `package.json scripts["${verifyScriptName}"] must equal "${verifyScriptCommand}" (found "${configuredVerify}").`,
+      );
+    }
+  }
+
+  const contextIndex = readJsonIfPresent(".agents-config/docs/CONTEXT_INDEX.json");
+  if (contextIndex && typeof contextIndex === "object") {
+    const commands =
+      contextIndex.commands && typeof contextIndex.commands === "object"
+        ? contextIndex.commands
+        : null;
+    if (!commands) {
+      addFailure(".agents-config/docs/CONTEXT_INDEX.json commands block is required.");
+      return;
+    }
+
+    const generateCommandKey = toNonEmptyString(contract.contextIndexGenerateCommandKey);
+    const verifyCommandKey = toNonEmptyString(contract.contextIndexVerifyCommandKey);
+    const coverageFileCommandKey = toNonEmptyString(contract.contextIndexCoverageFileCommandKey);
+
+    if (generateCommandKey) {
+      const generateCommand = toNonEmptyString(commands[generateCommandKey]);
+      if (generateCommand !== "npm run openapi-coverage:generate") {
+        addFailure(
+          `.agents-config/docs/CONTEXT_INDEX.json.commands.${generateCommandKey} must equal "npm run openapi-coverage:generate".`,
+        );
+      }
+    }
+
+    if (verifyCommandKey) {
+      const verifyCommand = toNonEmptyString(commands[verifyCommandKey]);
+      if (verifyCommand !== "npm run openapi-coverage:verify") {
+        addFailure(
+          `.agents-config/docs/CONTEXT_INDEX.json.commands.${verifyCommandKey} must equal "npm run openapi-coverage:verify".`,
+        );
+      }
+    }
+
+    if (coverageFileCommandKey) {
+      const coverageFileCommand = toNonEmptyString(commands[coverageFileCommandKey]);
+      if (coverageFileCommand !== "cat .agents-config/docs/OPENAPI_COVERAGE.md") {
+        addFailure(
+          `.agents-config/docs/CONTEXT_INDEX.json.commands.${coverageFileCommandKey} must equal "cat .agents-config/docs/OPENAPI_COVERAGE.md".`,
+        );
+      }
+    }
+  }
+}
+
 function checkLoggingStandardsContract(config) {
   const contractPath = "contracts.loggingStandards";
   const contract = config?.contracts?.loggingStandards;
@@ -6835,6 +7175,7 @@ const POLICY_ENFORCEMENT_CHECK_IDS = new Set([
   "checkRouteMapContract",
   "checkDomainReadmesContract",
   "checkJSDocCoverageContract",
+  "checkOpenAPICoverageContract",
   "checkLoggingStandardsContract",
   "checkSessionArtifactsContract",
   "checkManagedFilesCanonicalContract",
@@ -6940,6 +7281,9 @@ function inferRuleEnforcementChecks(ruleId) {
   }
   if (ruleId === "rule_jsdoc_coverage_required") {
     return ["checkJSDocCoverageContract"];
+  }
+  if (ruleId === "rule_openapi_endpoint_docs_required") {
+    return ["checkOpenAPICoverageContract"];
   }
   if (ruleId === "rule_logging_contract_required") {
     return ["checkLoggingStandardsContract"];
@@ -7469,6 +7813,7 @@ function runPolicyChecks(activeConfigPath = configPath, options = {}) {
   checkRouteMapContract(config);
   checkDomainReadmesContract(config);
   checkJSDocCoverageContract(config);
+  checkOpenAPICoverageContract(config);
   checkLoggingStandardsContract(config);
   checkSessionArtifactsContract(config);
   checkManagedFilesCanonicalContract(config);
