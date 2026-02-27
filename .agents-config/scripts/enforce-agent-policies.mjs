@@ -406,6 +406,11 @@ function checkForbiddenTextPatterns(config, trackedFiles, trackedFilesReliable) 
         continue;
       }
 
+      if (!fs.existsSync(filePath)) {
+        addWarning(`Tracked file missing during forbidden-text scan: ${filePath}`);
+        continue;
+      }
+
       const content = fs.readFileSync(filePath, "utf8");
       if (!isLikelyText(content)) {
         continue;

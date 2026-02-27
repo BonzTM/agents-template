@@ -8,6 +8,12 @@ Deterministic local repository indexing for retrieval and drift detection.
 - Enable strict verification gates before implementation.
 - Preserve reproducible indexing across branches/worktrees.
 
+## Local Customization Modes
+
+- Replacement mode: if `.agents-config/agent-overrides/.agents-config/docs/REPO_INDEXING.replace.md` exists, managed sync/check treats it as the authoritative local content for `.agents-config/docs/REPO_INDEXING.md`.
+- Additive mode (default): when the `.replace.md` file is absent, optional `.agents-config/agent-overrides/.agents-config/docs/REPO_INDEXING.override.md` content is appended after the canonical template body.
+- Keep `.agents-config/docs/REPO_INDEXING.md` template-managed; place local project indexing details in `.replace.md` or `.override.md`.
+
 ## Canonical Commands
 
 ```bash
