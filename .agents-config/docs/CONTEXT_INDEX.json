@@ -493,11 +493,7 @@
       "python"
     ],
     "activeProfiles": [
-      "base",
-      "typescript",
-      "typescript-openapi",
-      "javascript",
-      "python"
+      "base"
     ]
   },
   "managedFilesCanonical": {
