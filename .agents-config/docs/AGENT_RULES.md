@@ -26,12 +26,11 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_policy_sync_required`: When process expectations change, update policy + enforcement + human docs together.
 - `rule_continuity_required`: Read and maintain `.agents/CONTINUITY.md` as canonical continuity context.
 - `rule_post_compaction_rebootstrap`: Treat compaction recovery as full startup and run preflight.
-- `rule_repo_index_preflight_gate`: Require preflight index readiness checks (always re-index, then strict verify) before implementation starts.
 - `rule_context_index_drift_guard`: Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with policy/documentation contracts and fail checks on drift.
 - `rule_canonical_ruleset_contract_required`: Maintain canonical rule IDs/statements in `.agents-config/contracts/rules/canonical-ruleset.json` with hash lineage tied to policy and rules docs.
-- `rule_local_rule_overrides_contract_required`: Allow local-only override IDs only through `.agents-config/agent-overrides/rule-overrides.json`, validated against `.agents-config/agent-overrides/rule-overrides.schema.json`.
+- `rule_local_rule_overrides_contract_required`: Allow local-only override IDs only through `.agents-config/rule-overrides.json`, validated against `.agents-config/rule-overrides.schema.json`.
 - `rule_managed_files_canonical_contract_required`: Keep managed workflow manifests (`.agents-config/agent-managed.json` and `.agents-config/tools/bootstrap/managed-files.template.json`) canonical with explicit `canonical_contract` defaults and authority modes.
-- `rule_managed_files_known_overrides_only`: Permit managed-file override payloads only for explicitly allowlisted entries (`allow_override=true`) and fail unknown `.agents-config/agent-overrides/**` payload files.
+- `rule_managed_files_known_overrides_only`: Permit managed-file override payloads only for explicitly allowlisted entries (`allow_override=true`) and fail unknown/non-allowlisted override payload files (adjacent `.override`/`.append`).
 - `rule_canonical_agents_root`: Treat `.agents` as the canonical project-local agent-context path; bootstrap defaults to external workfiles mode where `.agents` symlinks to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`), and local `.agents` mode is explicit via `--agents-mode local`.
 - `rule_worktree_root_required`: Keep all non-primary Git worktrees under `../<repo-name>.worktrees`.
 - `rule_agents_semantic_merge_required`: `.agents/**` is shared multi-session state; every `.agents/**` edit must be semantically merged against latest on-disk state.
@@ -179,9 +178,9 @@ At task start, explicitly determine:
 
 - Treat `.agents-config/agent-managed.json` and `.agents-config/tools/bootstrap/managed-files.template.json` as canonical machine-readable workflow surface declarations.
 - Keep `canonical_contract.default_authority` as `template` and explicitly declare any non-template behavior using the per-entry `authority` field.
-- Override payload files live under `.agents-config/agent-overrides/<managed-path>` and are valid only when the managed entry sets `allow_override=true`.
-- Bootstrap should seed allowlisted override payloads for rewritten files only when local content diverges from template source.
-- Unknown or non-allowlisted `.agents-config/agent-overrides/**` payload files must fail `npm run agent:managed -- --mode check`.
+- Override payload files are adjacent to managed files by default (`<managed-file>.override.<ext>` for full replacement, `<managed-file>.append.<ext>` for additive merge) and are valid only when the managed entry sets `allow_override=true`.
+- Bootstrap must not auto-seed managed override payloads; overrides are opt-in local artifacts (`.override`/`.append`) when local divergence is intentional.
+- Unknown or non-allowlisted override payload files (adjacent `.override`/`.append`) must fail `npm run agent:managed -- --mode check`.
 
 ### Orchestrator/Subagent Instruction Contract (Required)
 
@@ -248,7 +247,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Logging compliance command: `npm run logging:compliance:verify`
 - OpenAPI coverage command: `npm run openapi-coverage:verify`
 - Release runtime contract command: `npm run release:contract:check`
-- CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + index readiness + release-runtime checks)
+- CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
 - CI template gate: meaningful workflow-path changes require `Template-Impact` PR metadata (`yes` + `Template-Ref`, or `none` + `Template-Impact-Reason`).
 
 When policy expectations change, update all relevant governance artifacts in the same change set:
@@ -420,14 +419,6 @@ When policy expectations change, update all relevant governance artifacts in the
   - when a feature/top-level queue enters `complete`, archive the feature snapshot and reset hot queue state from `complete`.
   - maintain `.agents/EXECUTION_ARCHIVE_INDEX.json` as lookup metadata for archived records.
   - do not read archive shards during normal startup; load archive files only for explicit historical/regression lookup.
-- Repository index readiness gate:
-  - `npm run agent:preflight` must check branch/worktree index readiness.
-  - `npm run agent:preflight` must re-index the active namespaced index before readiness verification.
-  - After re-indexing, preflight runs strict verify before implementation starts.
-  - If re-index or strict verify fails, treat it as a blocking failure unless policy explicitly sets warn mode.
-- End-of-task index verification:
-  - When feasible, run `npm run index:verify` before final handoff.
-  - If verify reports drift, run `npm run index:build` and re-run verify in the same session.
 - CONTEXT_INDEX drift guard:
   - Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with `.agents-config/AGENTS_TEMPLATE.md`, policy contracts, and command map entries.
   - Policy checks must fail if `.agents-config/docs/CONTEXT_INDEX.json` paths/headings/commands drift from canonical contracts.
@@ -473,7 +464,6 @@ A task is done when all of the following are true:
   - build attempted when code changed,
   - linting run when code changed,
   - tests/typecheck run as applicable,
-  - `npm run index:verify` run when index-backed retrieval was used or index-governance artifacts changed (with rebuild + re-verify if drifted),
   - remaining warnings/errors are either fixed or explicitly listed as out-of-scope.
 - Documentation is updated for impacted areas.
 - Follow-ups are listed for intentionally deferred work.

@@ -1881,7 +1881,6 @@ function checkContextIndexContract(config) {
       "queueQualityGate",
       "workspaceLayout",
       "sessionBriefContract",
-      "repositoryIndexPreflight",
     ];
 
     for (const fieldName of requiredSessionArtifactFields) {
@@ -2431,99 +2430,6 @@ function checkContextIndexContract(config) {
     } else {
       addFailure(
         `${contract.indexFile}.sessionArtifacts.sessionBriefContract must be an object.`,
-      );
-    }
-
-    if (
-      index.sessionArtifacts.repositoryIndexPreflight &&
-      typeof index.sessionArtifacts.repositoryIndexPreflight === "object"
-    ) {
-      const repositoryIndexPreflight =
-        index.sessionArtifacts.repositoryIndexPreflight;
-      for (const fieldName of [
-        "enabled",
-        "buildIfMissing",
-        "reindexBeforeVerify",
-        "verifyStrict",
-        "failureMode",
-        "closeoutVerifyIfPossible",
-      ]) {
-        if (!(fieldName in repositoryIndexPreflight)) {
-          addFailure(
-            `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight is missing required field ${fieldName}.`,
-          );
-        }
-      }
-
-      if (typeof repositoryIndexPreflight.enabled !== "boolean") {
-        addFailure(
-          `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight.enabled must be a boolean.`,
-        );
-      }
-      if (typeof repositoryIndexPreflight.buildIfMissing !== "boolean") {
-        addFailure(
-          `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight.buildIfMissing must be a boolean.`,
-        );
-      }
-      if (typeof repositoryIndexPreflight.reindexBeforeVerify !== "boolean") {
-        addFailure(
-          `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight.reindexBeforeVerify must be a boolean.`,
-        );
-      }
-      if (typeof repositoryIndexPreflight.verifyStrict !== "boolean") {
-        addFailure(
-          `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight.verifyStrict must be a boolean.`,
-        );
-      }
-      if (
-        typeof repositoryIndexPreflight.closeoutVerifyIfPossible !== "boolean"
-      ) {
-        addFailure(
-          `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight.closeoutVerifyIfPossible must be a boolean.`,
-        );
-      }
-
-      const repositoryIndexFailureMode = toNonEmptyString(
-        repositoryIndexPreflight.failureMode,
-      );
-      if (
-        !repositoryIndexFailureMode ||
-        !["warn", "fail"].includes(repositoryIndexFailureMode)
-      ) {
-        addFailure(
-          `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight.failureMode must be either "warn" or "fail".`,
-        );
-      }
-
-      const contractRepositoryIndexPreflight =
-        sessionArtifactsContract &&
-        typeof sessionArtifactsContract === "object" &&
-        sessionArtifactsContract.repositoryIndexPreflight &&
-        typeof sessionArtifactsContract.repositoryIndexPreflight === "object"
-          ? sessionArtifactsContract.repositoryIndexPreflight
-          : null;
-      if (contractRepositoryIndexPreflight) {
-        for (const fieldName of [
-          "enabled",
-          "buildIfMissing",
-          "reindexBeforeVerify",
-          "verifyStrict",
-          "failureMode",
-          "closeoutVerifyIfPossible",
-        ]) {
-          if (
-            repositoryIndexPreflight[fieldName] !==
-            contractRepositoryIndexPreflight[fieldName]
-          ) {
-            addFailure(
-              `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight.${fieldName} must equal contracts.sessionArtifacts.repositoryIndexPreflight.${fieldName}.`,
-            );
-          }
-        }
-      }
-    } else {
-      addFailure(
-        `${contract.indexFile}.sessionArtifacts.repositoryIndexPreflight must be an object.`,
       );
     }
 
@@ -4667,70 +4573,6 @@ function checkSessionArtifactsContract(config) {
     }
   }
 
-  const repositoryIndexPreflight = contract.repositoryIndexPreflight;
-  if (!repositoryIndexPreflight || typeof repositoryIndexPreflight !== "object") {
-    addFailure(`${contractPath}.repositoryIndexPreflight must be an object.`);
-  } else {
-    for (const fieldName of [
-      "enabled",
-      "buildIfMissing",
-      "reindexBeforeVerify",
-      "verifyStrict",
-      "failureMode",
-      "closeoutVerifyIfPossible",
-    ]) {
-      if (!(fieldName in repositoryIndexPreflight)) {
-        addFailure(
-          `${contractPath}.repositoryIndexPreflight is missing field ${fieldName}.`,
-        );
-      }
-    }
-
-    if (typeof repositoryIndexPreflight.enabled !== "boolean") {
-      addFailure(`${contractPath}.repositoryIndexPreflight.enabled must be a boolean.`);
-    }
-    if (typeof repositoryIndexPreflight.buildIfMissing !== "boolean") {
-      addFailure(
-        `${contractPath}.repositoryIndexPreflight.buildIfMissing must be a boolean.`,
-      );
-    }
-    if (typeof repositoryIndexPreflight.reindexBeforeVerify !== "boolean") {
-      addFailure(
-        `${contractPath}.repositoryIndexPreflight.reindexBeforeVerify must be a boolean.`,
-      );
-    } else if (repositoryIndexPreflight.reindexBeforeVerify !== true) {
-      addFailure(
-        `${contractPath}.repositoryIndexPreflight.reindexBeforeVerify must equal true.`,
-      );
-    }
-    if (typeof repositoryIndexPreflight.verifyStrict !== "boolean") {
-      addFailure(
-        `${contractPath}.repositoryIndexPreflight.verifyStrict must be a boolean.`,
-      );
-    }
-    if (typeof repositoryIndexPreflight.closeoutVerifyIfPossible !== "boolean") {
-      addFailure(
-        `${contractPath}.repositoryIndexPreflight.closeoutVerifyIfPossible must be a boolean.`,
-      );
-    }
-
-    const repositoryIndexFailureMode = toNonEmptyString(
-      repositoryIndexPreflight.failureMode,
-    );
-    if (
-      !repositoryIndexFailureMode ||
-      !["warn", "fail"].includes(repositoryIndexFailureMode)
-    ) {
-      addFailure(
-        `${contractPath}.repositoryIndexPreflight.failureMode must be either "warn" or "fail".`,
-      );
-    } else if (repositoryIndexFailureMode !== "fail") {
-      addFailure(
-        `${contractPath}.repositoryIndexPreflight.failureMode must equal "fail".`,
-      );
-    }
-  }
-
   const retiredArtifacts = validateStringArray(
     contract.retiredArtifacts,
     `${contractPath}.retiredArtifacts`,
@@ -5582,7 +5424,6 @@ function checkSessionArtifactsContract(config) {
       "scope",
       "queue_file",
       "archive_index_file",
-      "index_readiness",
       "queue_read_contract",
       "queue_overview",
       "startup_attestation",
@@ -6776,12 +6617,7 @@ function checkManagedFilesCanonicalContract(config) {
   }
 
   const overrideReservedPaths = normalizeStringArray(contract.overrideReservedPaths);
-  const requiredOverrideReservedPaths = [
-    "rule-overrides.schema.json",
-    "rule-overrides.json",
-    "README.md",
-    ".gitkeep",
-  ];
+  const requiredOverrideReservedPaths = [".gitkeep"];
   for (const requiredPath of requiredOverrideReservedPaths) {
     if (!overrideReservedPaths.includes(requiredPath)) {
       addFailure(
@@ -7022,15 +6858,15 @@ function checkCanonicalRulesContract(config, repoRoot, activeConfigPath) {
   const overrideSchemaFile = toNonEmptyString(contract.overrideSchemaFile);
   const overrideFile =
     toNonEmptyString(contract.optionalOverrideFile) ??
-    ".agents-config/agent-overrides/rule-overrides.json";
+    ".agents-config/rule-overrides.json";
   const verifyScript = toNonEmptyString(contract.verifyScript);
 
   if (canonicalFile !== ".agents-config/contracts/rules/canonical-ruleset.json") {
     addFailure(`${contractPath}.file must equal ".agents-config/contracts/rules/canonical-ruleset.json".`);
   }
-  if (overrideSchemaFile !== ".agents-config/agent-overrides/rule-overrides.schema.json") {
+  if (overrideSchemaFile !== ".agents-config/rule-overrides.schema.json") {
     addFailure(
-      `${contractPath}.overrideSchemaFile must equal ".agents-config/agent-overrides/rule-overrides.schema.json".`,
+      `${contractPath}.overrideSchemaFile must equal ".agents-config/rule-overrides.schema.json".`,
     );
   }
   if (verifyScript !== ".agents-config/tools/rules/verify-canonical-ruleset.mjs") {
@@ -7159,7 +6995,7 @@ function checkCanonicalRulesContract(config, repoRoot, activeConfigPath) {
     rulesFile,
     canonicalFile: canonicalFile ?? ".agents-config/contracts/rules/canonical-ruleset.json",
     overridesSchemaFile:
-      overrideSchemaFile ?? ".agents-config/agent-overrides/rule-overrides.schema.json",
+      overrideSchemaFile ?? ".agents-config/rule-overrides.schema.json",
     overridesFile: overrideFile,
     mode: "check",
   });
@@ -7221,7 +7057,6 @@ function inferRuleEnforcementChecks(ruleId) {
       "rule_plan_status_coherence_required",
       "rule_continuity_required",
       "rule_post_compaction_rebootstrap",
-      "rule_repo_index_preflight_gate",
     ].includes(ruleId)
   ) {
     return ["checkSessionArtifactsContract"];

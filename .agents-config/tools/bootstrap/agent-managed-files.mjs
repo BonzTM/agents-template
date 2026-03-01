@@ -16,6 +16,8 @@ const DEFAULT_OVERRIDE_RESERVED_PATHS = [
   "README.md",
   ".gitkeep",
 ];
+const SIDECAR_PAYLOAD_SUFFIX_PATTERN =
+  /(?:\.override|\.append|\.replace)(?:\.[^/]+)*$/;
 
 function fail(message) {
   console.error(message);
@@ -48,6 +50,31 @@ function normalizeStringArray(value) {
     out.push(text);
   }
   return out;
+}
+
+function isSidecarPayloadPath(candidatePath) {
+  const value = toNonEmptyString(candidatePath);
+  if (!value) {
+    return false;
+  }
+  const normalized = normalizeRelativePath(value);
+  const basename = path.posix.basename(normalized);
+  return SIDECAR_PAYLOAD_SUFFIX_PATTERN.test(basename);
+}
+
+function assertManifestPathFieldNotSidecarPayload({
+  entryPath,
+  fieldName,
+  fieldValue,
+}) {
+  if (!isSidecarPayloadPath(fieldValue)) {
+    return;
+  }
+  const entryLabel = JSON.stringify(toNonEmptyString(entryPath) ?? "<unknown>");
+  const normalizedFieldValue = normalizePath(String(fieldValue));
+  fail(
+    `Managed entry ${entryLabel} field ${fieldName} cannot use sidecar payload naming (${normalizedFieldValue}); managed entries must point to canonical files, not .override/.append/.replace payloads.`,
+  );
 }
 
 function parseArgs(argv) {
@@ -181,10 +208,49 @@ function assertSafeRepoRelativePath(candidatePath, label) {
   }
 }
 
-function resolveOverrideRepoRelativePath({
+function uniqueNormalizedPaths(paths) {
+  const out = [];
+  const seen = new Set();
+  for (const candidatePath of paths) {
+    const value = toNonEmptyString(candidatePath);
+    if (!value) {
+      continue;
+    }
+    const normalized = normalizeRelativePath(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function deriveAdjacentOverrideRepoRelativePath(targetRelativePath) {
+  const normalizedTargetPath = normalizeRelativePath(targetRelativePath);
+  if (!normalizedTargetPath) {
+    return null;
+  }
+
+  assertSafeRepoRelativePath(normalizedTargetPath, "managed target path");
+
+  const targetDirectory = path.posix.dirname(normalizedTargetPath);
+  const targetBasename = path.posix.basename(normalizedTargetPath);
+  const lastDotIndex = targetBasename.lastIndexOf(".");
+  const hasExtension = lastDotIndex > 0 && lastDotIndex < targetBasename.length - 1;
+  const overrideBasename = hasExtension
+    ? `${targetBasename.slice(0, lastDotIndex)}.override${targetBasename.slice(lastDotIndex)}`
+    : `${targetBasename}.override`;
+
+  if (targetDirectory === ".") {
+    return overrideBasename;
+  }
+  return `${targetDirectory}/${overrideBasename}`;
+}
+
+function resolveOverridePathSet({
   entry,
   targetRelativePath,
-  overrideRoot,
 }) {
   const explicitOverridePath = toNonEmptyString(entry?.override_path);
   if (explicitOverridePath) {
@@ -197,27 +263,59 @@ function resolveOverrideRepoRelativePath({
       explicitOverridePath,
       `Managed entry ${JSON.stringify(entry?.path ?? "<unknown>")} override_path`,
     );
-    return normalizeRelativePath(explicitOverridePath);
+    const normalizedExplicitPath = normalizeRelativePath(explicitOverridePath);
+    const additiveExplicitPath =
+      deriveAdditiveOverrideRepoRelativePath(normalizedExplicitPath);
+
+    const fullReplacementRepoRelativePaths = uniqueNormalizedPaths([normalizedExplicitPath]);
+    const additiveRepoRelativePaths = uniqueNormalizedPaths([additiveExplicitPath]);
+    const allowlistedRepoRelativePaths = uniqueNormalizedPaths([
+      ...fullReplacementRepoRelativePaths,
+      ...additiveRepoRelativePaths,
+    ]);
+    const deprecatedRepoRelativePaths = uniqueNormalizedPaths(
+      fullReplacementRepoRelativePaths.map((entryPath) =>
+        deriveDeprecatedReplaceRepoRelativePath(entryPath),
+      ),
+    );
+
+    return {
+      fullReplacementRepoRelativePaths,
+      additiveRepoRelativePaths,
+      allowlistedRepoRelativePaths,
+      deprecatedRepoRelativePaths,
+    };
   }
 
-  const normalizedOverrideRoot = toNonEmptyString(overrideRoot)
-    ? normalizeRelativePath(overrideRoot)
-    : "";
-  if (normalizedOverrideRoot) {
-    assertSafeRepoRelativePath(normalizedOverrideRoot, "overrideRoot");
-  }
-  if (!normalizedOverrideRoot) {
-    return null;
-  }
+  const adjacentOverridePath = deriveAdjacentOverrideRepoRelativePath(targetRelativePath);
+  const adjacentAdditivePath =
+    deriveAdditiveOverrideRepoRelativePath(adjacentOverridePath);
 
-  return normalizeRelativePath(
-    path.posix.join(normalizedOverrideRoot, normalizeRelativePath(targetRelativePath)),
+  const fullReplacementRepoRelativePaths = uniqueNormalizedPaths([adjacentOverridePath]);
+  const additiveRepoRelativePaths = uniqueNormalizedPaths([adjacentAdditivePath]);
+  const allowlistedRepoRelativePaths = uniqueNormalizedPaths([
+    ...fullReplacementRepoRelativePaths,
+    ...additiveRepoRelativePaths,
+  ]);
+  const deprecatedRepoRelativePaths = uniqueNormalizedPaths(
+    fullReplacementRepoRelativePaths.map((entryPath) =>
+      deriveDeprecatedReplaceRepoRelativePath(entryPath),
+    ),
   );
+
+  return {
+    fullReplacementRepoRelativePaths,
+    additiveRepoRelativePaths,
+    allowlistedRepoRelativePaths,
+    deprecatedRepoRelativePaths,
+  };
 }
 
 function toPathRelativeToRoot({ repoRelativePath, rootRelativePath }) {
   const normalizedRepoPath = normalizeRelativePath(repoRelativePath);
-  const normalizedRoot = normalizeRelativePath(rootRelativePath);
+  const normalizedRoot = toNonEmptyString(rootRelativePath)
+    ? normalizeRelativePath(rootRelativePath)
+    : null;
   if (!normalizedRoot) {
     return normalizedRepoPath;
   }
@@ -260,6 +358,25 @@ function listRelativeFilesRecursively(rootPath) {
 
   files.sort((left, right) => left.localeCompare(right));
   return files;
+}
+
+function listExistingRepoRelativePaths(repoRoot, repoRelativePaths) {
+  if (!Array.isArray(repoRelativePaths)) {
+    return [];
+  }
+  const existing = [];
+  for (const repoRelativePath of repoRelativePaths) {
+    const value = toNonEmptyString(repoRelativePath);
+    if (!value) {
+      continue;
+    }
+    const normalizedPath = normalizeRelativePath(value);
+    const absolutePath = path.resolve(repoRoot, normalizedPath);
+    if (fs.existsSync(absolutePath)) {
+      existing.push(normalizedPath);
+    }
+  }
+  return existing;
 }
 
 function resolveCanonicalContract(manifest) {
@@ -311,18 +428,53 @@ function isReservedOverridePath(overrideRelativePath, reservedPaths) {
   }
 
   const basename = path.posix.basename(overrideRelativePath);
-  return reservedPaths.has(basename);
+  if (basename !== ".gitkeep") {
+    return false;
+  }
+
+  return reservedPaths.has(".gitkeep");
 }
 
 function deriveAdditiveOverrideRepoRelativePath(overrideRepoRelativePath) {
   const normalized = toNonEmptyString(overrideRepoRelativePath)
     ? normalizeRelativePath(overrideRepoRelativePath)
     : null;
-  if (!normalized || !normalized.endsWith(".replace.md")) {
+
+  if (!normalized) {
     return null;
   }
 
-  return `${normalized.slice(0, -".replace.md".length)}.override.md`;
+  const overrideWithExtensionMatch = normalized.match(/^(.*)\.override(\.[^/]+)$/);
+  if (overrideWithExtensionMatch) {
+    return `${overrideWithExtensionMatch[1]}.append${overrideWithExtensionMatch[2]}`;
+  }
+
+  if (normalized.endsWith(".override")) {
+    return `${normalized.slice(0, -".override".length)}.append`;
+  }
+
+  return null;
+}
+
+function deriveDeprecatedReplaceRepoRelativePath(overrideRepoRelativePath) {
+  const normalized = toNonEmptyString(overrideRepoRelativePath)
+    ? normalizeRelativePath(overrideRepoRelativePath)
+    : null;
+
+  if (!normalized) {
+    return null;
+  }
+
+  const overrideWithExtensionMatch = normalized.match(/^(.*)\.override(\.[^/]+)$/);
+  if (overrideWithExtensionMatch) {
+    return `${overrideWithExtensionMatch[1]}.replace${overrideWithExtensionMatch[2]}`;
+  }
+
+  if (normalized.endsWith(".override")) {
+    return `${normalized.slice(0, -".override".length)}.replace`;
+  }
+
+  return null;
 }
 
 function mergeTemplateWithAdditiveOverride(templateContent, additiveContent) {
@@ -470,16 +622,23 @@ async function resolveExpectedContent({
   repoRoot,
   source,
   allowOverride,
-  overrideRepoRelativePath,
-  additiveOverrideRepoRelativePath,
+  overrideRepoRelativePaths,
+  additiveOverrideRepoRelativePaths,
   templateRelativePath,
   remoteCache,
 }) {
   const normalizedTemplate = normalizePath(templateRelativePath);
 
-  if (allowOverride && overrideRepoRelativePath) {
-    const overridePath = path.resolve(repoRoot, overrideRepoRelativePath);
-    if (fs.existsSync(overridePath)) {
+  if (allowOverride && Array.isArray(overrideRepoRelativePaths)) {
+    for (const overrideRepoRelativePath of overrideRepoRelativePaths) {
+      const value = toNonEmptyString(overrideRepoRelativePath);
+      if (!value) {
+        continue;
+      }
+      const overridePath = path.resolve(repoRoot, value);
+      if (!fs.existsSync(overridePath)) {
+        continue;
+      }
       return {
         content: fs.readFileSync(overridePath, "utf8"),
         sourceLabel: `override:${normalizePath(path.relative(repoRoot, overridePath))}`,
@@ -493,9 +652,16 @@ async function resolveExpectedContent({
     remoteCache,
   });
 
-  if (allowOverride && additiveOverrideRepoRelativePath) {
-    const additiveOverridePath = path.resolve(repoRoot, additiveOverrideRepoRelativePath);
-    if (fs.existsSync(additiveOverridePath)) {
+  if (allowOverride && Array.isArray(additiveOverrideRepoRelativePaths)) {
+    for (const additiveOverrideRepoRelativePath of additiveOverrideRepoRelativePaths) {
+      const value = toNonEmptyString(additiveOverrideRepoRelativePath);
+      if (!value) {
+        continue;
+      }
+      const additiveOverridePath = path.resolve(repoRoot, value);
+      if (!fs.existsSync(additiveOverridePath)) {
+        continue;
+      }
       const additiveContent = fs.readFileSync(additiveOverridePath, "utf8");
       if (additiveContent.trim().length > 0) {
         return {
@@ -533,9 +699,28 @@ async function run() {
     fail(`${normalizePath(path.relative(repoRoot, manifestPath))} must define non-empty managed_files.`);
   }
 
+  for (const entry of managedFiles) {
+    const entryPath = toNonEmptyString(entry?.path);
+    assertManifestPathFieldNotSidecarPayload({
+      entryPath,
+      fieldName: "path",
+      fieldValue: entry?.path,
+    });
+    assertManifestPathFieldNotSidecarPayload({
+      entryPath,
+      fieldName: "source_path",
+      fieldValue: entry?.source_path,
+    });
+    assertManifestPathFieldNotSidecarPayload({
+      entryPath,
+      fieldName: "override_path",
+      fieldValue: entry?.override_path,
+    });
+  }
+
   const activeProfiles = resolveActiveProfiles(manifest, args);
   const source = resolveTemplateSource(manifest, repoRoot, args.preferRemote);
-  const overrideRoot = toNonEmptyString(manifest?.overrideRoot) ?? ".agents-config/agent-overrides";
+  const overrideRoot = toNonEmptyString(manifest?.overrideRoot);
   const remoteCache = new Map();
 
   const activeEntriesRaw = managedFiles.filter((entry) => isEntryActive(entry, activeProfiles));
@@ -556,33 +741,20 @@ async function run() {
     if (!allowOverride || authority !== "template") {
       continue;
     }
-    const overrideRepoRelativePath = resolveOverrideRepoRelativePath({
+
+    const overridePathSet = resolveOverridePathSet({
       entry,
       targetRelativePath: candidatePath,
-      overrideRoot,
     });
-    if (overrideRepoRelativePath === null) {
-      continue;
-    }
-    const overrideRootRelativePath = toPathRelativeToRoot({
-      repoRelativePath: overrideRepoRelativePath,
-      rootRelativePath: overrideRoot,
-    });
-    if (overrideRootRelativePath !== null) {
-      allowlistedOverrideRootRelativePaths.add(overrideRootRelativePath);
-    }
 
-    const additiveOverrideRepoRelativePath =
-      deriveAdditiveOverrideRepoRelativePath(overrideRepoRelativePath);
-    const additiveOverrideRootRelativePath =
-      additiveOverrideRepoRelativePath === null
-        ? null
-        : toPathRelativeToRoot({
-            repoRelativePath: additiveOverrideRepoRelativePath,
-            rootRelativePath: overrideRoot,
-          });
-    if (additiveOverrideRootRelativePath !== null) {
-      allowlistedOverrideRootRelativePaths.add(additiveOverrideRootRelativePath);
+    for (const allowlistedRepoRelativePath of overridePathSet.allowlistedRepoRelativePaths) {
+      const overrideRootRelativePath = toPathRelativeToRoot({
+        repoRelativePath: allowlistedRepoRelativePath,
+        rootRelativePath: overrideRoot,
+      });
+      if (overrideRootRelativePath !== null) {
+        allowlistedOverrideRootRelativePaths.add(overrideRootRelativePath);
+      }
     }
   }
 
@@ -615,22 +787,10 @@ async function run() {
       );
     }
 
-    const overrideRepoRelativePath = allowOverride
-      ? resolveOverrideRepoRelativePath({
-          entry,
-          targetRelativePath: targetRelativePath,
-          overrideRoot,
-        })
-      : null;
-    const overrideRootRelativePath =
-      overrideRepoRelativePath === null
-        ? null
-        : toPathRelativeToRoot({
-            repoRelativePath: overrideRepoRelativePath,
-            rootRelativePath: overrideRoot,
-          });
-    const additiveOverrideRepoRelativePath =
-      deriveAdditiveOverrideRepoRelativePath(overrideRepoRelativePath);
+    const overridePathSet = resolveOverridePathSet({
+      entry,
+      targetRelativePath,
+    });
 
     const resolvedEntry = {
       targetRelativePath,
@@ -638,38 +798,65 @@ async function run() {
       templateRelativePath,
       authority,
       allowOverride,
-      overrideRepoRelativePath,
-      additiveOverrideRepoRelativePath,
-      overrideRootRelativePath,
+      overrideRepoRelativePaths: overridePathSet.fullReplacementRepoRelativePaths,
+      additiveOverrideRepoRelativePaths: overridePathSet.additiveRepoRelativePaths,
+      allowlistedOverrideRepoRelativePaths: overridePathSet.allowlistedRepoRelativePaths,
+      deprecatedOverrideRepoRelativePaths: overridePathSet.deprecatedRepoRelativePaths,
     };
 
     activeEntriesByPath.set(normalizedTargetPath, resolvedEntry);
-    if (overrideRootRelativePath !== null) {
-      if (activeEntriesByOverrideRootRelativePath.has(overrideRootRelativePath)) {
-        fail(
-          `Duplicate override path under ${overrideRoot}: ${overrideRootRelativePath}`,
-        );
+    if (allowOverride && authority === "template") {
+      for (const allowlistedRepoRelativePath of overridePathSet.allowlistedRepoRelativePaths) {
+        const overrideRootRelativePath = toPathRelativeToRoot({
+          repoRelativePath: allowlistedRepoRelativePath,
+          rootRelativePath: overrideRoot,
+        });
+        if (overrideRootRelativePath === null) {
+          continue;
+        }
+        if (activeEntriesByOverrideRootRelativePath.has(overrideRootRelativePath)) {
+          fail(
+            `Duplicate override path under ${overrideRoot}: ${overrideRootRelativePath}`,
+          );
+        }
+        activeEntriesByOverrideRootRelativePath.set(overrideRootRelativePath, resolvedEntry);
       }
-      activeEntriesByOverrideRootRelativePath.set(overrideRootRelativePath, resolvedEntry);
     }
     activeEntries.push(resolvedEntry);
   }
 
   const overrideViolations = [];
+  const seenOverrideViolationPaths = new Set();
+  const addOverrideViolation = (repoRelativePath, reason) => {
+    const normalizedPath = normalizePath(repoRelativePath);
+    if (seenOverrideViolationPaths.has(normalizedPath)) {
+      return;
+    }
+    seenOverrideViolationPaths.add(normalizedPath);
+    overrideViolations.push({
+      path: normalizedPath,
+      reason,
+    });
+  };
+
   if (overrideRoot) {
     const overrideRootPath = path.resolve(repoRoot, overrideRoot);
+    const normalizedOverrideRoot = normalizeRelativePath(overrideRoot);
     const overrideFiles = listRelativeFilesRecursively(overrideRootPath);
     for (const overrideRelativePath of overrideFiles) {
       if (isReservedOverridePath(overrideRelativePath, canonicalContract.reservedPaths)) {
         continue;
       }
 
+      const repoRelativeOverridePath = normalizedOverrideRoot
+        ? normalizeRelativePath(path.posix.join(normalizedOverrideRoot, overrideRelativePath))
+        : normalizeRelativePath(overrideRelativePath);
+
       if (!allowlistedOverrideRootRelativePaths.has(overrideRelativePath)) {
-        overrideViolations.push({
-          path: overrideRelativePath,
-          reason:
-            "override file exists but no allowlisted managed_files entry maps to this path",
-        });
+        addOverrideViolation(
+          repoRelativeOverridePath,
+          "override file exists but no allowlisted managed_files entry maps to this path",
+        );
         continue;
       }
 
@@ -679,19 +866,82 @@ async function run() {
       }
 
       if (activeEntry.authority !== "template") {
-        overrideViolations.push({
-          path: overrideRelativePath,
-          reason: `managed authority is ${activeEntry.authority}; overrides only apply to authority=template`,
-        });
+        addOverrideViolation(
+          repoRelativeOverridePath,
+          `managed authority is ${activeEntry.authority}; overrides only apply to authority=template`,
+        );
         continue;
       }
 
       if (!activeEntry.allowOverride) {
-        overrideViolations.push({
-          path: overrideRelativePath,
-          reason: "override file exists but managed entry does not allow overrides (set allow_override=true)",
-        });
+        addOverrideViolation(
+          repoRelativeOverridePath,
+          "override file exists but managed entry does not allow overrides (set allow_override=true)",
+        );
       }
+    }
+  }
+
+  for (const activeEntry of activeEntries) {
+    for (const deprecatedOverridePath of activeEntry.deprecatedOverrideRepoRelativePaths) {
+      const deprecatedPath = path.resolve(repoRoot, deprecatedOverridePath);
+      if (!fs.existsSync(deprecatedPath)) {
+        continue;
+      }
+      addOverrideViolation(
+        deprecatedOverridePath,
+        "deprecated .replace override naming is unsupported; use .override (full replace) or .append (additive)",
+      );
+    }
+
+    const entrySupportsOverrides =
+      activeEntry.authority === "template" && activeEntry.allowOverride;
+
+    if (entrySupportsOverrides) {
+      const existingFullReplacementOverridePaths = listExistingRepoRelativePaths(
+        repoRoot,
+        activeEntry.overrideRepoRelativePaths,
+      );
+      const existingAdditiveOverridePaths = listExistingRepoRelativePaths(
+        repoRoot,
+        activeEntry.additiveOverrideRepoRelativePaths,
+      );
+
+      if (existingFullReplacementOverridePaths.length > 0 && existingAdditiveOverridePaths.length > 0) {
+        const fullPayloads = existingFullReplacementOverridePaths
+          .map((entryPath) => normalizePath(entryPath))
+          .join(", ");
+        const additivePayloads = existingAdditiveOverridePaths
+          .map((entryPath) => normalizePath(entryPath))
+          .join(", ");
+        const reason =
+          `both full replacement and additive override payloads exist for managed entry ${activeEntry.normalizedTargetPath}; keep exactly one mode (full: ${fullPayloads}; additive: ${additivePayloads})`;
+        for (const conflictPath of existingFullReplacementOverridePaths) {
+          addOverrideViolation(conflictPath, reason);
+        }
+        for (const conflictPath of existingAdditiveOverridePaths) {
+          addOverrideViolation(conflictPath, reason);
+        }
+      }
+      continue;
+    }
+
+    for (const candidateOverridePath of activeEntry.allowlistedOverrideRepoRelativePaths) {
+      const candidatePath = path.resolve(repoRoot, candidateOverridePath);
+      if (!fs.existsSync(candidatePath)) {
+        continue;
+      }
+      if (activeEntry.authority !== "template") {
+        addOverrideViolation(
+          candidateOverridePath,
+          `managed authority is ${activeEntry.authority}; overrides only apply to authority=template`,
+        );
+        continue;
+      }
+      addOverrideViolation(
+        candidateOverridePath,
+        "override file exists but managed entry does not allow overrides (set allow_override=true)",
+      );
     }
   }
 
@@ -721,8 +971,8 @@ async function run() {
         repoRoot,
         source,
         allowOverride: false,
-        overrideRepoRelativePath: null,
-        additiveOverrideRepoRelativePath: null,
+        overrideRepoRelativePaths: [],
+        additiveOverrideRepoRelativePaths: [],
         templateRelativePath: entry.templateRelativePath,
         remoteCache,
       });
@@ -741,8 +991,8 @@ async function run() {
       repoRoot,
       source,
       allowOverride: entry.allowOverride,
-      overrideRepoRelativePath: entry.overrideRepoRelativePath,
-      additiveOverrideRepoRelativePath: entry.additiveOverrideRepoRelativePath,
+      overrideRepoRelativePaths: entry.overrideRepoRelativePaths,
+      additiveOverrideRepoRelativePaths: entry.additiveOverrideRepoRelativePaths,
       templateRelativePath: entry.templateRelativePath,
       remoteCache,
     });

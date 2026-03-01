@@ -8,10 +8,10 @@
       ".agents-config/docs/AGENT_RULES.md"
     ],
     "lineage": {
-      "policy_required_ids_sha256": "9803ce4b56484f98f595889664038e2c8a02a6ef6705a81010a84467a95f2c06",
+      "policy_required_ids_sha256": "0d679488c8590ed893ea58ba9cd866262d9df0b322e67fbcd2a81d20f3745dc0",
       "policy_orchestrator_rules_sha256": "5d6bae98890860e9cc1118216be111b377a40c9e3553f4e457eac8e2d29888d2",
-      "rules_doc_catalog_sha256": "0b9730b55a4abfe86503d2ed35817e321efcdfa570d2927f21645e37db373cd7",
-      "canonical_rules_sha256": "beb3cd9e71fac69316712aff33e214e983f93ac076a9144ba90233b92731fb05"
+      "rules_doc_catalog_sha256": "5d7252cfe39666bae5acdae60b5e1da0442ceea558fbce787a29fa1d658abc78",
+      "canonical_rules_sha256": "d65d57bf15c30099b465313bdb45861d9261887d90af7bd0533fed26536b1b39"
     }
   },
   "rules": [
@@ -160,14 +160,6 @@
       "source": "docs.ruleCatalog"
     },
     {
-      "id": "rule_repo_index_preflight_gate",
-      "statement": "Require preflight index readiness checks (always re-index, then strict verify) before implementation starts.",
-      "category": "governance",
-      "severity": "error",
-      "overrideable": false,
-      "source": "docs.ruleCatalog"
-    },
-    {
       "id": "rule_context_index_drift_guard",
       "statement": "Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with policy/documentation contracts and fail checks on drift.",
       "category": ".agents-config/docs",
@@ -185,7 +177,7 @@
     },
     {
       "id": "rule_local_rule_overrides_contract_required",
-      "statement": "Allow local-only override IDs only through `.agents-config/agent-overrides/rule-overrides.json`, validated against `.agents-config/agent-overrides/rule-overrides.schema.json`.",
+      "statement": "Allow local-only override IDs only through `.agents-config/rule-overrides.json`, validated against `.agents-config/rule-overrides.schema.json`.",
       "category": "governance",
       "severity": "error",
       "overrideable": false,
@@ -193,7 +185,7 @@
     },
     {
       "id": "rule_managed_files_known_overrides_only",
-      "statement": "Permit managed-file override payloads only for explicitly allowlisted entries (`allow_override=true`) and fail unknown `.agents-config/agent-overrides/**` payload files.",
+      "statement": "Permit managed-file override payloads only for explicitly allowlisted entries (`allow_override=true`) and fail unknown/non-allowlisted override payload files (adjacent `.override`/`.append`).",
       "category": "governance",
       "severity": "error",
       "overrideable": false,

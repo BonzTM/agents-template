@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 const DEFAULT_POLICY_FILE = ".agents-config/policies/agent-governance.json";
 const DEFAULT_RULES_FILE = ".agents-config/docs/AGENT_RULES.md";
 const DEFAULT_CANONICAL_FILE = ".agents-config/contracts/rules/canonical-ruleset.json";
-const DEFAULT_OVERRIDES_SCHEMA_FILE = ".agents-config/agent-overrides/rule-overrides.schema.json";
-const DEFAULT_OVERRIDES_FILE = ".agents-config/agent-overrides/rule-overrides.json";
+const DEFAULT_OVERRIDES_SCHEMA_FILE = ".agents-config/rule-overrides.schema.json";
+const DEFAULT_OVERRIDES_FILE = ".agents-config/rule-overrides.json";
 const CATEGORY_VALUES = new Set([
   "governance",
   "execution",

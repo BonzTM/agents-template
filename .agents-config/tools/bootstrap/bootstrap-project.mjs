@@ -45,7 +45,6 @@ const FILES = {
   releaseTemplate: ".agents-config/docs/RELEASE_NOTES_TEMPLATE.md",
   generateReleaseNotes: ".agents-config/scripts/generate-release-notes.mjs",
   verifyLoggingCompliance: ".agents-config/scripts/verify-logging-compliance.mjs",
-  indexConfig: ".agents-config/tools/index/index.config.json",
   agentsDoc: "AGENTS.md",
   rulesDoc: ".agents-config/docs/AGENT_RULES.md",
   contextDoc: ".agents-config/docs/AGENT_CONTEXT.md",
@@ -84,57 +83,6 @@ function toNonEmptyString(value) {
 
 function toPosixPath(filePath) {
   return filePath.split(path.sep).join("/");
-}
-
-function normalizeRelativePath(filePath) {
-  const normalized = path.posix
-    .normalize(toPosixPath(filePath))
-    .replace(/^\.\//, "");
-  if (normalized === ".") {
-    return "";
-  }
-  return normalized;
-}
-
-function assertSafeRepoRelativePath(candidatePath, label) {
-  const normalized = normalizeRelativePath(candidatePath);
-  if (
-    normalized === ".." ||
-    normalized.startsWith("../") ||
-    normalized.split("/").includes("..")
-  ) {
-    fail(`${label} must remain inside the repository root (received: ${candidatePath}).`);
-  }
-}
-
-function resolveManagedOverrideRepoPath({ entry, targetRelativePath, overrideRoot }) {
-  const explicitOverridePath = toNonEmptyString(entry?.override_path);
-  if (explicitOverridePath) {
-    if (path.isAbsolute(explicitOverridePath)) {
-      fail(
-        `Managed entry ${JSON.stringify(entry?.path ?? "<unknown>")} uses absolute override_path; use a repo-relative path.`,
-      );
-    }
-    assertSafeRepoRelativePath(
-      explicitOverridePath,
-      `Managed entry ${JSON.stringify(entry?.path ?? "<unknown>")} override_path`,
-    );
-    return normalizeRelativePath(explicitOverridePath);
-  }
-
-  const normalizedOverrideRoot = toNonEmptyString(overrideRoot)
-    ? normalizeRelativePath(overrideRoot)
-    : "";
-  if (normalizedOverrideRoot) {
-    assertSafeRepoRelativePath(normalizedOverrideRoot, "overrideRoot");
-  }
-  if (!normalizedOverrideRoot) {
-    return null;
-  }
-
-  return normalizeRelativePath(
-    path.posix.join(normalizedOverrideRoot, normalizeRelativePath(targetRelativePath)),
-  );
 }
 
 function validateProjectId(projectId) {
@@ -179,18 +127,6 @@ function parseProfiles(rawProfiles) {
   }
 
   return unique;
-}
-
-function managedEntryIsActive(entry, activeProfiles) {
-  const requiredProfiles = Array.isArray(entry?.profiles)
-    ? entry.profiles.map((profile) => toNonEmptyString(profile)).filter(Boolean)
-    : [];
-
-  if (requiredProfiles.length === 0) {
-    return true;
-  }
-
-  return requiredProfiles.some((profile) => activeProfiles.has(profile));
 }
 
 function normalizeAgentsMode(rawMode) {
@@ -625,94 +561,6 @@ function applyProfiles({ policy, contextIndex, profiles }) {
   };
 }
 
-function syncAllowlistedManagedOverrides({
-  repoRoot,
-  managedManifest,
-  templateLocalPathOverride,
-}) {
-  if (!managedManifest || typeof managedManifest !== "object") {
-    return;
-  }
-
-  const overrideRoot =
-    toNonEmptyString(managedManifest.overrideRoot) ?? ".agents-config/agent-overrides";
-  const overrideRootAbs = path.resolve(repoRoot, overrideRoot);
-
-  const activeProfileValues = Array.isArray(managedManifest.profiles)
-    ? managedManifest.profiles.map((profile) => toNonEmptyString(profile)).filter(Boolean)
-    : [];
-  const activeProfiles = new Set(
-    activeProfileValues.length > 0 ? activeProfileValues : DEFAULT_PROFILES,
-  );
-
-  const templateLocalPath =
-    toNonEmptyString(templateLocalPathOverride) ??
-    toNonEmptyString(managedManifest?.template?.localPath);
-  const templateRoot = templateLocalPath
-    ? path.resolve(repoRoot, templateLocalPath)
-    : null;
-  const templateAvailable = Boolean(templateRoot && fs.existsSync(templateRoot));
-
-  const entries = Array.isArray(managedManifest.managed_files)
-    ? managedManifest.managed_files
-    : [];
-
-  for (const entry of entries) {
-    if (!managedEntryIsActive(entry, activeProfiles)) {
-      continue;
-    }
-    if (entry?.allow_override !== true) {
-      continue;
-    }
-
-    const targetRelativePath = toNonEmptyString(entry?.path);
-    if (!targetRelativePath) {
-      continue;
-    }
-
-    const targetPath = path.resolve(repoRoot, targetRelativePath);
-    if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isFile()) {
-      continue;
-    }
-
-    const sourceRelativePath = toNonEmptyString(entry?.source_path) ?? targetRelativePath;
-    const targetContent = fs.readFileSync(targetPath, "utf8");
-
-    let shouldWriteOverride = true;
-    if (templateAvailable) {
-      const templateSourcePath = path.resolve(templateRoot, sourceRelativePath);
-      if (fs.existsSync(templateSourcePath) && fs.statSync(templateSourcePath).isFile()) {
-        const templateContent = fs.readFileSync(templateSourcePath, "utf8");
-        shouldWriteOverride = targetContent !== templateContent;
-      }
-    }
-
-    const overrideRelativePath = resolveManagedOverrideRepoPath({
-      entry,
-      targetRelativePath,
-      overrideRoot,
-    });
-    if (!overrideRelativePath) {
-      continue;
-    }
-    const overridePath = path.resolve(repoRoot, overrideRelativePath);
-
-    if (!shouldWriteOverride) {
-      if (fs.existsSync(overridePath) && fs.statSync(overridePath).isFile()) {
-        fs.unlinkSync(overridePath);
-      }
-      continue;
-    }
-
-    ensureDir(path.dirname(overridePath));
-    fs.writeFileSync(overridePath, targetContent, "utf8");
-  }
-
-  if (toNonEmptyString(overrideRoot)) {
-    ensureDir(overrideRootAbs);
-  }
-}
-
 function runPreflight(repoRoot) {
   const result = spawnSync("npm", ["run", "agent:preflight"], {
     cwd: repoRoot,
@@ -786,11 +634,6 @@ function main() {
   const managedTemplate = readJson(managedTemplatePath);
   const packageJson = readJson(path.resolve(repoRoot, FILES.packageJson));
   const packageLock = readJson(path.resolve(repoRoot, FILES.packageLock));
-  const indexConfigPath = path.resolve(repoRoot, FILES.indexConfig);
-  const indexConfig = readJsonIfPresent(indexConfigPath);
-  if (indexConfig === null) {
-    fail(`Missing required file: ${FILES.indexConfig}`);
-  }
 
   if (nodeWebEnabled && featureIndex === null) {
     fail(`Missing required file for node-web profile: ${FILES.featureIndex}`);
@@ -920,7 +763,6 @@ function main() {
   if (packageLock.packages && packageLock.packages[""]) {
     packageLock.packages[""].name = packageName;
   }
-  indexConfig.outputDir = ".agents/index/project-v1";
 
   writeJson(policyPath, rewrittenPolicy);
   writeJson(contextIndexPath, rewrittenContextIndex);
@@ -933,7 +775,6 @@ function main() {
   writeJson(path.resolve(repoRoot, FILES.managedManifest), rewrittenManagedManifest);
   writeJson(path.resolve(repoRoot, FILES.packageJson), packageJson);
   writeJson(path.resolve(repoRoot, FILES.packageLock), packageLock);
-  writeJson(indexConfigPath, indexConfig);
 
   const releaseTemplatePath = path.resolve(repoRoot, FILES.releaseTemplate);
   if (fs.existsSync(releaseTemplatePath)) {
@@ -983,12 +824,6 @@ function main() {
     }
     rewriteTextToken(absoluteDocPath, agentDocReplacements);
   }
-
-  syncAllowlistedManagedOverrides({
-    repoRoot,
-    managedManifest: rewrittenManagedManifest,
-    templateLocalPathOverride: templateLocalPath,
-  });
 
   ensureDir(path.resolve(repoRoot, canonicalWorktreesRootRel));
   ensureAgentsStorage({ repoRoot, canonicalAgentsRootAbs, agentsMode });

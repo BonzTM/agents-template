@@ -8,6 +8,8 @@ const SUPPORTED_PROFILES = new Set(["base", "node-web"]);
 const SUPPORTED_BOOTSTRAP_MODES = new Set(["new", "existing"]);
 const DOWNSTREAM_SCRIPT_EXCLUDES = new Set(["bootstrap"]);
 const DEFAULT_AGENTS_WORKFILES_PATH = "../agents-workfiles";
+const SIDECAR_PAYLOAD_SUFFIX_PATTERN =
+  /(?:\.override|\.append|\.replace)(?:\.[^/]+)*$/;
 
 function fail(message) {
   console.error(message);
@@ -20,6 +22,41 @@ function toNonEmptyString(value) {
 
 function normalizePath(input) {
   return input.split(path.sep).join("/");
+}
+
+function normalizeRelativePath(input) {
+  const normalized = path.posix
+    .normalize(normalizePath(input))
+    .replace(/^\.\//, "");
+  if (normalized === ".") {
+    return "";
+  }
+  return normalized;
+}
+
+function isSidecarPayloadPath(candidatePath) {
+  const value = toNonEmptyString(candidatePath);
+  if (!value) {
+    return false;
+  }
+  const normalized = normalizeRelativePath(value);
+  const basename = path.posix.basename(normalized);
+  return SIDECAR_PAYLOAD_SUFFIX_PATTERN.test(basename);
+}
+
+function assertManifestPathFieldNotSidecarPayload({
+  entryPath,
+  fieldName,
+  fieldValue,
+}) {
+  if (!isSidecarPayloadPath(fieldValue)) {
+    return;
+  }
+  const entryLabel = JSON.stringify(toNonEmptyString(entryPath) ?? "<unknown>");
+  const normalizedFieldValue = normalizePath(String(fieldValue));
+  fail(
+    `Managed entry ${entryLabel} field ${fieldName} cannot use sidecar payload naming (${normalizedFieldValue}); managed entries must point to canonical files, not .override/.append/.replace payloads.`,
+  );
 }
 
 function slugifyProjectId(input) {
@@ -250,7 +287,26 @@ function copyManagedFiles({ templateRoot, targetRoot, manifest, profiles, mode }
     if (!targetRelativePath) {
       continue;
     }
-    const sourceRelativePath = toNonEmptyString(entry?.source_path) ?? targetRelativePath;
+    const explicitSourceRelativePath = toNonEmptyString(entry?.source_path);
+    const explicitOverridePath = toNonEmptyString(entry?.override_path);
+
+    assertManifestPathFieldNotSidecarPayload({
+      entryPath: targetRelativePath,
+      fieldName: "path",
+      fieldValue: targetRelativePath,
+    });
+    assertManifestPathFieldNotSidecarPayload({
+      entryPath: targetRelativePath,
+      fieldName: "source_path",
+      fieldValue: explicitSourceRelativePath,
+    });
+    assertManifestPathFieldNotSidecarPayload({
+      entryPath: targetRelativePath,
+      fieldName: "override_path",
+      fieldValue: explicitOverridePath,
+    });
+
+    const sourceRelativePath = explicitSourceRelativePath ?? targetRelativePath;
 
     const srcPath = path.resolve(templateRoot, sourceRelativePath);
     if (!fs.existsSync(srcPath)) {
@@ -506,8 +562,6 @@ function main() {
     targetRoot,
     packageName,
   });
-
-  ensureDir(path.resolve(targetRoot, ".agents-config/agent-overrides"));
 
   runBootstrapProject({
     targetRoot,

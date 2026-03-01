@@ -57,8 +57,6 @@
         "sessionPreflight",
         "agentPayloadStub",
         "queueLifecycle",
-        "indexBuild",
-        "indexVerify",
         "featureIndexVerify",
         "routeMapGenerate",
         "routeMapVerify",
@@ -70,7 +68,6 @@
         "openapiCoverageVerify",
         "loggingComplianceGenerate",
         "loggingComplianceVerify",
-        "indexQueryStrictFresh",
         "releasePrepare",
         "releaseVerify",
         "releaseNotes",
@@ -404,21 +401,12 @@
       "stalePlanReferenceScanRoots": [
         ".agents/plans"
       ],
-      "repositoryIndexPreflight": {
-        "enabled": true,
-        "buildIfMissing": true,
-        "reindexBeforeVerify": true,
-        "verifyStrict": true,
-        "failureMode": "fail",
-        "closeoutVerifyIfPossible": true
-      },
       "sessionBriefRequiredFields": [
         "generated_at",
         "policy",
         "scope",
         "queue_file",
         "archive_index_file",
-        "index_readiness",
         "queue_read_contract",
         "queue_overview",
         "startup_attestation",
@@ -580,8 +568,8 @@
     },
     "canonicalRules": {
       "file": ".agents-config/contracts/rules/canonical-ruleset.json",
-      "overrideSchemaFile": ".agents-config/agent-overrides/rule-overrides.schema.json",
-      "optionalOverrideFile": ".agents-config/agent-overrides/rule-overrides.json",
+      "overrideSchemaFile": ".agents-config/rule-overrides.schema.json",
+      "optionalOverrideFile": ".agents-config/rule-overrides.json",
       "verifyScript": ".agents-config/tools/rules/verify-canonical-ruleset.mjs",
       "npmVerifyScriptName": "rules:canonical:verify",
       "npmVerifyScriptCommand": "node .agents-config/tools/rules/verify-canonical-ruleset.mjs --check",
@@ -616,7 +604,6 @@
         "rule_policy_sync_required",
         "rule_continuity_required",
         "rule_post_compaction_rebootstrap",
-        "rule_repo_index_preflight_gate",
         "rule_context_index_drift_guard",
         "rule_canonical_ruleset_contract_required",
         "rule_local_rule_overrides_contract_required",
@@ -961,9 +948,6 @@
       ],
       "overrideMode": "explicit_allowlist",
       "overrideReservedPaths": [
-        "rule-overrides.schema.json",
-        "rule-overrides.json",
-        "README.md",
         ".gitkeep"
       ],
       "entryAllowOverrideField": "allow_override",
@@ -995,7 +979,7 @@
           "## Canonical Sources and Precedence",
           "Machine-readable canonical policy: `.agents-config/policies/agent-governance.json`",
           "Canonical rule catalog: `.agents-config/contracts/rules/canonical-ruleset.json`",
-          "Local rule override schema: `.agents-config/agent-overrides/rule-overrides.schema.json`",
+          "Local rule override schema: `.agents-config/rule-overrides.schema.json`",
           "## Session Context Artifacts",
           "Shared queue authority for orchestrator and subagents: `.agents/EXECUTION_QUEUE.json` (single source of truth)",
           "## Orchestrator/Subagent Contract Pointer",

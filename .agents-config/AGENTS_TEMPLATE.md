@@ -6,22 +6,22 @@ Bootstrap contract for AI coding agents in this repository.
 
 Local repository naming is the definitive mode selector:
 
-- Replacement mode: if `AGENTS.replace.md` exists, treat it as the authoritative local AGENTS contract and ignore `AGENTS.override.md`.
-- Additive mode (default): if `AGENTS.replace.md` is absent, use canonical `AGENTS.md` plus optional additive deltas in `AGENTS.override.md`.
+- Override mode: if `AGENTS.override.md` exists, treat it as the authoritative local AGENTS contract and ignore `AGENTS.append.md`.
+- Additive mode (default): if `AGENTS.override.md` is absent, use canonical `AGENTS.md` plus optional additive deltas in `AGENTS.append.md`.
 
 ## Required Startup Order
 
 Read these in order before non-trivial work:
 
 1. `AGENTS.md`
-2. `AGENTS.replace.md` (when present; replacement mode, then skip step 3)
-3. `AGENTS.override.md` (when present and `AGENTS.replace.md` is absent; additive-only local deltas)
+2. `AGENTS.override.md` (when present; override mode, then skip step 3)
+3. `AGENTS.append.md` (when present and `AGENTS.override.md` is absent; additive-only local deltas)
 4. `.agents-config/docs/AGENT_RULES.md`
 5. `.agents-config/docs/CONTEXT_INDEX.json`
 6. `.agents-config/docs/AGENT_CONTEXT.md`
 7. `.agents/EXECUTION_QUEUE.json` (when present)
 8. `.agents/CONTINUITY.md`
-9. Run `npm run agent:preflight` to refresh `.agents/SESSION_BRIEF.json` and enforce repository-index readiness
+9. Run `npm run agent:preflight` to refresh `.agents/SESSION_BRIEF.json`
 
 ## Canonical Sources and Precedence
 
@@ -29,12 +29,12 @@ Read these in order before non-trivial work:
 - Enforcement runner: `.agents-config/scripts/enforce-agent-policies.mjs`
 - Session preflight generator: `.agents-config/scripts/agent-session-preflight.mjs`
 - Canonical rule catalog: `.agents-config/contracts/rules/canonical-ruleset.json`
-- Local rule override schema: `.agents-config/agent-overrides/rule-overrides.schema.json`
-- Optional local rule overrides file: `.agents-config/agent-overrides/rule-overrides.json`
+- Local rule override schema: `.agents-config/rule-overrides.schema.json`
+- Optional local rule overrides file: `.agents-config/rule-overrides.json`
 - Managed workflow manifest: `.agents-config/agent-managed.json`
 - Managed workflow template seed: `.agents-config/tools/bootstrap/managed-files.template.json`
-- Optional local AGENTS replacement file: `AGENTS.replace.md`
 - Optional local AGENTS override file: `AGENTS.override.md`
+- Optional local AGENTS append file: `AGENTS.append.md`
 - Release notes source of truth: `CHANGELOG.md`
 - Release notes template artifact: `.agents-config/docs/RELEASE_NOTES_TEMPLATE.md`
 - Release notes generator: `.agents-config/scripts/generate-release-notes.mjs`
@@ -53,8 +53,8 @@ Read these in order before non-trivial work:
 Conflict resolution order:
 
 1. Latest explicit user instruction.
-2. `AGENTS.replace.md` (when present).
-3. `AGENTS.override.md` (when present and `AGENTS.replace.md` is absent).
+2. `AGENTS.override.md` (when present).
+3. `AGENTS.append.md` (when present and `AGENTS.override.md` is absent).
 4. Machine-readable policy contracts/checks.
 5. Human-readable rules contract.
 6. Human-readable context contract.
@@ -94,7 +94,6 @@ Queue-first execution rule:
 - Session brief contract is machine-validated and required via `.agents/SESSION_BRIEF.json`; missing/stale freshness beyond policy threshold fails policy checks until refreshed.
 - Preflight queue-quality gate blocks archival/closeout when required queue metadata is missing (`deferred_reason`, execution/completion timestamps, outputs/evidence/resolution summary).
 - Completion evidence for `complete` items must include explicit verification trace entries prefixed `verify:`.
-- Preflight includes repository index readiness gating: always re-index namespaced index and strict-verify before implementation work starts.
 
 Simplified plan architecture:
 
@@ -176,9 +175,9 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Managed workflow fix/recheck: `npm run agent:managed -- --fix --recheck`
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
 - `AGENTS.md` is template-managed. Do not hand-edit canonical `AGENTS.md`.
-- Use `AGENTS.replace.md` for full replacement mode, or `AGENTS.override.md` for additive mode.
-- Bootstrap seeds allowlisted override payloads when rewritten local content diverges from template source.
-- Managed override gate: unknown/non-allowlisted `.agents-config/agent-overrides/**` payload files fail managed checks.
+- Use `AGENTS.override.md` for full replacement mode, or `AGENTS.append.md` for additive mode.
+- Bootstrap does not auto-seed managed override payloads; overrides are opt-in local artifacts (`.override`/`.append`) when a project intentionally diverges.
+- Managed override gate: unknown/non-allowlisted managed override payload files (adjacent `.override`/`.append`) fail managed checks.
 - Template-impact declaration gate (PR metadata): `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Release prep (changelog rotation): `npm run release:prepare -- --version <X.Y.Z>`
 - Release notes generator: `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`
@@ -192,7 +191,7 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - OpenAPI coverage verify: `npm run openapi-coverage:verify`
 - Logging compliance verify: `npm run logging:compliance:verify`
 - Logging policy requirement: runtime code paths should not ship without appropriate scoped logging coverage.
-- CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + index readiness + release-runtime checks)
+- CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
 - CI template gate: meaningful workflow-path changes must carry `Template-Impact` declaration (`yes` with `Template-Ref`, or `none` with `Template-Impact-Reason`).
 - If process expectations change, update all of:
   - `.agents-config/AGENTS_TEMPLATE.md`
@@ -202,7 +201,7 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
   - `.agents-config/agent-managed.json`
   - `.agents-config/tools/bootstrap/managed-files.template.json`
   - `.agents-config/contracts/rules/canonical-ruleset.json`
-  - `.agents-config/agent-overrides/rule-overrides.schema.json`
+  - `.agents-config/rule-overrides.schema.json`
   - `.agents-config/docs/FEATURE_INDEX.json`
   - `.agents-config/docs/TEST_MATRIX.md`
   - `.agents-config/docs/ROUTE_MAP.md`

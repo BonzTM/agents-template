@@ -29,11 +29,6 @@ jobs:
       - name: Check managed workflow drift
         run: npm run agent:managed -- --mode check
 
-      - name: Verify repository index readiness
-        run: |
-          npm run index:build
-          npm run index:verify
-
       - name: Verify release runtime contract
         run: npm run release:contract:check
 

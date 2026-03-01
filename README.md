@@ -8,8 +8,8 @@ This template provides policy-as-code enforcement, startup/preflight contracts, 
 
 - `.agents-config/AGENTS_TEMPLATE.md` is the downstream cross-agent startup-contract source and is synced as downstream `AGENTS.md`.
 - Downstream projects can choose local AGENTS mode by filename:
-- `AGENTS.replace.md` for replacement mode.
-- `AGENTS.override.md` for additive mode (read after canonical `AGENTS.md`).
+- `AGENTS.override.md` for full replacement mode.
+- `AGENTS.append.md` for additive mode (read after canonical `AGENTS.md` when no `.override.md` is present).
 - `.agents-config/templates/CLAUDE.md` is the downstream Claude bootstrap source and is synced as downstream `CLAUDE.md`.
 - `AGENTS.md` and `CLAUDE.md` are repository-local maintainer instructions for `agents-template` itself.
 
@@ -73,12 +73,12 @@ npm run bootstrap -- --mode existing --target-path ../<project-name> --project-i
 - Managed file authority defaults to template-canonical via `.agents-config/agent-managed.json.canonical_contract.default_authority = "template"`.
 - `AGENTS.md` is canonical/template-managed.
 - Local AGENTS mode selection is filename-driven in downstream repos:
-- `AGENTS.replace.md` means replacement mode.
-- `AGENTS.override.md` means additive mode.
+- `AGENTS.override.md` means full replacement mode.
+- `AGENTS.append.md` means additive mode.
 - Known override surfaces are explicit: managed entries must set `allow_override: true` before override payload files are accepted.
-- Override payloads default to `.agents-config/agent-overrides/<managed-path>` and can be remapped per entry via `override_path` when a managed file intentionally uses a non-default override location.
-- Bootstrap auto-seeds allowlisted override payloads for rewritten project-specific files only when target content diverges from template source.
-- Unknown/non-allowlisted `.agents-config/agent-overrides/**` payload files fail `npm run agent:managed -- --mode check`.
+- Override payloads default to adjacent files next to managed targets (`<managed-file>.override.<ext>` for full replacement and `<managed-file>.append.<ext>` for additive merge), and can be remapped per entry via `override_path`.
+- Bootstrap does not auto-seed managed override payloads; overrides are opt-in local artifacts.
+- Unknown/non-allowlisted override payload files (adjacent `.override`/`.append`) fail `npm run agent:managed -- --mode check`.
 - Optional non-template ownership can be declared per entry with `authority: "project"` when a file is intentionally project-local.
 - Project-specific architecture and process details should be maintained in local docs/policy files, not hard-forked template scripts.
 
@@ -87,7 +87,7 @@ npm run bootstrap -- --mode existing --target-path ../<project-name> --project-i
 - Canonical rule IDs/statements live in `.agents-config/contracts/rules/canonical-ruleset.json`.
 - Drift is checked by ID + hash lineage against policy/doc sources with `npm run rules:canonical:verify`.
 - Template maintainers can regenerate canonical lineage after intentional policy/rule changes with `npm run rules:canonical:sync`.
-- Project-local rule overrides (local-only IDs) must use `.agents-config/agent-overrides/rule-overrides.json` and validate against `.agents-config/agent-overrides/rule-overrides.schema.json`.
+- Project-local rule overrides (local-only IDs) must use `.agents-config/rule-overrides.json` and validate against `.agents-config/rule-overrides.schema.json`.
 
 ## Drift Controls
 

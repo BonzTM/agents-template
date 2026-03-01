@@ -249,14 +249,6 @@
         ".agents/plans"
       ]
     },
-    "repositoryIndexPreflight": {
-      "enabled": true,
-      "buildIfMissing": true,
-      "reindexBeforeVerify": true,
-      "verifyStrict": true,
-      "failureMode": "fail",
-      "closeoutVerifyIfPossible": true
-    },
     "workspaceLayout": {
       "canonicalRepoRoot": ".",
       "canonicalAgentsRoot": "../agents-workfiles/agents-template",
@@ -273,7 +265,6 @@
         "scope",
         "queue_file",
         "archive_index_file",
-        "index_readiness",
         "queue_read_contract",
         "queue_overview",
         "startup_attestation",
@@ -303,8 +294,8 @@
   },
   "canonicalRules": {
     "file": ".agents-config/contracts/rules/canonical-ruleset.json",
-    "overrideSchemaFile": ".agents-config/agent-overrides/rule-overrides.schema.json",
-    "optionalOverrideFile": ".agents-config/agent-overrides/rule-overrides.json",
+    "overrideSchemaFile": ".agents-config/rule-overrides.schema.json",
+    "optionalOverrideFile": ".agents-config/rule-overrides.json",
     "verifyCommandKey": "canonicalRulesVerify",
     "syncCommandKey": "canonicalRulesSync"
   },
@@ -461,8 +452,6 @@
     "sessionPreflight": "npm run agent:preflight",
     "agentPayloadStub": "npm run agent:payload:stub -- --help",
     "queueLifecycle": "npm run agent:queue:open -- --help",
-    "indexBuild": "npm run index:build",
-    "indexVerify": "npm run index:verify",
     "featureIndexVerify": "npm run feature-index:verify",
     "routeMapGenerate": "npm run route-map:generate",
     "routeMapVerify": "npm run route-map:verify",
@@ -474,7 +463,6 @@
     "openapiCoverageVerify": "npm run openapi-coverage:verify",
     "loggingComplianceGenerate": "npm run logging:compliance:generate",
     "loggingComplianceVerify": "npm run logging:compliance:verify",
-    "indexQueryStrictFresh": "node .agents-config/tools/index/indexer.mjs query \"<query>\" --strict-fresh",
     "releasePrepare": "npm run release:prepare -- --version <X.Y.Z>",
     "releaseVerify": "npm run release:verify -- --version <X.Y.Z>",
     "releaseNotes": "npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]",
@@ -517,9 +505,6 @@
     ],
     "overrideMode": "explicit_allowlist",
     "overrideReservedPaths": [
-      "rule-overrides.schema.json",
-      "rule-overrides.json",
-      "README.md",
       ".gitkeep"
     ],
     "entryAllowOverrideField": "allow_override",

@@ -13,7 +13,6 @@ const CRITICAL_TEMPLATE_IMPACT_PREFIXES = [
   ".agents-config/scripts/",
   ".agents-config/tools/bootstrap/",
   ".agents-config/tools/rules/",
-  ".agents-config/tools/index/",
   ".github/workflows/",
 ];
 
