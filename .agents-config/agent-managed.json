@@ -73,6 +73,12 @@
       "allow_override": true
     },
     {
+      "path": ".agents-config/OWNERSHIP.md",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
       "path": ".agents-config/docs/AGENT_RULES.md",
       "profiles": [
         "base"
@@ -212,6 +218,12 @@
       ]
     },
     {
+      "path": ".agents-config/tools/bootstrap/generate-ownership-matrix.mjs",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
       "path": ".agents-config/tools/rules/verify-canonical-ruleset.mjs",
       "profiles": [
         "base"
@@ -331,6 +343,12 @@
     },
     {
       "path": ".agents-config/AGENTS_TEMPLATE.md",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/OWNERSHIP.md",
       "profiles": [
         "base"
       ]

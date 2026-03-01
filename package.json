@@ -32,6 +32,8 @@
     "release:prepare": "node .agents-config/scripts/release-version-sync.mjs --write",
     "release:verify": "node .agents-config/scripts/release-version-sync.mjs --check",
     "release:contract:check": "node .agents-config/scripts/release-contract-check.mjs",
+    "ownership:generate": "node .agents-config/tools/bootstrap/generate-ownership-matrix.mjs --write",
+    "ownership:verify": "node .agents-config/tools/bootstrap/generate-ownership-matrix.mjs --check",
     "bootstrap": "node .agents-config/tools/bootstrap/bootstrap.mjs"
   },
   "devDependencies": {
