@@ -329,13 +329,14 @@ function copyManagedFiles({ templateRoot, targetRoot, manifest, profiles, mode }
     }
 
     const dstPath = path.resolve(targetRoot, targetRelativePath);
-    const preserveExistingOverride =
+    const authority = toNonEmptyString(entry?.authority) ?? "template";
+    const preserveExistingManagedFile =
       mode === "existing" &&
-      entry?.allow_override === true &&
+      (entry?.allow_override === true || authority === "project") &&
       fs.existsSync(dstPath) &&
       fs.statSync(dstPath).isFile();
 
-    if (preserveExistingOverride) {
+    if (preserveExistingManagedFile) {
       preserved += 1;
       continue;
     }
@@ -427,6 +428,7 @@ function mergePackageScripts({ templateRoot, targetRoot, packageName }) {
 
 function runBootstrapProject({
   targetRoot,
+  mode,
   templateRoot,
   projectId,
   repoOwner,
@@ -458,6 +460,8 @@ function runBootstrapProject({
     packageName,
     "--profiles",
     profiles.join(","),
+    "--bootstrap-mode",
+    mode,
     "--agents-mode",
     agentsMode,
     "--template-repo",
@@ -580,6 +584,7 @@ function main() {
 
   runBootstrapProject({
     targetRoot,
+    mode,
     templateRoot,
     projectId,
     repoOwner,
@@ -604,7 +609,7 @@ function main() {
   console.log(`- managed files copied: ${copyStats.copied}`);
   if (copyStats.preserved > 0) {
     console.log(
-      `- preserved existing allowlisted managed files (existing mode): ${copyStats.preserved}`,
+      `- preserved existing allowlisted/project-managed files (existing mode): ${copyStats.preserved}`,
     );
   }
   if (packageMerge.created) {

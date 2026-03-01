@@ -13,6 +13,7 @@ const SUPPORTED_PROFILE_LIST = [
 ];
 const SUPPORTED_PROFILES = new Set(SUPPORTED_PROFILE_LIST);
 const DEFAULT_PROFILES = ["base"];
+const SUPPORTED_BOOTSTRAP_MODES = new Set(["new", "existing"]);
 const SUPPORTED_AGENTS_MODES = new Set(["external", "local"]);
 const DEFAULT_AGENTS_WORKFILES_PATH = "../agents-workfiles";
 const REQUIRED_GITIGNORE_SNIPPETS = [".agents", ".agents/", ".agents/**"];
@@ -158,6 +159,16 @@ function normalizeAgentsMode(rawMode) {
   return mode;
 }
 
+function normalizeBootstrapMode(rawMode) {
+  const mode = toNonEmptyString(rawMode) ?? "new";
+  if (!SUPPORTED_BOOTSTRAP_MODES.has(mode)) {
+    fail(
+      `Unknown --bootstrap-mode "${mode}". Supported: ${[...SUPPORTED_BOOTSTRAP_MODES].join(", ")}`,
+    );
+  }
+  return mode;
+}
+
 function parseArgs(argv) {
   const options = {
     projectId: "",
@@ -174,6 +185,7 @@ function parseArgs(argv) {
     templateRepo: "BonzTM/agents-template",
     templateRef: "main",
     templateLocalPath: "../agents-template",
+    bootstrapMode: "new",
     skipPreflight: false,
   };
 
@@ -237,6 +249,9 @@ function parseArgs(argv) {
       case "template-local-path":
         options.templateLocalPath = value.trim();
         break;
+      case "bootstrap-mode":
+        options.bootstrapMode = value.trim();
+        break;
       default:
         fail(`Unknown flag: --${key}`);
     }
@@ -258,6 +273,56 @@ function readJsonIfPresent(filePath) {
 
 function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function buildManagedEntryIndex(manifest) {
+  const index = new Map();
+  const managedEntries = Array.isArray(manifest?.managed_files) ? manifest.managed_files : [];
+  for (const entry of managedEntries) {
+    const entryPath = toNonEmptyString(entry?.path);
+    if (!entryPath) {
+      continue;
+    }
+    const normalizedPath = toPosixPath(entryPath);
+    const sourcePath = toPosixPath(toNonEmptyString(entry?.source_path) ?? entryPath);
+    const authority = toNonEmptyString(entry?.authority) ?? "template";
+    index.set(normalizedPath, { sourcePath, authority });
+  }
+  return index;
+}
+
+function shouldPreserveExistingProjectManagedFile({
+  bootstrapMode,
+  managedEntryIndex,
+  repoRoot,
+  templateRoot,
+  targetRelativePath,
+}) {
+  if (bootstrapMode !== "existing") {
+    return false;
+  }
+
+  const normalizedTargetPath = toPosixPath(targetRelativePath);
+  const entry = managedEntryIndex.get(normalizedTargetPath);
+  if (!entry || entry.authority !== "project") {
+    return false;
+  }
+
+  const targetPath = path.resolve(repoRoot, normalizedTargetPath);
+  if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isFile()) {
+    return false;
+  }
+
+  if (!templateRoot) {
+    return true;
+  }
+
+  const templateSourcePath = path.resolve(templateRoot, entry.sourcePath);
+  if (!fs.existsSync(templateSourcePath) || !fs.statSync(templateSourcePath).isFile()) {
+    return true;
+  }
+
+  return fs.readFileSync(targetPath, "utf8") !== fs.readFileSync(templateSourcePath, "utf8");
 }
 
 function deepReplaceStrings(value, replacements) {
@@ -588,6 +653,7 @@ function runPreflight(repoRoot) {
 function main() {
   const repoRoot = resolveRepoRoot();
   const args = parseArgs(process.argv.slice(2));
+  const bootstrapMode = normalizeBootstrapMode(args.bootstrapMode);
 
   validateProjectId(args.projectId);
 
@@ -623,6 +689,8 @@ function main() {
   const templateRepo = toNonEmptyString(args.templateRepo) ?? "BonzTM/agents-template";
   const templateRef = toNonEmptyString(args.templateRef) ?? "main";
   const templateLocalPath = toNonEmptyString(args.templateLocalPath) ?? "../agents-template";
+  const templateRootCandidate = path.resolve(repoRoot, templateLocalPath);
+  const templateRoot = fs.existsSync(templateRootCandidate) ? templateRootCandidate : null;
 
   const agentsRootInfo = resolveCanonicalAgentsRoot({
     repoRoot,
@@ -646,6 +714,8 @@ function main() {
   const featureIndex = readJsonIfPresent(featureIndexPath);
   const loggingBaseline = readJsonIfPresent(loggingBaselinePath);
   const managedTemplate = readJson(managedTemplatePath);
+  const managedEntryIndex = buildManagedEntryIndex(managedTemplate);
+  const preservedProjectManagedPaths = new Set();
   const packageJson = readJson(path.resolve(repoRoot, FILES.packageJson));
   const packageLock = readJson(path.resolve(repoRoot, FILES.packageLock));
 
@@ -772,18 +842,36 @@ function main() {
     profiles,
   });
 
+  const preserveProjectManaged = (targetRelativePath) => {
+    const shouldPreserve = shouldPreserveExistingProjectManagedFile({
+      bootstrapMode,
+      managedEntryIndex,
+      repoRoot,
+      templateRoot,
+      targetRelativePath,
+    });
+    if (shouldPreserve) {
+      preservedProjectManagedPaths.add(toPosixPath(targetRelativePath));
+    }
+    return shouldPreserve;
+  };
+
   packageJson.name = packageName;
   packageLock.name = packageName;
   if (packageLock.packages && packageLock.packages[""]) {
     packageLock.packages[""].name = packageName;
   }
 
-  writeJson(policyPath, rewrittenPolicy);
-  writeJson(contextIndexPath, rewrittenContextIndex);
-  if (rewrittenFeatureIndex) {
+  if (!preserveProjectManaged(FILES.policy)) {
+    writeJson(policyPath, rewrittenPolicy);
+  }
+  if (!preserveProjectManaged(FILES.contextIndex)) {
+    writeJson(contextIndexPath, rewrittenContextIndex);
+  }
+  if (rewrittenFeatureIndex && !preserveProjectManaged(FILES.featureIndex)) {
     writeJson(featureIndexPath, rewrittenFeatureIndex);
   }
-  if (rewrittenLoggingBaseline) {
+  if (rewrittenLoggingBaseline && !preserveProjectManaged(FILES.loggingBaseline)) {
     writeJson(loggingBaselinePath, rewrittenLoggingBaseline);
   }
   writeJson(path.resolve(repoRoot, FILES.managedManifest), rewrittenManagedManifest);
@@ -791,7 +879,7 @@ function main() {
   writeJson(path.resolve(repoRoot, FILES.packageLock), packageLock);
 
   const releaseTemplatePath = path.resolve(repoRoot, FILES.releaseTemplate);
-  if (fs.existsSync(releaseTemplatePath)) {
+  if (fs.existsSync(releaseTemplatePath) && !preserveProjectManaged(FILES.releaseTemplate)) {
     rewriteReleaseTemplate(releaseTemplatePath, {
       repoName,
       dockerImage,
@@ -804,7 +892,7 @@ function main() {
   }
 
   const generateReleaseNotesPath = path.resolve(repoRoot, FILES.generateReleaseNotes);
-  if (fs.existsSync(generateReleaseNotesPath)) {
+  if (fs.existsSync(generateReleaseNotesPath) && !preserveProjectManaged(FILES.generateReleaseNotes)) {
     rewriteTextRegex(
       generateReleaseNotesPath,
       /const DEFAULT_REPO_WEB_URL = "https:\/\/github\.com\/[^"]+";/,
@@ -813,7 +901,10 @@ function main() {
   }
 
   const verifyLoggingCompliancePath = path.resolve(repoRoot, FILES.verifyLoggingCompliance);
-  if (fs.existsSync(verifyLoggingCompliancePath)) {
+  if (
+    fs.existsSync(verifyLoggingCompliancePath) &&
+    !preserveProjectManaged(FILES.verifyLoggingCompliance)
+  ) {
     rewriteTextRegex(
       verifyLoggingCompliancePath,
       /id: "[^"]+-logging-compliance-baseline"/,
@@ -836,6 +927,9 @@ function main() {
     if (!fs.existsSync(absoluteDocPath)) {
       continue;
     }
+    if (preserveProjectManaged(docPath)) {
+      continue;
+    }
     rewriteTextToken(absoluteDocPath, agentDocReplacements);
   }
 
@@ -854,6 +948,9 @@ function main() {
   console.log(`- Template source: ${templateRepo}@${templateRef} (local fallback: ${templateLocalPath})`);
   console.log(`- Repo URL default: https://github.com/${repoOwner}/${repoName}`);
   console.log(`- Helm repo URL: ${helmRepoUrl}`);
+  if (preservedProjectManagedPaths.size > 0) {
+    console.log(`- preserved existing project-managed files: ${preservedProjectManagedPaths.size}`);
+  }
 
   if (!args.skipPreflight) {
     runPreflight(repoRoot);

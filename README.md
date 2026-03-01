@@ -80,6 +80,7 @@ npm run bootstrap -- --mode existing --target-path ../<project-name> --project-i
 - Known override surfaces are explicit: managed entries must set `allow_override: true` before override payload files are accepted.
 - Override payloads default to adjacent files next to managed targets (`<managed-file>.override.<ext>` for full replacement and `<managed-file>.append.<ext>` for additive merge), and can be remapped per entry via `override_path`.
 - Bootstrap does not auto-seed managed override payloads; overrides are opt-in local artifacts.
+- Existing-mode bootstrap preserves project-owned managed files when local content differs from the template seed source.
 - Unknown/non-allowlisted override payload files (adjacent `.override`/`.append`) fail `npm run agent:managed -- --mode check`.
 - Optional non-template ownership can be declared per entry with `authority: "project"` when a file is intentionally project-local.
 - Project-specific architecture and process details should be maintained in local docs/policy files, not hard-forked template scripts.
