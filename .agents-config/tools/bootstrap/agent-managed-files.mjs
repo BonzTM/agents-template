@@ -6,7 +6,13 @@ import https from "node:https";
 import { spawnSync } from "node:child_process";
 
 const DEFAULT_MANIFEST_PATH = ".agents-config/agent-managed.json";
-const DEFAULT_PROFILES = ["base", "node-web"];
+const DEFAULT_PROFILES = [
+  "base",
+  "typescript",
+  "typescript-openapi",
+  "javascript",
+  "python",
+];
 const DEFAULT_CANONICAL_AUTHORITY = "template";
 const DEFAULT_ALLOWED_AUTHORITIES = ["template", "project"];
 const DEFAULT_OVERRIDE_MODE = "explicit_allowlist";

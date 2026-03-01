@@ -25,23 +25,23 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 | `.agents-config/docs/AGENT_CONTEXT.md` | `base` | `project` |
 | `.agents-config/docs/AGENT_RULES.md` | `base` | `project` |
 | `.agents-config/docs/CONTEXT_INDEX.json` | `base` | `project` |
-| `.agents-config/docs/FEATURE_INDEX.json` | `node-web` | `project` |
-| `.agents-config/docs/LOGGING_STANDARDS.md` | `node-web` | `project` |
+| `.agents-config/docs/FEATURE_INDEX.json` | `typescript, javascript` | `project` |
+| `.agents-config/docs/LOGGING_STANDARDS.md` | `typescript, javascript` | `project` |
 | `.agents-config/docs/RELEASE_NOTES_TEMPLATE.md` | `base` | `project` |
-| `.agents-config/docs/TEST_MATRIX.md` | `node-web` | `project` |
+| `.agents-config/docs/TEST_MATRIX.md` | `typescript, javascript` | `project` |
 | `.agents-config/policies/agent-governance.json` | `base` | `project` |
-| `.agents-config/policies/logging-compliance-baseline.json` | `node-web` | `project` |
+| `.agents-config/policies/logging-compliance-baseline.json` | `typescript, javascript` | `project` |
 | `.agents-config/scripts/generate-release-notes.mjs` | `base` | `project` |
-| `.agents-config/scripts/verify-logging-compliance.mjs` | `node-web` | `project` |
-| `backend/src/routes/README.md` | `node-web` | `project` |
-| `backend/src/services/README.md` | `node-web` | `project` |
-| `frontend/features/README.md` | `node-web` | `project` |
+| `.agents-config/scripts/verify-logging-compliance.mjs` | `typescript, javascript` | `project` |
+| `backend/src/routes/README.md` | `typescript, javascript` | `project` |
+| `backend/src/services/README.md` | `typescript, javascript` | `project` |
+| `frontend/features/README.md` | `typescript, javascript` | `project` |
 
 ## Template-Owned Managed Files
 
 | Path | Profiles | Authority |
 | --- | --- | --- |
-| `.agents-config/docs/README.md` | `node-web` | `template` |
+| `.agents-config/docs/README.md` | `typescript, javascript` | `template` |
 | `.agents-config/OWNERSHIP.md` | `base` | `template` |
 | `.agents-config/rule-overrides.schema.json` | `base` | `template` |
 | `.agents-config/scripts/agent-queue-lifecycle.mjs` | `base` | `template` |
@@ -59,11 +59,11 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 | `.agents-config/tools/bootstrap/check-template-impact.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/generate-ownership-matrix.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/managed-files.template.json` | `base` | `template` |
-| `.agents-config/tools/docs/feature-index-check.mjs` | `node-web` | `template` |
-| `.agents-config/tools/docs/generate-domain-readmes.mjs` | `node-web` | `template` |
-| `.agents-config/tools/docs/generate-jsdoc-coverage.mjs` | `node-web` | `template` |
-| `.agents-config/tools/docs/generate-openapi-coverage.mjs` | `node-web` | `template` |
-| `.agents-config/tools/docs/generate-route-map.mjs` | `node-web` | `template` |
+| `.agents-config/tools/docs/feature-index-check.mjs` | `typescript, javascript` | `template` |
+| `.agents-config/tools/docs/generate-domain-readmes.mjs` | `typescript, javascript` | `template` |
+| `.agents-config/tools/docs/generate-jsdoc-coverage.mjs` | `typescript, javascript` | `template` |
+| `.agents-config/tools/docs/generate-openapi-coverage.mjs` | `typescript-openapi` | `template` |
+| `.agents-config/tools/docs/generate-route-map.mjs` | `typescript, javascript` | `template` |
 | `.agents-config/tools/rules/verify-canonical-ruleset.mjs` | `base` | `template` |
 | `.github/workflows/pr-checks.yml` | `base` | `template` |
 | `AGENTS.md` | `base` | `template` |

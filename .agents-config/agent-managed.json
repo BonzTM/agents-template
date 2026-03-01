@@ -7,7 +7,10 @@
   },
   "profiles": [
     "base",
-    "node-web"
+    "typescript",
+    "typescript-openapi",
+    "javascript",
+    "python"
   ],
   "managed_files": [
     {
@@ -238,92 +241,105 @@
     {
       "path": ".agents-config/docs/FEATURE_INDEX.json",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     },
     {
       "path": ".agents-config/docs/TEST_MATRIX.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     },
     {
       "path": ".agents-config/docs/LOGGING_STANDARDS.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     },
     {
       "path": ".agents-config/docs/README.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": "backend/src/routes/README.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     },
     {
       "path": "backend/src/services/README.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     },
     {
       "path": "frontend/features/README.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     },
     {
       "path": ".agents-config/tools/docs/feature-index-check.mjs",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": ".agents-config/tools/docs/generate-route-map.mjs",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": ".agents-config/tools/docs/generate-domain-readmes.mjs",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": ".agents-config/tools/docs/generate-jsdoc-coverage.mjs",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": ".agents-config/tools/docs/generate-openapi-coverage.mjs",
       "profiles": [
-        "node-web"
+        "typescript-openapi"
       ]
     },
     {
       "path": ".agents-config/scripts/verify-logging-compliance.mjs",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     },
     {
       "path": ".agents-config/policies/logging-compliance-baseline.json",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "authority": "project"
     }
@@ -476,49 +492,58 @@
     {
       "path": ".agents-config/docs/FEATURE_INDEX.json",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": ".agents-config/docs/TEST_MATRIX.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": ".agents-config/docs/LOGGING_STANDARDS.md",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": "backend/src/routes/",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": "backend/src/services/",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": "frontend/features/",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     },
     {
       "path": ".agents-config/tools/docs/",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript",
+        "typescript-openapi"
       ]
     },
     {
       "path": ".agents-config/scripts/verify-logging-compliance.mjs",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ]
     }
   ],

@@ -4,7 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const SUPPORTED_PROFILES = new Set(["base", "node-web"]);
+const SUPPORTED_PROFILE_LIST = [
+  "base",
+  "typescript",
+  "typescript-openapi",
+  "javascript",
+  "python",
+];
+const SUPPORTED_PROFILES = new Set(SUPPORTED_PROFILE_LIST);
 const DEFAULT_PROFILES = ["base"];
 const SUPPORTED_AGENTS_MODES = new Set(["external", "local"]);
 const DEFAULT_AGENTS_WORKFILES_PATH = "../agents-workfiles";
@@ -26,14 +33,15 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Fixed
 - None.
 `;
-const NODE_WEB_PROFILE_CONTRACTS = [
-  "featureIndex",
-  "testMatrix",
-  "routeMap",
-  "domainReadmes",
-  "jsdocCoverage",
-  "loggingStandards",
-];
+const CONTRACT_PROFILE_REQUIREMENTS = {
+  featureIndex: ["typescript", "javascript"],
+  testMatrix: ["typescript", "javascript"],
+  routeMap: ["typescript", "javascript"],
+  domainReadmes: ["typescript", "javascript"],
+  jsdocCoverage: ["typescript", "javascript"],
+  openapiCoverage: ["typescript-openapi"],
+  loggingStandards: ["typescript", "javascript"],
+};
 
 const FILES = {
   policy: ".agents-config/policies/agent-governance.json",
@@ -126,7 +134,15 @@ function parseProfiles(rawProfiles) {
     fail('The "base" profile is required.');
   }
 
-  return unique;
+  return normalizeProfileDependencies(unique);
+}
+
+function normalizeProfileDependencies(profiles) {
+  const normalized = [...profiles];
+  if (normalized.includes("typescript-openapi") && !normalized.includes("typescript")) {
+    normalized.push("typescript");
+  }
+  return normalized;
 }
 
 function normalizeAgentsMode(rawMode) {
@@ -530,33 +546,31 @@ function rewriteTextRegex(filePath, pattern, replacement) {
   fs.writeFileSync(filePath, next, "utf8");
 }
 
-function setNodeWebContractState(policy, profiles) {
+function setContractProfileState(policy, profiles) {
   if (!policy.contracts || typeof policy.contracts !== "object") {
     return;
   }
 
-  const nodeWebEnabled = profiles.includes("node-web");
-
   policy.contracts.profiles = {
-    availableProfiles: [...SUPPORTED_PROFILES],
+    availableProfiles: [...SUPPORTED_PROFILE_LIST],
     activeProfiles: profiles,
   };
 
-  for (const contractName of NODE_WEB_PROFILE_CONTRACTS) {
+  for (const [contractName, contractProfiles] of Object.entries(CONTRACT_PROFILE_REQUIREMENTS)) {
     const contract = policy.contracts[contractName];
     if (!contract || typeof contract !== "object") {
       continue;
     }
-    contract.profiles = ["node-web"];
-    contract.enabled = nodeWebEnabled;
+    contract.profiles = [...contractProfiles];
+    contract.enabled = contractProfiles.some((profile) => profiles.includes(profile));
   }
 }
 
 function applyProfiles({ policy, contextIndex, profiles }) {
-  setNodeWebContractState(policy, profiles);
+  setContractProfileState(policy, profiles);
 
   contextIndex.profiles = {
-    availableProfiles: [...SUPPORTED_PROFILES],
+    availableProfiles: [...SUPPORTED_PROFILE_LIST],
     activeProfiles: profiles,
   };
 }
@@ -625,7 +639,7 @@ function main() {
   const featureIndexPath = path.resolve(repoRoot, FILES.featureIndex);
   const loggingBaselinePath = path.resolve(repoRoot, FILES.loggingBaseline);
   const managedTemplatePath = path.resolve(repoRoot, FILES.managedTemplate);
-  const nodeWebEnabled = profiles.includes("node-web");
+  const webDocsProfilesEnabled = profiles.includes("typescript") || profiles.includes("javascript");
 
   const policy = readJson(policyPath);
   const contextIndex = readJson(contextIndexPath);
@@ -635,11 +649,11 @@ function main() {
   const packageJson = readJson(path.resolve(repoRoot, FILES.packageJson));
   const packageLock = readJson(path.resolve(repoRoot, FILES.packageLock));
 
-  if (nodeWebEnabled && featureIndex === null) {
-    fail(`Missing required file for node-web profile: ${FILES.featureIndex}`);
+  if (webDocsProfilesEnabled && featureIndex === null) {
+    fail(`Missing required file for typescript/javascript profiles: ${FILES.featureIndex}`);
   }
-  if (nodeWebEnabled && loggingBaseline === null) {
-    fail(`Missing required file for node-web profile: ${FILES.loggingBaseline}`);
+  if (webDocsProfilesEnabled && loggingBaseline === null) {
+    fail(`Missing required file for typescript/javascript profiles: ${FILES.loggingBaseline}`);
   }
 
   const replacements = new Map([

@@ -667,7 +667,13 @@ function getActiveProfiles(config) {
   if (configuredProfiles.length > 0) {
     return new Set(configuredProfiles);
   }
-  return new Set(["base", "node-web"]);
+  return new Set([
+    "base",
+    "typescript",
+    "typescript-openapi",
+    "javascript",
+    "python",
+  ]);
 }
 
 function normalizeStringArray(value) {

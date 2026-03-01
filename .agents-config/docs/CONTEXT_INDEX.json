@@ -487,11 +487,17 @@
   "profiles": {
     "availableProfiles": [
       "base",
-      "node-web"
+      "typescript",
+      "typescript-openapi",
+      "javascript",
+      "python"
     ],
     "activeProfiles": [
       "base",
-      "node-web"
+      "typescript",
+      "typescript-openapi",
+      "javascript",
+      "python"
     ]
   },
   "managedFilesCanonical": {

@@ -4,7 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const SUPPORTED_PROFILES = new Set(["base", "node-web"]);
+const SUPPORTED_PROFILE_LIST = [
+  "base",
+  "typescript",
+  "typescript-openapi",
+  "javascript",
+  "python",
+];
+const SUPPORTED_PROFILES = new Set(SUPPORTED_PROFILE_LIST);
 const SUPPORTED_BOOTSTRAP_MODES = new Set(["new", "existing"]);
 const DOWNSTREAM_SCRIPT_EXCLUDES = new Set(["bootstrap"]);
 const DEFAULT_AGENTS_WORKFILES_PATH = "../agents-workfiles";
@@ -96,7 +103,15 @@ function parseProfiles(rawProfiles) {
     fail('The "base" profile is required.');
   }
 
-  return unique;
+  return normalizeProfileDependencies(unique);
+}
+
+function normalizeProfileDependencies(profiles) {
+  const normalized = [...profiles];
+  if (normalized.includes("typescript-openapi") && !normalized.includes("typescript")) {
+    normalized.push("typescript");
+  }
+  return normalized;
 }
 
 function normalizeBootstrapMode(rawMode) {

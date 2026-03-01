@@ -34,7 +34,7 @@ Default behavior:
 Common flags:
 
 - `--mode new|existing` (`new` default)
-- `--profiles base,node-web`
+- `--profiles base,typescript[,typescript-openapi][,javascript][,python]`
 - `--agents-workfiles-path <relative-path>` (default: `../agents-workfiles`)
 - `--agents-mode external|local` (`external` default, `local` for repo-local `.agents`)
 - `--project-id <project-id>`
@@ -55,8 +55,10 @@ If omitted, bootstrap derives it from the target project name/path. Use an expli
 Profile summary:
 
 - `base`: core orchestrator/subagent governance, queue, preflight, policy checks.
-- `node-web`: route-map/domain-readme/jsdoc/logging/feature-index contracts.
-  Use this after Node backend/frontend source roots are present; start with `base` for greenfield non-Node or not-yet-scaffolded repos.
+- `typescript`: route-map/domain-readme/jsdoc/logging/feature-index contracts for TS web/backend repos.
+- `typescript-openapi`: OpenAPI coverage contract; implies `typescript`.
+- `javascript`: route-map/domain-readme/jsdoc/logging/feature-index contracts for JS web/backend repos.
+- `python`: reserved for Python-specific contracts (no additional seeded artifacts yet).
 
 ## Bootstrap Inside an Existing Target Repo
 

@@ -187,7 +187,8 @@
       "frontendFeatureRoot": "frontend/features",
       "enforceFrontendFeatureCoverage": true,
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "enabled": true
     },
@@ -202,7 +203,8 @@
         "## Verification Workflow"
       ],
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "enabled": true
     },
@@ -818,7 +820,8 @@
         "## Frontend API Route Handler Map"
       ],
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "enabled": true
     },
@@ -836,7 +839,8 @@
       "requiredSection": "## Start Here",
       "frontendFeatureRoot": "frontend/features",
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "enabled": true
     },
@@ -853,7 +857,8 @@
         "## Missing Exported Symbols (Top 250)"
       ],
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "enabled": true,
       "minimumTotalCoveragePercent": 100,
@@ -875,7 +880,7 @@
         "## Missing OpenAPI Endpoint Docs"
       ],
       "profiles": [
-        "node-web"
+        "typescript-openapi"
       ],
       "enabled": true,
       "minimumTotalCoveragePercent": 100,
@@ -910,7 +915,8 @@
         "npm run logging:compliance:verify"
       ],
       "profiles": [
-        "node-web"
+        "typescript",
+        "javascript"
       ],
       "enabled": true
     },
@@ -930,11 +936,17 @@
     "profiles": {
       "availableProfiles": [
         "base",
-        "node-web"
+        "typescript",
+        "typescript-openapi",
+        "javascript",
+        "python"
       ],
       "activeProfiles": [
         "base",
-        "node-web"
+        "typescript",
+        "typescript-openapi",
+        "javascript",
+        "python"
       ]
     },
     "managedFilesCanonical": {
@@ -1054,7 +1066,9 @@
       {
         "file": ".agents-config/docs/README.md",
         "profiles": [
-          "node-web"
+          "typescript",
+          "javascript",
+          "typescript-openapi"
         ],
         "snippets": [
           "[`FEATURE_INDEX.json`](FEATURE_INDEX.json)",
@@ -1175,7 +1189,8 @@
       {
         "file": ".agents-config/docs/TEST_MATRIX.md",
         "profiles": [
-          "node-web"
+          "typescript",
+          "javascript"
         ],
         "sections": [
           "# Test Matrix",
@@ -1189,7 +1204,8 @@
       {
         "file": ".agents-config/docs/JSDOC_COVERAGE.md",
         "profiles": [
-          "node-web"
+          "typescript",
+          "javascript"
         ],
         "sections": [
           "# JSDoc Coverage Baseline",
@@ -1200,7 +1216,7 @@
       {
         "file": ".agents-config/docs/OPENAPI_COVERAGE.md",
         "profiles": [
-          "node-web"
+          "typescript-openapi"
         ],
         "sections": [
           "# OpenAPI Endpoint Coverage Baseline",
@@ -1222,7 +1238,8 @@
       {
         "file": ".agents-config/docs/ROUTE_MAP.md",
         "profiles": [
-          "node-web"
+          "typescript",
+          "javascript"
         ],
         "sections": [
           "# Route Map",
@@ -1234,7 +1251,8 @@
       {
         "file": "backend/src/routes/README.md",
         "profiles": [
-          "node-web"
+          "typescript",
+          "javascript"
         ],
         "sections": [
           "# Backend Routes",
@@ -1246,7 +1264,8 @@
       {
         "file": "backend/src/services/README.md",
         "profiles": [
-          "node-web"
+          "typescript",
+          "javascript"
         ],
         "sections": [
           "# Backend Services",
@@ -1258,7 +1277,8 @@
       {
         "file": "frontend/features/README.md",
         "profiles": [
-          "node-web"
+          "typescript",
+          "javascript"
         ],
         "sections": [
           "# Frontend Features",

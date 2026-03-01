@@ -5,7 +5,13 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const DEFAULT_MANIFEST_PATH = ".agents-config/agent-managed.json";
-const DEFAULT_PROFILES = ["base", "node-web"];
+const DEFAULT_PROFILES = [
+  "base",
+  "typescript",
+  "typescript-openapi",
+  "javascript",
+  "python",
+];
 const MIN_NONE_REASON_LENGTH = 24;
 const CRITICAL_TEMPLATE_IMPACT_PREFIXES = [
   ".agents-config/policies/",
