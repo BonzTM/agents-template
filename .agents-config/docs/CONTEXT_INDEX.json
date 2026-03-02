@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-03-02.02",
+    "version": "2026-03-02.05",
     "description": "Machine-readable agent-facing context index for startup lookup and command discovery."
   },
   "startupReadOrder": [
@@ -10,7 +10,7 @@
     ".agents-config/docs/CONTEXT_INDEX.json",
     ".agents-config/docs/AGENT_CONTEXT.md",
     ".agents/EXECUTION_QUEUE.json",
-    ".agents/CONTINUITY.md"
+    ".agents/MEMORY.md"
   ],
   "primaryContracts": {
     "bootstrapFile": ".agents-config/AGENTS_TEMPLATE.md",
@@ -26,7 +26,9 @@
   },
   "sessionArtifacts": {
     "executionQueueFile": ".agents/EXECUTION_QUEUE.json",
-    "continuityFile": ".agents/CONTINUITY.md",
+    "memoryFile": ".agents/MEMORY.md",
+    "memoryTopicsRoot": ".agents/memory",
+    "sessionLogFile": ".agents/SESSION_LOG.md",
     "sessionBriefJsonFile": ".agents/SESSION_BRIEF.json",
     "archiveRoot": ".agents/archives",
     "archiveIndexFile": ".agents/EXECUTION_ARCHIVE_INDEX.json",
@@ -63,9 +65,9 @@
       "heading": "### Orchestrator/Subagent Instruction Contract (Required)"
     },
     {
-      "id": "rules_continuity",
+      "id": "rules_memory_session_log",
       "file": ".agents-config/docs/AGENT_RULES.md",
-      "heading": "### CONTINUITY.md Contract (Required)"
+      "heading": "### MEMORY.md and SESSION_LOG.md Contracts (Required)"
     },
     {
       "id": "rules_post_compaction",

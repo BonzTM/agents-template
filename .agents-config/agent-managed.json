@@ -14,7 +14,13 @@
   ],
   "managed_files": [
     {
-      "path": ".agents-config/templates/agents/CONTINUITY.md",
+      "path": ".agents-config/templates/agents/MEMORY.md",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/templates/agents/SESSION_LOG.md",
       "profiles": [
         "base"
       ]
@@ -39,6 +45,12 @@
     },
     {
       "path": ".agents-config/templates/agents/index/.gitkeep",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/templates/agents/memory/.gitkeep",
       "profiles": [
         "base"
       ]
@@ -199,7 +211,15 @@
             "type": "string"
           },
           {
-            "path": "sessionArtifacts.continuityFile",
+            "path": "sessionArtifacts.memoryFile",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.memoryTopicsRoot",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.sessionLogFile",
             "type": "string"
           },
           {

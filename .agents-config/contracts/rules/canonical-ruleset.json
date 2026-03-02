@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "canonical-ruleset",
-    "version": "2026-03-02.01",
+    "version": "2026-03-02.04",
     "description": "Canonical governance rule catalog used for policy and drift checks.",
     "generated_from": [
       ".agents-config/policies/agent-governance.json",
@@ -14,8 +14,8 @@
       "policy_required_ids_sha256": "fa5c0af89d6f7c30b39abbd2a118ad31800b92caa4e64774563ef4f55e9c39a9",
       "policy_active_profiles_sha256": "d3754f9182d9a1e86bd910514dda0370b4fab06bc478e9e1823e0134d1626744",
       "policy_orchestrator_rules_sha256": "5d6bae98890860e9cc1118216be111b377a40c9e3553f4e457eac8e2d29888d2",
-      "rules_doc_catalog_sha256": "cd95e23527a07deef37f4c4e95debb7b57a32c98c0491240c2b1ce5697e5d6fb",
-      "canonical_rules_sha256": "eb375385340aa31055186e8ce23d2699ac57be24680f7f7ad665bddb4b6529ae"
+      "rules_doc_catalog_sha256": "d9823c86aa57627101707a0b7fa8551113f0b5afc0fb6335eed919c1e893945f",
+      "canonical_rules_sha256": "5388e05430aab933e37982853bb8c1c1c0366c27b6096b92a22cb553c530f259"
     }
   },
   "rules": [
@@ -149,7 +149,7 @@
     },
     {
       "id": "rule_continuity_required",
-      "statement": "Read and maintain `.agents/CONTINUITY.md` as canonical continuity context.",
+      "statement": "Use `.agents/MEMORY.md` as the canonical memory reference point and submemory index, and route timestamped implementation traces to `.agents/SESSION_LOG.md`.",
       "category": "governance",
       "severity": "error",
       "overrideable": false,

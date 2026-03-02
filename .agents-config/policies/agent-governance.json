@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-03-02.01",
+    "version": "2026-03-02.04",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
@@ -20,7 +20,7 @@
         ".agents-config/docs/CONTEXT_INDEX.json",
         ".agents-config/docs/AGENT_CONTEXT.md",
         ".agents/EXECUTION_QUEUE.json",
-        ".agents/CONTINUITY.md"
+        ".agents/MEMORY.md"
       ],
       "precedenceOrder": [
         "user_instruction",
@@ -49,7 +49,7 @@
         ".agents-config/docs/CONTEXT_INDEX.json",
         ".agents-config/docs/AGENT_CONTEXT.md",
         ".agents/EXECUTION_QUEUE.json",
-        ".agents/CONTINUITY.md"
+        ".agents/MEMORY.md"
       ],
       "requiredCommandKeys": [
         "policyCheck",
@@ -237,7 +237,9 @@
     "sessionArtifacts": {
       "executionQueueFile": ".agents/EXECUTION_QUEUE.json",
       "sessionBriefJsonFile": ".agents/SESSION_BRIEF.json",
-      "continuityFile": ".agents/CONTINUITY.md",
+      "memoryFile": ".agents/MEMORY.md",
+      "memoryTopicsRoot": ".agents/memory",
+      "sessionLogFile": ".agents/SESSION_LOG.md",
       "archiveRoot": ".agents/archives",
       "archiveIndexFile": ".agents/EXECUTION_ARCHIVE_INDEX.json",
       "archiveShardBy": "feature_id",
@@ -1040,6 +1042,9 @@
           "Local rule override schema: `.agents-config/rule-overrides.schema.json`",
           "## Session Context Artifacts",
           "Shared queue authority for orchestrator and subagents: `.agents/EXECUTION_QUEUE.json` (single source of truth)",
+          "Memory ledger: `.agents/MEMORY.md`",
+          "Session implementation log: `.agents/SESSION_LOG.md`",
+          "Submemory convention: each memory directory uses a short ID (`mNNN`) and stores freeform content in `_submemory.md`.",
           "## Orchestrator/Subagent Contract Pointer",
           "## Policy-as-Code Enforcement",
           "npm run rules:canonical:verify",
@@ -1089,7 +1094,10 @@
           "### Context7 MCP and Web Search Policy",
           "### Container-First Policy (Required)",
           "### Session Artifact Contracts (Required)",
-          "### CONTINUITY.md Contract (Required)",
+          "### MEMORY.md and SESSION_LOG.md Contracts (Required)",
+          "curated semantic memory",
+          "Route implementation traces to `.agents/SESSION_LOG.md`, not `.agents/MEMORY.md`.",
+          "- `- mNNN | .agents/memory/mNNN/_submemory.md | One sentence description.`",
           "### Post-Compaction Startup Checklist (Required)",
           "### Definition of Done",
           "strict atomic subagent tasks with explicit objective, inputs, acceptance criteria, and verification",
@@ -1238,7 +1246,7 @@
           "### CLI Worktree Parallelism (Required)",
           "### Orchestrator/Subagent Instruction Contract (Required)",
           "### Session Artifact Contracts (Required)",
-          "### CONTINUITY.md Contract (Required)",
+          "### MEMORY.md and SESSION_LOG.md Contracts (Required)",
           "### Post-Compaction Startup Checklist (Required)",
           "### Definition of Done"
         ]
@@ -1314,14 +1322,20 @@
         ]
       },
       {
-        "file": ".agents/CONTINUITY.md",
+        "file": ".agents/MEMORY.md",
         "optional": false,
         "sections": [
-          "## [PLANS]",
-          "## [DECISIONS]",
-          "## [PROGRESS]",
-          "## [DISCOVERIES]",
-          "## [OUTCOMES]"
+          "## User Directives",
+          "## Architecture Decisions",
+          "## Known Gotchas",
+          "## Submemory Index"
+        ]
+      },
+      {
+        "file": ".agents/SESSION_LOG.md",
+        "optional": false,
+        "sections": [
+          "## [ENTRIES]"
         ]
       },
       {
@@ -1383,7 +1397,7 @@
         "sequence": [
           "1. Re-read `.agents-config/AGENTS_TEMPLATE.md`, `.agents-config/docs/AGENT_RULES.md`, `.agents-config/docs/CONTEXT_INDEX.json`, and `.agents-config/docs/AGENT_CONTEXT.md`.",
           "2. Confirm branch + workspace state (`git rev-parse --abbrev-ref HEAD`, `git status --short`).",
-          "3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/CONTINUITY.md`; both are required startup artifacts.",
+          "3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/MEMORY.md`; both are required startup artifacts.",
           "4. Run `npm run agent:preflight` to regenerate `.agents/SESSION_BRIEF.json`.",
           "5. Re-confirm active user scope, exclusions, and acceptance criteria from the latest user instruction.",
           "6. Publish a short resume plan naming the exact next atomic task before editing code."
@@ -1405,17 +1419,24 @@
         ]
       }
     ],
-    "continuityEntryFormat": {
-      "file": ".agents/CONTINUITY.md",
+    "sessionLogEntryFormat": {
+      "file": ".agents/SESSION_LOG.md",
       "optional": false,
       "sectionHeaders": [
-        "## [PLANS]",
-        "## [DECISIONS]",
-        "## [PROGRESS]",
-        "## [DISCOVERIES]",
-        "## [OUTCOMES]"
+        "## [ENTRIES]"
       ],
       "entryRegex": "^- \\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?Z \\[(USER|CODE|TOOL|ASSUMPTION|MILESTONE)\\] .+"
+    },
+    "memoryIndexContract": {
+      "file": ".agents/MEMORY.md",
+      "optional": false,
+      "sectionHeader": "## Submemory Index",
+      "noneEntry": "- None recorded.",
+      "entryRegex": "^- (?<id>m[0-9]{3}) \\| (?<path>\\.agents\\/memory\\/m[0-9]{3}\\/_submemory\\.md) \\| (?<description>[^\\r\\n]+[.!?])$",
+      "directoryRoot": ".agents/memory",
+      "directoryNameRegex": "^m[0-9]{3}$",
+      "submemoryFileName": "_submemory.md",
+      "descriptionMinLength": 12
     },
     "disallowedTrackedPathPrefixes": [
       {

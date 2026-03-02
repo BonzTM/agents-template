@@ -153,7 +153,15 @@
             "type": "string"
           },
           {
-            "path": "sessionArtifacts.continuityFile",
+            "path": "sessionArtifacts.memoryFile",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.memoryTopicsRoot",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.sessionLogFile",
             "type": "string"
           },
           {

@@ -32,7 +32,7 @@ Read these in order before non-trivial work:
 5. `.agents-config/docs/CONTEXT_INDEX.json`
 6. `.agents-config/docs/AGENT_CONTEXT.md`
 7. `.agents/EXECUTION_QUEUE.json` (when present)
-8. `.agents/CONTINUITY.md`
+8. `.agents/MEMORY.md`
 9. Run `npm run agent:preflight` to refresh `.agents/SESSION_BRIEF.json`
 
 ## Canonical Sources and Precedence
@@ -80,7 +80,10 @@ Canonical local artifact roots are under `.agents/`:
 - Feature-sharded cold archive: `.agents/archives/<feature_id>.jsonl`
 - Archive index for historical lookup: `.agents/EXECUTION_ARCHIVE_INDEX.json`
 - Generated startup brief: `.agents/SESSION_BRIEF.json`
-- Continuity ledger: `.agents/CONTINUITY.md`
+- Memory ledger: `.agents/MEMORY.md` (reference point for persistent memories and the submemory index)
+- Topic memory root: `.agents/memory/`
+- Session implementation log: `.agents/SESSION_LOG.md`
+- Submemory convention: each memory directory uses a short ID (`mNNN`) and stores freeform content in `_submemory.md`.
 - Plan roots: `.agents/plans/current/`, `.agents/plans/deferred/`, `.agents/plans/archived/`
 - Shared queue authority for orchestrator and subagents: `.agents/EXECUTION_QUEUE.json` (single source of truth)
 - Bootstrap defaults to external workfiles mode: `.agents` is a symlink to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`).

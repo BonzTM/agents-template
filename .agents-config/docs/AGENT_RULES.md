@@ -24,7 +24,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_scope_tight_no_overbroad_refactor`: Keep changes narrowly scoped unless the user explicitly requests broad refactors.
 - `rule_hybrid_machine_human_contract`: Use machine-readable contracts as authority with concise human nuance addenda when needed.
 - `rule_policy_sync_required`: When process expectations change, update policy + enforcement + human docs together.
-- `rule_continuity_required`: Read and maintain `.agents/CONTINUITY.md` as canonical continuity context.
+- `rule_continuity_required`: Use `.agents/MEMORY.md` as the canonical memory reference point and submemory index, and route timestamped implementation traces to `.agents/SESSION_LOG.md`.
 - `rule_post_compaction_rebootstrap`: Treat compaction recovery as full startup and run preflight.
 - `rule_context_index_drift_guard`: Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with policy/documentation contracts and fail checks on drift.
 - `rule_canonical_ruleset_contract_required`: Maintain canonical rule IDs/statements in `.agents-config/contracts/rules/canonical-ruleset.json` with hash lineage tied to policy and rules docs.
@@ -299,7 +299,7 @@ When policy expectations change, update all relevant governance artifacts in the
 - If the user adds or changes a process rule, update `.agents-config/AGENTS_TEMPLATE.md` and `.agents-config/docs/AGENT_RULES.md` in the same change set and enforce it via policy-as-code (`.agents-config/policies/agent-governance.json` and `.agents-config/scripts/enforce-agent-policies.mjs`).
 - Work exhaustively with zero guesswork: if a required fact is unknown, explicitly look it up/verify it before proceeding.
 - Do not trim or skip relevant context; preserve complete context for correctness-critical work unless the user explicitly asks to narrow scope.
-- Record material findings/decisions in persistent context artifacts (`.agents/CONTINUITY.md`, `.agents/EXECUTION_QUEUE.json`, and plan files) to survive context compaction.
+- Record material findings/decisions in persistent context artifacts (`.agents/MEMORY.md`, `.agents/SESSION_LOG.md`, `.agents/EXECUTION_QUEUE.json`, and plan files) to survive context compaction.
 - Reuse shared abstractions by default; avoid duplicate logic when common helpers/hooks/services are available.
 - Keep changes small, readable, and scoped; avoid large refactors unless explicitly requested.
 - No fallback code and no dummy implementations; fail fast instead of masking broken paths.
@@ -381,7 +381,7 @@ When policy expectations change, update all relevant governance artifacts in the
 - Complete this checklist in order:
   1. Re-read `.agents-config/AGENTS_TEMPLATE.md`, `.agents-config/docs/AGENT_RULES.md`, `.agents-config/docs/CONTEXT_INDEX.json`, and `.agents-config/docs/AGENT_CONTEXT.md`.
   2. Confirm branch + workspace state (`git rev-parse --abbrev-ref HEAD`, `git status --short`).
-  3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/CONTINUITY.md`; both are required startup artifacts.
+  3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/MEMORY.md`; both are required startup artifacts.
   4. Run `npm run agent:preflight` to regenerate `.agents/SESSION_BRIEF.json`.
   5. Re-confirm active user scope, exclusions, and acceptance criteria from the latest user instruction.
   6. Publish a short resume plan naming the exact next atomic task before editing code.
@@ -453,7 +453,8 @@ When policy expectations change, update all relevant governance artifacts in the
   - retries/restarts must update the same queue item identity rather than creating duplicate logical work.
 - Consolidation boundary:
   - `.agents/EXECUTION_QUEUE.json` is authoritative for atomic execution state.
-  - `.agents/CONTINUITY.md` records decisions/outcomes/history, not queue status.
+  - `.agents/MEMORY.md` records durable decisions/outcomes/history, not queue status.
+  - `.agents/SESSION_LOG.md` records implementation trace entries, not queue status.
 - `PLAN.json` files are machine-authoritative plan lifecycle and narrative-context records.
 - Optional `PLAN.md` files are legacy historical context and must not be treated as authoritative state.
 - Stale-link hygiene:
@@ -461,25 +462,28 @@ When policy expectations change, update all relevant governance artifacts in the
 - Treat `.agents/SESSION_BRIEF.json` as a required generated artifact from preflight, not a hand-authored policy source.
 - Validate `.agents/SESSION_BRIEF.json` schema and freshness; stale or missing briefs are CI/local failures until refreshed via preflight.
 
-### CONTINUITY.md Contract (Required)
+### MEMORY.md and SESSION_LOG.md Contracts (Required)
 
-Maintain one canonical continuity file for this workspace: `.agents/CONTINUITY.md`.
+Maintain one canonical memory file for this workspace: `.agents/MEMORY.md`.
+Maintain one canonical session trace file for this workspace: `.agents/SESSION_LOG.md`.
 
-- Read `.agents/CONTINUITY.md` at the start of every assistant turn before acting.
-- Treat `.agents/CONTINUITY.md` as canonical context after compaction; do not rely on prior chat/tool output unless reflected there.
-- Update it only when there is a meaningful delta in:
-  - `[PLANS]`
-  - `[DECISIONS]`
-  - `[PROGRESS]`
-  - `[DISCOVERIES]`
-  - `[OUTCOMES]`
-- Keep continuity entries factual only (no transcripts, no raw logs).
-- Every continuity entry must include:
-  - ISO timestamp (for example `2026-01-13T09:42Z`)
-  - provenance tag: `[USER]`, `[CODE]`, `[TOOL]`, or `[ASSUMPTION]`
-  - `UNCONFIRMED` label when uncertain (never guess)
-- If a fact changes, add a superseding entry; do not silently rewrite history.
-- Keep the file short and high-signal; compress older detail into `[MILESTONE]` bullets when it grows.
+- Read `.agents/MEMORY.md` at session start and after any context compaction before implementation.
+- Do not require re-reading `.agents/MEMORY.md` every turn when no compaction/reset occurred.
+- Treat `.agents/MEMORY.md` as canonical context after compaction; do not rely on prior chat/tool output unless reflected there.
+- `.agents/MEMORY.md` is curated semantic memory and the reference point for all memory artifacts, not an append-only transcript.
+- Keep `.agents/MEMORY.md` bounded and high-signal; edit/remove stale items instead of appending history forever.
+- Structure `.agents/MEMORY.md` with curated sections:
+  - `## User Directives`
+  - `## Architecture Decisions`
+  - `## Known Gotchas`
+  - `## Submemory Index`
+- `## Submemory Index` is the lookup table for memory directories so agents can find one memory without reading all memory files.
+- Submemory index entry format (one line per memory):
+  - `- mNNN | .agents/memory/mNNN/_submemory.md | One sentence description.`
+- Submemory directory naming is required to be short and consistent: `mNNN` (for example `m001`, `m014`).
+- Each submemory directory must contain `_submemory.md` as the canonical freeform memory file.
+- Route implementation traces to `.agents/SESSION_LOG.md`, not `.agents/MEMORY.md`.
+- Keep `.agents/SESSION_LOG.md` under `## [ENTRIES]` and append timestamp/provenance entries using policy-enforced format.
 
 ### Definition of Done
 
@@ -493,5 +497,5 @@ A task is done when all of the following are true:
   - remaining warnings/errors are either fixed or explicitly listed as out-of-scope.
 - Documentation is updated for impacted areas.
 - Follow-ups are listed for intentionally deferred work.
-- `.agents/CONTINUITY.md` is updated when goal/state/decisions materially changed.
+- `.agents/MEMORY.md` is curated to reflect active directives/decisions/gotchas, and `.agents/SESSION_LOG.md` reflects implementation trace activity.
 - Scope-completeness check is reported against the user request, with no in-scope requested item left unaccounted for.

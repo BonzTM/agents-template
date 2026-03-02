@@ -14,8 +14,10 @@ Read these in order before non-trivial work:
 3. `.agents-config/docs/CONTEXT_INDEX.json`
 4. `.agents-config/docs/AGENT_CONTEXT.md`
 5. `.agents/EXECUTION_QUEUE.json` (when present)
-6. `.agents/CONTINUITY.md`
+6. `.agents/MEMORY.md`
 7. Run `npm run agent:preflight`
+
+Treat `.agents/MEMORY.md` as the reference point for memories and for the indexed submemory directories under `.agents/memory/`.
 
 Read downstream template sources only when intentionally changing downstream contract content:
 

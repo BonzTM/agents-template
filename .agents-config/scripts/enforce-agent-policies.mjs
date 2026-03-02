@@ -453,8 +453,8 @@ function checkPlaceholderMarkers(config) {
   }
 }
 
-function checkContinuityEntryFormat(config) {
-  const rule = config?.checks?.continuityEntryFormat;
+function checkSessionLogEntryFormat(config) {
+  const rule = config?.checks?.sessionLogEntryFormat;
   if (!rule) {
     return;
   }
@@ -490,7 +490,227 @@ function checkContinuityEntryFormat(config) {
 
     if (!entryRegex.test(trimmed)) {
       addFailure(
-        `Invalid continuity entry format in ${rule.file}:${i + 1}: ${trimmed}`,
+        `Invalid session log entry format in ${rule.file}:${i + 1}: ${trimmed}`,
+      );
+    }
+  }
+}
+
+function checkMemoryIndexContract(config) {
+  const rule = config?.checks?.memoryIndexContract;
+  if (!rule) {
+    return;
+  }
+
+  const memoryContent = readFileIfPresent(rule.file, Boolean(rule.optional));
+  if (memoryContent === null) {
+    return;
+  }
+
+  const sectionHeader = toNonEmptyString(rule.sectionHeader);
+  if (!sectionHeader) {
+    addFailure("checks.memoryIndexContract.sectionHeader must be a non-empty string.");
+    return;
+  }
+  const noneEntry = toNonEmptyString(rule.noneEntry) ?? "- None recorded.";
+  const entryRegexText = toNonEmptyString(rule.entryRegex);
+  if (!entryRegexText) {
+    addFailure("checks.memoryIndexContract.entryRegex must be a non-empty regex string.");
+    return;
+  }
+  const directoryRoot = toNonEmptyString(rule.directoryRoot) ?? ".agents/memory";
+  const directoryNameRegexText =
+    toNonEmptyString(rule.directoryNameRegex) ?? "^m[0-9]{3}$";
+  const submemoryFileName = toNonEmptyString(rule.submemoryFileName) ?? "_submemory.md";
+  const descriptionMinLength =
+    Number.isInteger(rule.descriptionMinLength) && rule.descriptionMinLength >= 1
+      ? rule.descriptionMinLength
+      : 12;
+
+  let entryRegex;
+  let directoryNameRegex;
+  try {
+    entryRegex = new RegExp(entryRegexText);
+  } catch (error) {
+    addFailure(
+      `checks.memoryIndexContract.entryRegex is invalid: ${error.message}`,
+    );
+    return;
+  }
+  try {
+    directoryNameRegex = new RegExp(directoryNameRegexText);
+  } catch (error) {
+    addFailure(
+      `checks.memoryIndexContract.directoryNameRegex is invalid: ${error.message}`,
+    );
+    return;
+  }
+
+  const lines = memoryContent.split(/\r?\n/);
+  let sectionStart = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].trim() === sectionHeader) {
+      sectionStart = i + 1;
+      break;
+    }
+  }
+  if (sectionStart === -1) {
+    addFailure(`${rule.file} is missing required section header: ${sectionHeader}`);
+    return;
+  }
+
+  const indexEntries = [];
+  for (let i = sectionStart; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith("## ")) {
+      break;
+    }
+    if (!trimmed.startsWith("- ")) {
+      continue;
+    }
+    indexEntries.push({ line: i + 1, text: trimmed });
+  }
+
+  if (indexEntries.length === 0) {
+    addFailure(
+      `${rule.file} ${sectionHeader} must contain at least one bullet entry (or ${noneEntry}).`,
+    );
+    return;
+  }
+
+  const directoryRootResolved = agentsAwareReadResolver(directoryRoot);
+  if (!fs.existsSync(directoryRootResolved)) {
+    addFailure(`${directoryRoot} must exist.`);
+    return;
+  }
+  if (!fs.statSync(directoryRootResolved).isDirectory()) {
+    addFailure(`${directoryRoot} must be a directory.`);
+    return;
+  }
+
+  const submemoryDirectories = fs
+    .readdirSync(directoryRootResolved, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  for (const directoryName of submemoryDirectories) {
+    if (!directoryNameRegex.test(directoryName)) {
+      addFailure(
+        `Invalid submemory directory name under ${directoryRoot}: ${directoryName} (expected ${directoryNameRegexText}).`,
+      );
+    }
+
+    const directoryPath = path.resolve(directoryRootResolved, directoryName);
+    const files = fs
+      .readdirSync(directoryPath, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name);
+
+    if (!files.includes(submemoryFileName)) {
+      addFailure(
+        `${directoryRoot}/${directoryName} must contain ${submemoryFileName}.`,
+      );
+    }
+
+    for (const fileName of files) {
+      if (fileName !== submemoryFileName) {
+        addFailure(
+          `${directoryRoot}/${directoryName} has invalid file "${fileName}"; submemory files must be named ${submemoryFileName}.`,
+        );
+      }
+    }
+  }
+
+  const isNoneRecordedEntry =
+    indexEntries.length === 1 && indexEntries[0].text === noneEntry;
+  if (isNoneRecordedEntry) {
+    if (submemoryDirectories.length > 0) {
+      addFailure(
+        `${rule.file} uses ${noneEntry} but ${directoryRoot} contains submemory directories.`,
+      );
+    }
+    return;
+  }
+
+  const indexedIds = new Set();
+  for (const entry of indexEntries) {
+    const match = entry.text.match(entryRegex);
+    if (!match) {
+      addFailure(
+        `Invalid submemory index entry format in ${rule.file}:${entry.line}: ${entry.text}`,
+      );
+      continue;
+    }
+
+    const id = toNonEmptyString(match.groups?.id);
+    const indexedPath = toNonEmptyString(match.groups?.path);
+    const description = toNonEmptyString(match.groups?.description);
+    if (!id || !indexedPath || !description) {
+      addFailure(
+        `Submemory index entry in ${rule.file}:${entry.line} must include id/path/description.`,
+      );
+      continue;
+    }
+
+    if (description.length < descriptionMinLength) {
+      addFailure(
+        `Submemory index entry description too short in ${rule.file}:${entry.line}; expected at least ${descriptionMinLength} characters.`,
+      );
+    }
+
+    if (!directoryNameRegex.test(id)) {
+      addFailure(
+        `Submemory index id in ${rule.file}:${entry.line} must match ${directoryNameRegexText} (found ${id}).`,
+      );
+    }
+
+    if (indexedIds.has(id)) {
+      addFailure(`Duplicate submemory index id in ${rule.file}: ${id}`);
+      continue;
+    }
+    indexedIds.add(id);
+
+    const expectedPath = `${directoryRoot}/${id}/${submemoryFileName}`;
+    if (indexedPath !== expectedPath) {
+      addFailure(
+        `Submemory index path mismatch in ${rule.file}:${entry.line}; expected ${expectedPath} (found ${indexedPath}).`,
+      );
+    }
+
+    const resolvedIndexedPath = agentsAwareReadResolver(indexedPath);
+    if (!fs.existsSync(resolvedIndexedPath)) {
+      addFailure(
+        `Submemory path referenced in ${rule.file}:${entry.line} is missing: ${indexedPath}`,
+      );
+      continue;
+    }
+    if (!fs.statSync(resolvedIndexedPath).isFile()) {
+      addFailure(
+        `Submemory path referenced in ${rule.file}:${entry.line} must be a file: ${indexedPath}`,
+      );
+    }
+
+    const directoryPath = path.dirname(resolvedIndexedPath);
+    const directoryName = path.basename(directoryPath);
+    if (directoryName !== id) {
+      addFailure(
+        `Submemory path/id mismatch in ${rule.file}:${entry.line}; expected parent dir ${id} (found ${directoryName}).`,
+      );
+    }
+
+    const relativeToRoot = toPosixPath(path.relative(directoryRootResolved, directoryPath));
+    if (relativeToRoot !== id) {
+      addFailure(
+        `Submemory path in ${rule.file}:${entry.line} must be directly under ${directoryRoot}.`,
+      );
+    }
+  }
+
+  for (const directoryName of submemoryDirectories) {
+    if (!indexedIds.has(directoryName)) {
+      addFailure(
+        `Missing submemory index entry in ${rule.file} for directory ${directoryRoot}/${directoryName}.`,
       );
     }
   }
@@ -663,7 +883,7 @@ function checkDocumentationModelContract(config) {
     ".agents-config/docs/CONTEXT_INDEX.json",
     ".agents-config/docs/AGENT_CONTEXT.md",
     ".agents/EXECUTION_QUEUE.json",
-    ".agents/CONTINUITY.md",
+    ".agents/MEMORY.md",
   ];
 
   checkExactOrderedArray({
@@ -1999,7 +2219,7 @@ function checkContextIndexContract(config) {
     ".agents-config/docs/CONTEXT_INDEX.json",
     ".agents-config/docs/AGENT_CONTEXT.md",
     ".agents/EXECUTION_QUEUE.json",
-    ".agents/CONTINUITY.md",
+    ".agents/MEMORY.md",
   ];
 
   checkExactOrderedArray({
@@ -2088,9 +2308,15 @@ function checkContextIndexContract(config) {
       executionQueueFile:
         toNonEmptyString(sessionArtifactsContract.executionQueueFile) ??
         ".agents/EXECUTION_QUEUE.json",
-      continuityFile:
-        toNonEmptyString(sessionArtifactsContract.continuityFile) ??
-        ".agents/CONTINUITY.md",
+      memoryFile:
+        toNonEmptyString(sessionArtifactsContract.memoryFile) ??
+        ".agents/MEMORY.md",
+      memoryTopicsRoot:
+        toNonEmptyString(sessionArtifactsContract.memoryTopicsRoot) ??
+        ".agents/memory",
+      sessionLogFile:
+        toNonEmptyString(sessionArtifactsContract.sessionLogFile) ??
+        ".agents/SESSION_LOG.md",
       sessionBriefJsonFile:
         toNonEmptyString(sessionArtifactsContract.sessionBriefJsonFile) ??
         ".agents/SESSION_BRIEF.json",
@@ -3814,7 +4040,9 @@ function checkSessionArtifactsContract(config) {
   const requiredStrings = {
     executionQueueFile: ".agents/EXECUTION_QUEUE.json",
     sessionBriefJsonFile: ".agents/SESSION_BRIEF.json",
-    continuityFile: ".agents/CONTINUITY.md",
+    memoryFile: ".agents/MEMORY.md",
+    memoryTopicsRoot: ".agents/memory",
+    sessionLogFile: ".agents/SESSION_LOG.md",
     archiveRoot: ".agents/archives",
     archiveIndexFile: ".agents/EXECUTION_ARCHIVE_INDEX.json",
     archiveShardBy: "feature_id",
@@ -5795,7 +6023,19 @@ function checkSessionArtifactsContract(config) {
     }
   }
 
-  readFileIfPresent(contract.continuityFile, false);
+  readFileIfPresent(contract.memoryFile, false);
+  readFileIfPresent(contract.sessionLogFile, false);
+  const memoryTopicsRoot = toNonEmptyString(contract.memoryTopicsRoot);
+  if (!memoryTopicsRoot) {
+    addFailure(`${contractPath}.memoryTopicsRoot must be a non-empty string.`);
+  } else {
+    const memoryTopicsRootResolved = resolveContractPath(memoryTopicsRoot);
+    if (!fs.existsSync(memoryTopicsRootResolved)) {
+      addFailure(`${memoryTopicsRoot} must exist.`);
+    } else if (!fs.statSync(memoryTopicsRootResolved).isDirectory()) {
+      addFailure(`${memoryTopicsRoot} must be a directory.`);
+    }
+  }
 }
 
 function checkManagedFilesCanonicalContract(config) {
@@ -6397,7 +6637,8 @@ const POLICY_ENFORCEMENT_CHECK_IDS = new Set([
   "checkRequiredMarkdownSections",
   "checkRequiredSequenceSnippets",
   "checkPlaceholderMarkers",
-  "checkContinuityEntryFormat",
+  "checkSessionLogEntryFormat",
+  "checkMemoryIndexContract",
   "checkForbiddenTextPatterns",
   "checkDisallowedTrackedPathPrefixes",
   "checkPolicyRuleQuality",
@@ -6425,11 +6666,14 @@ function inferRuleEnforcementChecks(ruleId) {
       "rule_plan_placeholder_deliverables_forbidden",
       "rule_plan_complete_step_summary_required",
       "rule_plan_status_coherence_required",
-      "rule_continuity_required",
       "rule_post_compaction_rebootstrap",
     ].includes(ruleId)
   ) {
     return ["checkSessionArtifactsContract"];
+  }
+
+  if (ruleId === "rule_continuity_required") {
+    return ["checkSessionArtifactsContract", "checkMemoryIndexContract"];
   }
 
   if (ruleId === "rule_startup_read_order") {
@@ -7077,7 +7321,8 @@ function runPolicyChecks(activeConfigPath = configPath, options = {}) {
   checkRequiredMarkdownSections(config);
   checkRequiredSequenceSnippets(config);
   checkPlaceholderMarkers(config);
-  checkContinuityEntryFormat(config);
+  checkSessionLogEntryFormat(config);
+  checkMemoryIndexContract(config);
   checkForbiddenTextPatterns(config, trackedFiles, trackedFilesReliable);
   checkDisallowedTrackedPathPrefixes(config, trackedFiles, trackedFilesReliable);
 

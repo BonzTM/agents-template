@@ -81,7 +81,7 @@ For this repository, documentation updates are part of done for behavior-changin
 - For `typescript-openapi`, keep `.agents-config/docs/OPENAPI_COVERAGE.md` current.
 - Keep `.agents-config/contracts/rules/canonical-ruleset.json` and `.agents-config/rule-overrides.schema.json` synchronized with policy/rules updates (`npm run rules:canonical:verify`).
 - Keep per-domain start-here docs current in `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/README.md`.
-- Maintain canonical continuity in `.agents/CONTINUITY.md` and queue state in `.agents/EXECUTION_QUEUE.json`.
+- Maintain canonical memory in `.agents/MEMORY.md` (reference point and submemory index), short-form submemory directories under `.agents/memory/mNNN/_submemory.md`, implementation trace in `.agents/SESSION_LOG.md`, and queue state in `.agents/EXECUTION_QUEUE.json`.
 
 ## Delivery Gates
 

@@ -581,7 +581,6 @@ function ensureAgentsSeedFiles({ repoRoot, canonicalAgentsRootAbs, agentsMode })
     agentsMode,
     nowIso: now,
   });
-  const enabledModeLabel = agentsMode === "local" ? "local" : "external";
 
   writeFileIfMissing(
     path.resolve(canonicalAgentsRootAbs, "EXECUTION_QUEUE.json"),
@@ -624,11 +623,17 @@ function ensureAgentsSeedFiles({ repoRoot, canonicalAgentsRootAbs, agentsMode })
   );
 
   writeFileIfMissing(
-    path.resolve(canonicalAgentsRootAbs, "CONTINUITY.md"),
-    `# CONTINUITY\n\n## [PLANS]\n- ${now} [TOOL] Initialize continuity baseline.\n\n## [DECISIONS]\n- ${now} [CODE] ${enabledModeLabel} canonical agents root enabled for this project.\n\n## [PROGRESS]\n- ${now} [TOOL] Baseline continuity initialized.\n\n## [DISCOVERIES]\n- ${now} [TOOL] None.\n\n## [OUTCOMES]\n- ${now} [TOOL] Ready for preflight.\n`,
+    path.resolve(canonicalAgentsRootAbs, "MEMORY.md"),
+    "# MEMORY\n\n## User Directives\n- None recorded.\n\n## Architecture Decisions\n- None recorded.\n\n## Known Gotchas\n- None recorded.\n\n## Submemory Index\n- None recorded.\n",
+  );
+
+  writeFileIfMissing(
+    path.resolve(canonicalAgentsRootAbs, "SESSION_LOG.md"),
+    `# SESSION_LOG\n\n## [ENTRIES]\n- ${now} [TOOL] Session log initialized.\n`,
   );
 
   ensureDir(path.resolve(canonicalAgentsRootAbs, "archives"));
+  ensureDir(path.resolve(canonicalAgentsRootAbs, "memory"));
   ensureDir(path.resolve(canonicalAgentsRootAbs, "plans/current"));
   ensureDir(path.resolve(canonicalAgentsRootAbs, "plans/deferred"));
   ensureDir(path.resolve(canonicalAgentsRootAbs, "plans/archived"));
