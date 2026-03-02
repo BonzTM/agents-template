@@ -6,8 +6,9 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 ## Summary
 
 - Managed entries: 42
-- Template-owned managed entries: 27
-- Project-owned managed entries: 15
+- Template-owned managed entries: 28
+- Structured managed entries: 11
+- Project-owned managed entries: 3
 - Overrideable managed entries: 2
 
 ## Overrideable Managed Files
@@ -21,27 +22,31 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 
 | Path | Profiles | Authority |
 | --- | --- | --- |
-| `.agents-config/contracts/rules/canonical-ruleset.json` | `base` | `project` |
-| `.agents-config/docs/AGENT_CONTEXT.md` | `base` | `project` |
-| `.agents-config/docs/AGENT_RULES.md` | `base` | `project` |
-| `.agents-config/docs/CONTEXT_INDEX.json` | `base` | `project` |
-| `.agents-config/docs/FEATURE_INDEX.json` | `typescript, javascript` | `project` |
-| `.agents-config/docs/LOGGING_STANDARDS.md` | `typescript, javascript` | `project` |
-| `.agents-config/docs/RELEASE_NOTES_TEMPLATE.md` | `base` | `project` |
-| `.agents-config/docs/TEST_MATRIX.md` | `typescript, javascript` | `project` |
-| `.agents-config/policies/agent-governance.json` | `base` | `project` |
 | `.agents-config/policies/logging-compliance-baseline.json` | `typescript, javascript` | `project` |
 | `.agents-config/scripts/generate-release-notes.mjs` | `base` | `project` |
 | `.agents-config/scripts/verify-logging-compliance.mjs` | `typescript, javascript` | `project` |
-| `backend/src/routes/README.md` | `typescript, javascript` | `project` |
-| `backend/src/services/README.md` | `typescript, javascript` | `project` |
-| `frontend/features/README.md` | `typescript, javascript` | `project` |
+
+## Structured Managed Files
+
+| Path | Profiles | Authority |
+| --- | --- | --- |
+| `.agents-config/docs/AGENT_CONTEXT.md` | `base` | `structured` |
+| `.agents-config/docs/AGENT_RULES.md` | `base` | `structured` |
+| `.agents-config/docs/CONTEXT_INDEX.json` | `base` | `structured` |
+| `.agents-config/docs/FEATURE_INDEX.json` | `typescript, javascript` | `structured` |
+| `.agents-config/docs/LOGGING_STANDARDS.md` | `typescript, javascript` | `structured` |
+| `.agents-config/docs/RELEASE_NOTES_TEMPLATE.md` | `base` | `structured` |
+| `.agents-config/docs/TEST_MATRIX.md` | `typescript, javascript` | `structured` |
+| `.agents-config/policies/agent-governance.json` | `base` | `structured` |
+| `backend/src/routes/README.md` | `typescript, javascript` | `structured` |
+| `backend/src/services/README.md` | `typescript, javascript` | `structured` |
+| `frontend/features/README.md` | `typescript, javascript` | `structured` |
 
 ## Template-Owned Managed Files
 
 | Path | Profiles | Authority |
 | --- | --- | --- |
-| `.agents-config/docs/README.md` | `typescript, javascript` | `template` |
+| `.agents-config/contracts/rules/canonical-ruleset.json` | `base` | `template` |
 | `.agents-config/OWNERSHIP.md` | `base` | `template` |
 | `.agents-config/rule-overrides.schema.json` | `base` | `template` |
 | `.agents-config/scripts/agent-queue-lifecycle.mjs` | `base` | `template` |
@@ -55,6 +60,7 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 | `.agents-config/scripts/repair-queue-verification-evidence.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/agent-managed-files.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/bootstrap-project.mjs` | `base` | `template` |
+| `.agents-config/tools/bootstrap/bootstrap-runtime.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/bootstrap.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/check-template-impact.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/generate-ownership-matrix.mjs` | `base` | `template` |
@@ -72,5 +78,6 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 ## Notes
 
 - Project-owned managed files are seeded once and then maintained locally.
+- Structured managed files keep template-defined required sections/paths while preserving project-authored content.
 - Template-owned managed files continue to follow template sync behavior.
 - Generated artifacts may still be policy-required even when they are not managed entries.

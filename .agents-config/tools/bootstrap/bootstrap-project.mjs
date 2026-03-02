@@ -94,6 +94,54 @@ function toPosixPath(filePath) {
   return filePath.split(path.sep).join("/");
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneJsonValue(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out = [];
+  const seen = new Set();
+  for (const entry of value) {
+    const text = toNonEmptyString(entry);
+    if (!text || seen.has(text)) {
+      continue;
+    }
+    seen.add(text);
+    out.push(text);
+  }
+  return out;
+}
+
+function normalizeProfileKeyedStringArrayMap(value) {
+  if (!isPlainObject(value)) {
+    return {};
+  }
+  const out = {};
+  for (const [key, entries] of Object.entries(value)) {
+    const normalizedEntries = normalizeStringArray(entries);
+    if (normalizedEntries.length === 0) {
+      continue;
+    }
+    out[key] = normalizedEntries;
+  }
+  return out;
+}
+
+function mergeProfileKeyedStringArrayMap({ templateMap, existingMap }) {
+  const merged = isPlainObject(existingMap) ? cloneJsonValue(existingMap) : {};
+  for (const [profile, entries] of Object.entries(templateMap)) {
+    merged[profile] = [...entries];
+  }
+  return merged;
+}
+
 function validateProjectId(projectId) {
   if (!projectId) {
     fail("Missing required --project-id <id>.");
@@ -275,6 +323,14 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+function writeJsonIfChanged(filePath, previousValue, nextValue) {
+  if (JSON.stringify(previousValue) === JSON.stringify(nextValue)) {
+    return false;
+  }
+  writeJson(filePath, nextValue);
+  return true;
+}
+
 function buildManagedEntryIndex(manifest) {
   const index = new Map();
   const managedEntries = Array.isArray(manifest?.managed_files) ? manifest.managed_files : [];
@@ -291,7 +347,7 @@ function buildManagedEntryIndex(manifest) {
   return index;
 }
 
-function shouldPreserveExistingProjectManagedFile({
+function shouldPreserveExistingNonTemplateManagedFile({
   bootstrapMode,
   managedEntryIndex,
   repoRoot,
@@ -304,7 +360,7 @@ function shouldPreserveExistingProjectManagedFile({
 
   const normalizedTargetPath = toPosixPath(targetRelativePath);
   const entry = managedEntryIndex.get(normalizedTargetPath);
-  if (!entry || entry.authority !== "project") {
+  if (!entry || entry.authority === "template") {
     return false;
   }
 
@@ -611,19 +667,138 @@ function rewriteTextRegex(filePath, pattern, replacement) {
   fs.writeFileSync(filePath, next, "utf8");
 }
 
-function setContractProfileState(policy, profiles) {
-  if (!policy.contracts || typeof policy.contracts !== "object") {
+function updateReleaseNotesRequiredTextSnippet(
+  policy,
+  { repoName, helmRepoUrl, helmChartName, helmRepoName, helmReleaseName },
+) {
+  if (!Array.isArray(policy?.checks?.requiredTextSnippets)) {
+    return;
+  }
+  for (const entry of policy.checks.requiredTextSnippets) {
+    if (entry?.file !== ".agents-config/docs/RELEASE_NOTES_TEMPLATE.md" || !Array.isArray(entry.snippets)) {
+      continue;
+    }
+    entry.snippets = [
+      `# ${repoName} {{VERSION}} Release Notes`,
+      `Helm chart repository: \`${helmRepoUrl}\``,
+      `Helm chart name: \`${helmChartName}\``,
+      `Helm chart reference: \`${helmRepoName}/${helmChartName}\``,
+      `helm repo add ${helmRepoName} ${helmRepoUrl}`,
+      `helm upgrade --install ${helmReleaseName} ${helmRepoName}/${helmChartName} --version {{VERSION}}`,
+    ];
+  }
+}
+
+function resolveTemplatePolicyChecks({
+  templateRoot,
+  replacements,
+  downstreamDocFileReplacements,
+}) {
+  if (!templateRoot) {
+    return null;
+  }
+
+  const templatePolicyPath = path.resolve(templateRoot, FILES.policy);
+  if (!fs.existsSync(templatePolicyPath) || !fs.statSync(templatePolicyPath).isFile()) {
+    return null;
+  }
+
+  const templatePolicy = readJson(templatePolicyPath);
+  const rewrittenTemplatePolicy = deepReplaceStrings(
+    deepReplaceStrings(templatePolicy, replacements),
+    downstreamDocFileReplacements,
+  );
+  if (!isPlainObject(rewrittenTemplatePolicy?.checks)) {
+    return null;
+  }
+
+  return cloneJsonValue(rewrittenTemplatePolicy.checks);
+}
+
+function resolveTemplateProfileContractDefaults({ templateRoot, fallbackPolicy }) {
+  let templatePolicy = null;
+  if (templateRoot) {
+    const templatePolicyPath = path.resolve(templateRoot, FILES.policy);
+    if (fs.existsSync(templatePolicyPath) && fs.statSync(templatePolicyPath).isFile()) {
+      templatePolicy = readJson(templatePolicyPath);
+    }
+  }
+
+  const sourcePolicy =
+    isPlainObject(templatePolicy?.contracts) || !fallbackPolicy ? templatePolicy : fallbackPolicy;
+  const sourceRuleCatalog = isPlainObject(sourcePolicy?.contracts?.ruleCatalog)
+    ? sourcePolicy.contracts.ruleCatalog
+    : {};
+  const sourceContextIndex = isPlainObject(sourcePolicy?.contracts?.contextIndex)
+    ? sourcePolicy.contracts.contextIndex
+    : {};
+
+  return {
+    requiredRuleIds: normalizeStringArray(sourceRuleCatalog.requiredIds),
+    requiredIdsByProfile: normalizeProfileKeyedStringArrayMap(sourceRuleCatalog.requiredIdsByProfile),
+    requiredCommandKeys: normalizeStringArray(sourceContextIndex.requiredCommandKeys),
+    requiredCommandKeysByProfile: normalizeProfileKeyedStringArrayMap(
+      sourceContextIndex.requiredCommandKeysByProfile,
+    ),
+  };
+}
+
+function setContractProfileState(policy, profiles, templateProfileContractDefaults) {
+  if (!isPlainObject(policy?.contracts)) {
     return;
   }
 
-  policy.contracts.profiles = {
+  const contracts = policy.contracts;
+  const existingProfilesContract = isPlainObject(contracts.profiles) ? contracts.profiles : {};
+  contracts.profiles = {
+    ...existingProfilesContract,
     availableProfiles: [...SUPPORTED_PROFILE_LIST],
-    activeProfiles: profiles,
+    activeProfiles: [...profiles],
   };
 
+  const ruleCatalogContract = isPlainObject(contracts.ruleCatalog) ? contracts.ruleCatalog : {};
+  const contextIndexContract = isPlainObject(contracts.contextIndex) ? contracts.contextIndex : {};
+  const templateRequiredRuleIds = normalizeStringArray(templateProfileContractDefaults?.requiredRuleIds);
+  const templateRequiredCommandKeys = normalizeStringArray(
+    templateProfileContractDefaults?.requiredCommandKeys,
+  );
+  const templateRequiredIdsByProfile = normalizeProfileKeyedStringArrayMap(
+    templateProfileContractDefaults?.requiredIdsByProfile,
+  );
+  const templateRequiredCommandKeysByProfile = normalizeProfileKeyedStringArrayMap(
+    templateProfileContractDefaults?.requiredCommandKeysByProfile,
+  );
+  const existingRequiredIdsByProfile = normalizeProfileKeyedStringArrayMap(
+    ruleCatalogContract.requiredIdsByProfile,
+  );
+  const existingRequiredCommandKeysByProfile = normalizeProfileKeyedStringArrayMap(
+    contextIndexContract.requiredCommandKeysByProfile,
+  );
+
+  ruleCatalogContract.requiredIds =
+    templateRequiredRuleIds.length > 0
+      ? [...templateRequiredRuleIds]
+      : normalizeStringArray(ruleCatalogContract.requiredIds);
+  ruleCatalogContract.requiredIdsByProfile = mergeProfileKeyedStringArrayMap({
+    templateMap: templateRequiredIdsByProfile,
+    existingMap: existingRequiredIdsByProfile,
+  });
+
+  contextIndexContract.requiredCommandKeys =
+    templateRequiredCommandKeys.length > 0
+      ? [...templateRequiredCommandKeys]
+      : normalizeStringArray(contextIndexContract.requiredCommandKeys);
+  contextIndexContract.requiredCommandKeysByProfile = mergeProfileKeyedStringArrayMap({
+    templateMap: templateRequiredCommandKeysByProfile,
+    existingMap: existingRequiredCommandKeysByProfile,
+  });
+
+  contracts.ruleCatalog = ruleCatalogContract;
+  contracts.contextIndex = contextIndexContract;
+
   for (const [contractName, contractProfiles] of Object.entries(CONTRACT_PROFILE_REQUIREMENTS)) {
-    const contract = policy.contracts[contractName];
-    if (!contract || typeof contract !== "object") {
+    const contract = contracts[contractName];
+    if (!isPlainObject(contract)) {
       continue;
     }
     contract.profiles = [...contractProfiles];
@@ -631,13 +806,27 @@ function setContractProfileState(policy, profiles) {
   }
 }
 
-function applyProfiles({ policy, contextIndex, profiles }) {
-  setContractProfileState(policy, profiles);
+function setContextIndexProfileState({ contextIndex, policy, profiles }) {
+  const existingProfiles = isPlainObject(contextIndex?.profiles) ? contextIndex.profiles : {};
+  const requiredRuleIdsByProfile = normalizeProfileKeyedStringArrayMap(
+    policy?.contracts?.ruleCatalog?.requiredIdsByProfile,
+  );
+  const requiredCommandKeysByProfile = normalizeProfileKeyedStringArrayMap(
+    policy?.contracts?.contextIndex?.requiredCommandKeysByProfile,
+  );
 
   contextIndex.profiles = {
+    ...existingProfiles,
     availableProfiles: [...SUPPORTED_PROFILE_LIST],
-    activeProfiles: profiles,
+    activeProfiles: [...profiles],
+    requiredRuleIdsByProfile,
+    requiredCommandKeysByProfile,
   };
+}
+
+function applyProfiles({ policy, contextIndex, profiles, templateProfileContractDefaults }) {
+  setContractProfileState(policy, profiles, templateProfileContractDefaults);
+  setContextIndexProfileState({ contextIndex, policy, profiles });
 }
 
 function runPreflight(repoRoot) {
@@ -718,6 +907,10 @@ function main() {
   const preservedProjectManagedPaths = new Set();
   const packageJson = readJson(path.resolve(repoRoot, FILES.packageJson));
   const packageLock = readJson(path.resolve(repoRoot, FILES.packageLock));
+  const templateProfileContractDefaults = resolveTemplateProfileContractDefaults({
+    templateRoot,
+    fallbackPolicy: policy,
+  });
 
   if (webDocsProfilesEnabled && featureIndex === null) {
     fail(`Missing required file for typescript/javascript profiles: ${FILES.featureIndex}`);
@@ -745,11 +938,19 @@ function main() {
     [".agents-config/AGENTS_TEMPLATE.md", "AGENTS.md"],
     [".agents-config/templates/CLAUDE.md", "CLAUDE.md"],
   ]);
+  const templatePolicyChecks = resolveTemplatePolicyChecks({
+    templateRoot,
+    replacements,
+    downstreamDocFileReplacements,
+  });
 
   const rewrittenPolicy = deepReplaceStrings(
     deepReplaceStrings(policy, replacements),
     downstreamDocFileReplacements,
   );
+  if (templatePolicyChecks) {
+    rewrittenPolicy.checks = cloneJsonValue(templatePolicyChecks);
+  }
   rewrittenPolicy.metadata.id = `${projectId}-agent-governance`;
   rewrittenPolicy.contracts.workspaceLayout = {
     ...rewrittenPolicy.contracts.workspaceLayout,
@@ -780,22 +981,13 @@ function main() {
       "app",
     ],
   };
-  if (Array.isArray(rewrittenPolicy.checks?.requiredTextSnippets)) {
-    for (const entry of rewrittenPolicy.checks.requiredTextSnippets) {
-      if (entry?.file !== ".agents-config/docs/RELEASE_NOTES_TEMPLATE.md" || !Array.isArray(entry.snippets)) {
-        continue;
-      }
-
-      entry.snippets = [
-        `# ${repoName} {{VERSION}} Release Notes`,
-        `Helm chart repository: \`${helmRepoUrl}\``,
-        `Helm chart name: \`${helmChartName}\``,
-        `Helm chart reference: \`${helmRepoName}/${helmChartName}\``,
-        `helm repo add ${helmRepoName} ${helmRepoUrl}`,
-        `helm upgrade --install ${helmReleaseName} ${helmRepoName}/${helmChartName} --version {{VERSION}}`,
-      ];
-    }
-  }
+  updateReleaseNotesRequiredTextSnippet(rewrittenPolicy, {
+    repoName,
+    helmRepoUrl,
+    helmChartName,
+    helmRepoName,
+    helmReleaseName,
+  });
 
   const rewrittenContextIndex = deepReplaceStrings(
     deepReplaceStrings(contextIndex, replacements),
@@ -840,10 +1032,11 @@ function main() {
     policy: rewrittenPolicy,
     contextIndex: rewrittenContextIndex,
     profiles,
+    templateProfileContractDefaults,
   });
 
-  const preserveProjectManaged = (targetRelativePath) => {
-    const shouldPreserve = shouldPreserveExistingProjectManagedFile({
+  const preserveNonTemplateManaged = (targetRelativePath) => {
+    const shouldPreserve = shouldPreserveExistingNonTemplateManagedFile({
       bootstrapMode,
       managedEntryIndex,
       repoRoot,
@@ -862,16 +1055,49 @@ function main() {
     packageLock.packages[""].name = packageName;
   }
 
-  if (!preserveProjectManaged(FILES.policy)) {
-    writeJson(policyPath, rewrittenPolicy);
+  const preservePolicy = preserveNonTemplateManaged(FILES.policy);
+  const preserveContextIndex = preserveNonTemplateManaged(FILES.contextIndex);
+
+  const policyToWrite = preservePolicy ? cloneJsonValue(policy) : rewrittenPolicy;
+  if (preservePolicy) {
+    if (templatePolicyChecks) {
+      policyToWrite.checks = cloneJsonValue(templatePolicyChecks);
+    }
+    setContractProfileState(policyToWrite, profiles, templateProfileContractDefaults);
+    updateReleaseNotesRequiredTextSnippet(policyToWrite, {
+      repoName,
+      helmRepoUrl,
+      helmChartName,
+      helmRepoName,
+      helmReleaseName,
+    });
   }
-  if (!preserveProjectManaged(FILES.contextIndex)) {
-    writeJson(contextIndexPath, rewrittenContextIndex);
+
+  const contextIndexToWrite = preserveContextIndex
+    ? cloneJsonValue(contextIndex)
+    : rewrittenContextIndex;
+  if (preserveContextIndex) {
+    setContextIndexProfileState({
+      contextIndex: contextIndexToWrite,
+      policy: policyToWrite,
+      profiles,
+    });
   }
-  if (rewrittenFeatureIndex && !preserveProjectManaged(FILES.featureIndex)) {
+
+  if (preservePolicy) {
+    writeJsonIfChanged(policyPath, policy, policyToWrite);
+  } else {
+    writeJson(policyPath, policyToWrite);
+  }
+  if (preserveContextIndex) {
+    writeJsonIfChanged(contextIndexPath, contextIndex, contextIndexToWrite);
+  } else {
+    writeJson(contextIndexPath, contextIndexToWrite);
+  }
+  if (rewrittenFeatureIndex && !preserveNonTemplateManaged(FILES.featureIndex)) {
     writeJson(featureIndexPath, rewrittenFeatureIndex);
   }
-  if (rewrittenLoggingBaseline && !preserveProjectManaged(FILES.loggingBaseline)) {
+  if (rewrittenLoggingBaseline && !preserveNonTemplateManaged(FILES.loggingBaseline)) {
     writeJson(loggingBaselinePath, rewrittenLoggingBaseline);
   }
   writeJson(path.resolve(repoRoot, FILES.managedManifest), rewrittenManagedManifest);
@@ -879,7 +1105,7 @@ function main() {
   writeJson(path.resolve(repoRoot, FILES.packageLock), packageLock);
 
   const releaseTemplatePath = path.resolve(repoRoot, FILES.releaseTemplate);
-  if (fs.existsSync(releaseTemplatePath) && !preserveProjectManaged(FILES.releaseTemplate)) {
+  if (fs.existsSync(releaseTemplatePath) && !preserveNonTemplateManaged(FILES.releaseTemplate)) {
     rewriteReleaseTemplate(releaseTemplatePath, {
       repoName,
       dockerImage,
@@ -892,7 +1118,7 @@ function main() {
   }
 
   const generateReleaseNotesPath = path.resolve(repoRoot, FILES.generateReleaseNotes);
-  if (fs.existsSync(generateReleaseNotesPath) && !preserveProjectManaged(FILES.generateReleaseNotes)) {
+  if (fs.existsSync(generateReleaseNotesPath) && !preserveNonTemplateManaged(FILES.generateReleaseNotes)) {
     rewriteTextRegex(
       generateReleaseNotesPath,
       /const DEFAULT_REPO_WEB_URL = "https:\/\/github\.com\/[^"]+";/,
@@ -903,7 +1129,7 @@ function main() {
   const verifyLoggingCompliancePath = path.resolve(repoRoot, FILES.verifyLoggingCompliance);
   if (
     fs.existsSync(verifyLoggingCompliancePath) &&
-    !preserveProjectManaged(FILES.verifyLoggingCompliance)
+    !preserveNonTemplateManaged(FILES.verifyLoggingCompliance)
   ) {
     rewriteTextRegex(
       verifyLoggingCompliancePath,
@@ -927,7 +1153,7 @@ function main() {
     if (!fs.existsSync(absoluteDocPath)) {
       continue;
     }
-    if (preserveProjectManaged(docPath)) {
+    if (preserveNonTemplateManaged(docPath)) {
       continue;
     }
     rewriteTextToken(absoluteDocPath, agentDocReplacements);

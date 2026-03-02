@@ -40,28 +40,75 @@
       "profiles": [
         "base"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Rule ID Catalog (Machine Cross-Reference)",
+          "## Global Operating Agreements (All LLMs)",
+          "## Policy-as-Code Enforcement"
+        ]
+      }
     },
     {
       "path": ".agents-config/docs/AGENT_CONTEXT.md",
       "profiles": [
         "base"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Project Overview",
+          "## Architecture",
+          "## Tech Stack",
+          "## Project Structure",
+          "## Key Conventions",
+          "## Reuse and Consolidation Atlas",
+          "## Fork Documentation Maintenance",
+          "## Delivery Gates",
+          "## Database",
+          "## Testing",
+          "## Local Testing Bootstrap",
+          "## Common Tasks"
+        ]
+      }
     },
     {
       "path": ".agents-config/docs/CONTEXT_INDEX.json",
       "profiles": [
         "base"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "json_required_paths",
+        "seed_missing_paths_from_template": true,
+        "required_paths": [
+          {
+            "path": "startupReadOrder",
+            "type": "array",
+            "min_items": 1
+          },
+          {
+            "path": "commands",
+            "type": "object"
+          },
+          {
+            "path": "sessionArtifacts",
+            "type": "object"
+          }
+        ]
+      }
     },
     {
       "path": ".agents-config/contracts/rules/canonical-ruleset.json",
       "profiles": [
         "base"
-      ],
-      "authority": "project"
+      ]
     },
     {
       "path": ".agents-config/rule-overrides.schema.json",
@@ -74,7 +121,29 @@
       "profiles": [
         "base"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "json_required_paths",
+        "seed_missing_paths_from_template": true,
+        "required_paths": [
+          {
+            "path": "metadata",
+            "type": "object"
+          },
+          {
+            "path": "contracts",
+            "type": "object"
+          },
+          {
+            "path": "contracts.managedFilesCanonical",
+            "type": "object"
+          },
+          {
+            "path": "checks",
+            "type": "object"
+          }
+        ]
+      }
     },
     {
       "path": ".agents-config/scripts/enforce-agent-policies.mjs",
@@ -142,10 +211,33 @@
       "profiles": [
         "base"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Release Summary",
+          "## Fixed",
+          "## Added",
+          "## Changed",
+          "## Admin/Operations",
+          "## Deployment and Distribution",
+          "## Breaking Changes",
+          "## Known Issues",
+          "## Compatibility and Migration",
+          "## Full Changelog"
+        ]
+      }
     },
     {
       "path": ".agents-config/tools/bootstrap/bootstrap.mjs",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/tools/bootstrap/bootstrap-runtime.mjs",
       "profiles": [
         "base"
       ]
@@ -198,7 +290,38 @@
         "typescript",
         "javascript"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "json_required_paths",
+        "seed_missing_paths_from_template": true,
+        "required_paths": [
+          {
+            "path": "metadata",
+            "type": "object"
+          },
+          {
+            "path": "sources",
+            "type": "object"
+          },
+          {
+            "path": "coverage",
+            "type": "object"
+          },
+          {
+            "path": "coverage.frontend_feature_dirs",
+            "type": "array"
+          },
+          {
+            "path": "coverage.verification_rules",
+            "type": "array",
+            "min_items": 1
+          },
+          {
+            "path": "features",
+            "type": "array"
+          }
+        ]
+      }
     },
     {
       "path": ".agents-config/docs/TEST_MATRIX.md",
@@ -206,7 +329,19 @@
         "typescript",
         "javascript"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Usage Rule",
+          "## Fast Commands",
+          "## Feature-to-Test Map",
+          "## Update Triggers",
+          "## Verification Workflow"
+        ]
+      }
     },
     {
       "path": ".agents-config/docs/LOGGING_STANDARDS.md",
@@ -214,14 +349,20 @@
         "typescript",
         "javascript"
       ],
-      "authority": "project"
-    },
-    {
-      "path": ".agents-config/docs/README.md",
-      "profiles": [
-        "typescript",
-        "javascript"
-      ]
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Shared Principles",
+          "## Frontend Contract",
+          "## Backend Contract",
+          "## Python Sidecar Contract",
+          "## Enforcement",
+          "## Migration to 100% Coverage"
+        ]
+      }
     },
     {
       "path": "backend/src/routes/README.md",
@@ -229,7 +370,17 @@
         "typescript",
         "javascript"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Start Here",
+          "## Mounted Route Modules",
+          "## Update Rule"
+        ]
+      }
     },
     {
       "path": "backend/src/services/README.md",
@@ -237,7 +388,17 @@
         "typescript",
         "javascript"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Start Here",
+          "## Service Modules",
+          "## Update Rule"
+        ]
+      }
     },
     {
       "path": "frontend/features/README.md",
@@ -245,7 +406,17 @@
         "typescript",
         "javascript"
       ],
-      "authority": "project"
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Start Here",
+          "## Feature Domains",
+          "## Update Rule"
+        ]
+      }
     },
     {
       "path": ".agents-config/tools/docs/feature-index-check.mjs",
@@ -499,7 +670,8 @@
     "default_authority": "template",
     "allowed_authorities": [
       "template",
-      "project"
+      "project",
+      "structured"
     ],
     "override_mode": "explicit_allowlist",
     "override_reserved_paths": [

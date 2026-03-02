@@ -126,6 +126,7 @@ function buildOwnershipDoc({ manifestPath, managedFiles }) {
   normalized.sort(sortByPath);
 
   const templateOwned = normalized.filter((entry) => entry.authority === "template");
+  const structuredOwned = normalized.filter((entry) => entry.authority === "structured");
   const projectOwned = normalized.filter((entry) => entry.authority === "project");
   const overrideable = normalized.filter((entry) => entry.allowOverride);
 
@@ -139,6 +140,7 @@ function buildOwnershipDoc({ manifestPath, managedFiles }) {
   lines.push("");
   lines.push(`- Managed entries: ${normalized.length}`);
   lines.push(`- Template-owned managed entries: ${templateOwned.length}`);
+  lines.push(`- Structured managed entries: ${structuredOwned.length}`);
   lines.push(`- Project-owned managed entries: ${projectOwned.length}`);
   lines.push(`- Overrideable managed entries: ${overrideable.length}`);
   lines.push("");
@@ -163,6 +165,16 @@ function buildOwnershipDoc({ manifestPath, managedFiles }) {
     ]).trimEnd(),
   );
   lines.push("");
+  lines.push("## Structured Managed Files");
+  lines.push("");
+  lines.push(
+    renderTable(structuredOwned, [
+      { label: "Path", value: (row) => `\`${row.path}\`` },
+      { label: "Profiles", value: (row) => `\`${toProfiles(row.profiles)}\`` },
+      { label: "Authority", value: () => "`structured`" },
+    ]).trimEnd(),
+  );
+  lines.push("");
   lines.push("## Template-Owned Managed Files");
   lines.push("");
   lines.push(
@@ -176,6 +188,7 @@ function buildOwnershipDoc({ manifestPath, managedFiles }) {
   lines.push("## Notes");
   lines.push("");
   lines.push("- Project-owned managed files are seeded once and then maintained locally.");
+  lines.push("- Structured managed files keep template-defined required sections/paths while preserving project-authored content.");
   lines.push("- Template-owned managed files continue to follow template sync behavior.");
   lines.push("- Generated artifacts may still be policy-required even when they are not managed entries.");
 

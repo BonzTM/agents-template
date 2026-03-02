@@ -14,7 +14,7 @@ const DEFAULT_PROFILES = [
   "python",
 ];
 const DEFAULT_CANONICAL_AUTHORITY = "template";
-const DEFAULT_ALLOWED_AUTHORITIES = ["template", "project"];
+const DEFAULT_ALLOWED_AUTHORITIES = ["template", "project", "structured"];
 const DEFAULT_OVERRIDE_MODE = "explicit_allowlist";
 const DEFAULT_OVERRIDE_RESERVED_PATHS = [
   "rule-overrides.schema.json",
@@ -56,6 +56,157 @@ function normalizeStringArray(value) {
     out.push(text);
   }
   return out;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneJsonValue(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function ensureTrailingNewline(text) {
+  return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+function normalizeMarkdownHeading(headingText) {
+  const value = toNonEmptyString(headingText);
+  if (!value || !value.startsWith("##")) {
+    return null;
+  }
+  const withoutHashes = value.replace(/^##+/, "").trim();
+  if (!withoutHashes) {
+    return null;
+  }
+  return `## ${withoutHashes}`;
+}
+
+function parseMarkdownLevelTwoBlocks(content) {
+  const normalizedContent = String(content).replace(/\r\n/g, "\n");
+  const lines = normalizedContent.split("\n");
+  const preambleLines = [];
+  const blocks = [];
+  let currentBlock = null;
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^##\s+(.+)$/);
+    if (headingMatch) {
+      if (currentBlock) {
+        blocks.push(currentBlock);
+      }
+      currentBlock = {
+        heading: normalizeMarkdownHeading(line),
+        lines: [line],
+      };
+      continue;
+    }
+
+    if (currentBlock) {
+      currentBlock.lines.push(line);
+    } else {
+      preambleLines.push(line);
+    }
+  }
+
+  if (currentBlock) {
+    blocks.push(currentBlock);
+  }
+
+  return {
+    preambleLines,
+    blocks,
+  };
+}
+
+function renderMarkdownLevelTwoBlocks({ preambleLines, blocks }) {
+  const lines = [
+    ...(Array.isArray(preambleLines) ? preambleLines : []),
+    ...blocks.flatMap((block) => (Array.isArray(block?.lines) ? block.lines : [])),
+  ];
+  return ensureTrailingNewline(lines.join("\n"));
+}
+
+function findBlockIndexByHeading(blocks, normalizedHeading) {
+  for (let index = 0; index < blocks.length; index += 1) {
+    if (blocks[index]?.heading === normalizedHeading) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findFirstLaterRequiredBlockIndex(blocks, requiredSectionSet, requiredSectionOrder, currentOrder) {
+  for (let index = 0; index < blocks.length; index += 1) {
+    const heading = blocks[index]?.heading;
+    if (!heading || !requiredSectionSet.has(heading)) {
+      continue;
+    }
+    const order = requiredSectionOrder.get(heading);
+    if (typeof order === "number" && order > currentOrder) {
+      return index;
+    }
+  }
+  return blocks.length;
+}
+
+function normalizeJsonPath(pathText, entryLabel) {
+  const value = toNonEmptyString(pathText);
+  if (!value) {
+    fail(`${entryLabel} structure_contract.required_paths entries must define a non-empty path.`);
+  }
+  const segments = value.split(".").map((segment) => segment.trim());
+  if (segments.length === 0 || segments.some((segment) => segment.length === 0)) {
+    fail(`${entryLabel} structure_contract.required_paths path "${pathText}" is invalid.`);
+  }
+  return segments;
+}
+
+function getValueAtJsonPath(rootValue, pathSegments) {
+  let current = rootValue;
+  for (const segment of pathSegments) {
+    if (!isPlainObject(current) || !Object.prototype.hasOwnProperty.call(current, segment)) {
+      return {
+        exists: false,
+        value: undefined,
+      };
+    }
+    current = current[segment];
+  }
+  return {
+    exists: true,
+    value: current,
+  };
+}
+
+function setValueAtJsonPath(rootValue, pathSegments, value) {
+  let current = rootValue;
+  for (let index = 0; index < pathSegments.length - 1; index += 1) {
+    const segment = pathSegments[index];
+    if (!isPlainObject(current[segment])) {
+      current[segment] = {};
+    }
+    current = current[segment];
+  }
+  const leafKey = pathSegments[pathSegments.length - 1];
+  current[leafKey] = value;
+}
+
+function valueMatchesDeclaredType(value, declaredType) {
+  switch (declaredType) {
+    case "object":
+      return isPlainObject(value);
+    case "array":
+      return Array.isArray(value);
+    case "string":
+      return typeof value === "string";
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "boolean":
+      return typeof value === "boolean";
+    default:
+      return false;
+  }
 }
 
 function isSidecarPayloadPath(candidatePath) {
@@ -504,6 +655,279 @@ function resolveEntryAuthority(entry, canonicalContract) {
   return authority;
 }
 
+function resolveStructuredContract(entry, normalizedTargetPath) {
+  const entryLabel = `Managed entry ${JSON.stringify(normalizedTargetPath)}`;
+  const raw = entry?.structure_contract;
+  if (!isPlainObject(raw)) {
+    fail(`${entryLabel} must define structure_contract when authority=structured.`);
+  }
+
+  const kind = toNonEmptyString(raw.kind);
+  if (!kind) {
+    fail(`${entryLabel} structure_contract.kind is required for authority=structured.`);
+  }
+
+  if (kind === "markdown_sections") {
+    const requiredSectionsRaw = Array.isArray(raw.required_sections)
+      ? raw.required_sections
+      : null;
+    if (!requiredSectionsRaw || requiredSectionsRaw.length === 0) {
+      fail(`${entryLabel} structure_contract.required_sections must be a non-empty array.`);
+    }
+
+    const requiredSections = [];
+    const seen = new Set();
+    for (const sectionHeading of requiredSectionsRaw) {
+      const normalizedHeading = normalizeMarkdownHeading(sectionHeading);
+      if (!normalizedHeading) {
+        fail(
+          `${entryLabel} structure_contract.required_sections contains invalid heading: ${JSON.stringify(sectionHeading)}.`,
+        );
+      }
+      if (seen.has(normalizedHeading)) {
+        fail(
+          `${entryLabel} structure_contract.required_sections contains duplicate heading: ${normalizedHeading}.`,
+        );
+      }
+      seen.add(normalizedHeading);
+      requiredSections.push(normalizedHeading);
+    }
+
+    return {
+      kind,
+      ordered: raw.ordered !== false,
+      seedMissingSections: raw.seed_missing_sections !== false,
+      requiredSections,
+    };
+  }
+
+  if (kind === "json_required_paths") {
+    const requiredPathsRaw = Array.isArray(raw.required_paths)
+      ? raw.required_paths
+      : null;
+    if (!requiredPathsRaw || requiredPathsRaw.length === 0) {
+      fail(`${entryLabel} structure_contract.required_paths must be a non-empty array.`);
+    }
+
+    const requiredPaths = [];
+    const seen = new Set();
+    for (const pathRule of requiredPathsRaw) {
+      if (!isPlainObject(pathRule)) {
+        fail(`${entryLabel} structure_contract.required_paths entries must be objects.`);
+      }
+      const pathValue = toNonEmptyString(pathRule.path);
+      if (!pathValue) {
+        fail(`${entryLabel} structure_contract.required_paths entries require a non-empty path.`);
+      }
+      if (seen.has(pathValue)) {
+        fail(`${entryLabel} structure_contract.required_paths duplicates path: ${pathValue}.`);
+      }
+      seen.add(pathValue);
+
+      const type = toNonEmptyString(pathRule.type);
+      if (!["object", "array", "string", "number", "boolean"].includes(type ?? "")) {
+        fail(
+          `${entryLabel} structure_contract.required_paths path ${pathValue} must declare a supported type (object|array|string|number|boolean).`,
+        );
+      }
+
+      const minItems =
+        pathRule.min_items === undefined || pathRule.min_items === null
+          ? null
+          : Number(pathRule.min_items);
+      if (minItems !== null) {
+        if (!Number.isInteger(minItems) || minItems < 0) {
+          fail(
+            `${entryLabel} structure_contract.required_paths path ${pathValue} min_items must be a non-negative integer.`,
+          );
+        }
+        if (type !== "array") {
+          fail(
+            `${entryLabel} structure_contract.required_paths path ${pathValue} cannot set min_items unless type is array.`,
+          );
+        }
+      }
+
+      requiredPaths.push({
+        path: pathValue,
+        segments: normalizeJsonPath(pathValue, entryLabel),
+        type,
+        minItems,
+      });
+    }
+
+    return {
+      kind,
+      seedMissingPathsFromTemplate: raw.seed_missing_paths_from_template !== false,
+      requiredPaths,
+    };
+  }
+
+  fail(`${entryLabel} uses unsupported structure_contract.kind: ${kind}.`);
+}
+
+function defaultValueForDeclaredType(type) {
+  switch (type) {
+    case "object":
+      return {};
+    case "array":
+      return [];
+    case "string":
+      return "";
+    case "number":
+      return 0;
+    case "boolean":
+      return false;
+    default:
+      return null;
+  }
+}
+
+function buildStructuredMarkdownContent({
+  actualContent,
+  templateContent,
+  contract,
+}) {
+  const parsedActual = parseMarkdownLevelTwoBlocks(actualContent);
+  const parsedTemplate = parseMarkdownLevelTwoBlocks(templateContent);
+  const blocks = parsedActual.blocks.map((block) => ({
+    heading: block.heading,
+    lines: [...block.lines],
+  }));
+  const templateBlocksByHeading = new Map();
+  for (const templateBlock of parsedTemplate.blocks) {
+    if (!templateBlock?.heading || templateBlocksByHeading.has(templateBlock.heading)) {
+      continue;
+    }
+    templateBlocksByHeading.set(templateBlock.heading, {
+      heading: templateBlock.heading,
+      lines: [...templateBlock.lines],
+    });
+  }
+
+  const requiredSectionOrder = new Map(
+    contract.requiredSections.map((heading, index) => [heading, index]),
+  );
+  const requiredSectionSet = new Set(contract.requiredSections);
+  const missingSections = [];
+  const reorderedSections = [];
+  let lastRequiredIndex = -1;
+
+  for (const requiredHeading of contract.requiredSections) {
+    let headingIndex = findBlockIndexByHeading(blocks, requiredHeading);
+    if (headingIndex === -1) {
+      if (contract.seedMissingSections) {
+        const insertionIndex = findFirstLaterRequiredBlockIndex(
+          blocks,
+          requiredSectionSet,
+          requiredSectionOrder,
+          requiredSectionOrder.get(requiredHeading),
+        );
+        const templateBlock = templateBlocksByHeading.get(requiredHeading);
+        const seededBlock = templateBlock
+          ? { heading: templateBlock.heading, lines: [...templateBlock.lines] }
+          : { heading: requiredHeading, lines: [requiredHeading, ""] };
+        blocks.splice(insertionIndex, 0, seededBlock);
+        headingIndex = insertionIndex;
+      } else {
+        headingIndex = -1;
+      }
+      missingSections.push(requiredHeading);
+    }
+
+    if (headingIndex === -1) {
+      continue;
+    }
+
+    if (contract.ordered && headingIndex < lastRequiredIndex) {
+      const [block] = blocks.splice(headingIndex, 1);
+      blocks.splice(lastRequiredIndex, 0, block);
+      headingIndex = lastRequiredIndex;
+      reorderedSections.push(requiredHeading);
+    }
+
+    lastRequiredIndex = headingIndex;
+  }
+
+  const mergedContent = renderMarkdownLevelTwoBlocks({
+    preambleLines: parsedActual.preambleLines,
+    blocks,
+  });
+
+  return {
+    mergedContent,
+    missingSections,
+    reorderedSections,
+    syncable: true,
+  };
+}
+
+function buildStructuredJsonContent({
+  actualContent,
+  templateContent,
+  contract,
+}) {
+  const templateJson = JSON.parse(templateContent);
+  const actualJson = JSON.parse(actualContent);
+  const mergedJson = cloneJsonValue(actualJson);
+
+  if (!isPlainObject(mergedJson)) {
+    return {
+      mergedContent: ensureTrailingNewline(JSON.stringify(templateJson, null, 2)),
+      missingPaths: [],
+      typeViolations: [
+        "Root JSON value must be an object for structured json_required_paths contracts.",
+      ],
+      syncable: false,
+    };
+  }
+
+  const missingPaths = [];
+  const typeViolations = [];
+  for (const pathRule of contract.requiredPaths) {
+    const mergedLookup = getValueAtJsonPath(mergedJson, pathRule.segments);
+    if (!mergedLookup.exists) {
+      if (contract.seedMissingPathsFromTemplate) {
+        const templateLookup = getValueAtJsonPath(templateJson, pathRule.segments);
+        const seededValue = templateLookup.exists
+          ? cloneJsonValue(templateLookup.value)
+          : defaultValueForDeclaredType(pathRule.type);
+        setValueAtJsonPath(mergedJson, pathRule.segments, seededValue);
+        missingPaths.push(pathRule.path);
+      } else {
+        typeViolations.push(`Missing required path: ${pathRule.path}`);
+        continue;
+      }
+    }
+
+    const nextLookup = getValueAtJsonPath(mergedJson, pathRule.segments);
+    if (!nextLookup.exists) {
+      typeViolations.push(`Missing required path: ${pathRule.path}`);
+      continue;
+    }
+    if (!valueMatchesDeclaredType(nextLookup.value, pathRule.type)) {
+      typeViolations.push(
+        `Path ${pathRule.path} expected type ${pathRule.type} but found ${Array.isArray(nextLookup.value) ? "array" : typeof nextLookup.value}.`,
+      );
+      continue;
+    }
+    if (pathRule.type === "array" && pathRule.minItems !== null) {
+      if (nextLookup.value.length < pathRule.minItems) {
+        typeViolations.push(
+          `Path ${pathRule.path} must contain at least ${pathRule.minItems} item(s).`,
+        );
+      }
+    }
+  }
+
+  return {
+    mergedContent: ensureTrailingNewline(JSON.stringify(mergedJson, null, 2)),
+    missingPaths,
+    typeViolations,
+    syncable: typeViolations.length === 0,
+  };
+}
+
 function resolveActiveProfiles(manifest, args) {
   const manifestProfiles = normalizeStringArray(manifest?.profiles);
   const selected = args.profilesOverride.length > 0 ? args.profilesOverride : manifestProfiles;
@@ -781,6 +1205,15 @@ async function run() {
     const templateRelativePath = toNonEmptyString(entry?.source_path) ?? targetRelativePath;
     const authority = resolveEntryAuthority(entry, canonicalContract);
     const allowOverride = entry?.allow_override === true;
+    const hasStructureContract = entry?.structure_contract !== undefined;
+    let structureContract = null;
+    if (authority === "structured") {
+      structureContract = resolveStructuredContract(entry, normalizedTargetPath);
+    } else if (hasStructureContract) {
+      fail(
+        `Managed entry ${normalizedTargetPath} defines structure_contract but authority=${authority}; structure_contract is only valid for authority=structured.`,
+      );
+    }
     const explicitOverridePath = toNonEmptyString(entry?.override_path);
     if (allowOverride && authority !== "template") {
       fail(
@@ -803,6 +1236,7 @@ async function run() {
       normalizedTargetPath,
       templateRelativePath,
       authority,
+      structureContract,
       allowOverride,
       overrideRepoRelativePaths: overridePathSet.fullReplacementRepoRelativePaths,
       additiveOverrideRepoRelativePaths: overridePathSet.additiveRepoRelativePaths,
@@ -989,6 +1423,110 @@ async function run() {
         expectedContent: expected.content,
         expectedSource: expected.sourceLabel,
         reason: "missing target file (project authority seed required)",
+        syncable: true,
+      });
+      continue;
+    }
+
+    if (entry.authority === "structured") {
+      const expected = await resolveExpectedContent({
+        repoRoot,
+        source,
+        allowOverride: false,
+        overrideRepoRelativePaths: [],
+        additiveOverrideRepoRelativePaths: [],
+        templateRelativePath: entry.templateRelativePath,
+        remoteCache,
+      });
+
+      if (!targetExists) {
+        mismatches.push({
+          path: normalizePath(entry.targetRelativePath),
+          targetPath,
+          expectedContent: expected.content,
+          expectedSource: expected.sourceLabel,
+          reason: "missing target file (structured authority seed required)",
+          syncable: true,
+        });
+        continue;
+      }
+
+      let structuredResult;
+      try {
+        if (entry.structureContract?.kind === "markdown_sections") {
+          structuredResult = buildStructuredMarkdownContent({
+            actualContent,
+            templateContent: expected.content,
+            contract: entry.structureContract,
+          });
+        } else if (entry.structureContract?.kind === "json_required_paths") {
+          structuredResult = buildStructuredJsonContent({
+            actualContent,
+            templateContent: expected.content,
+            contract: entry.structureContract,
+          });
+        } else {
+          fail(
+            `Managed entry ${entry.normalizedTargetPath} has unsupported structured contract kind: ${entry.structureContract?.kind}.`,
+          );
+        }
+      } catch (error) {
+        mismatches.push({
+          path: normalizePath(entry.targetRelativePath),
+          targetPath,
+          expectedContent: actualContent,
+          expectedSource: `structured:${entry.structureContract?.kind ?? "unknown"}`,
+          reason: `structured contract evaluation failed: ${error.message}`,
+          syncable: false,
+        });
+        continue;
+      }
+
+      const reasonParts = [];
+      if (Array.isArray(structuredResult.missingSections) && structuredResult.missingSections.length > 0) {
+        reasonParts.push(
+          `missing required section(s): ${structuredResult.missingSections.join(", ")}`,
+        );
+      }
+      if (Array.isArray(structuredResult.reorderedSections) && structuredResult.reorderedSections.length > 0) {
+        reasonParts.push(
+          `required section order normalized: ${structuredResult.reorderedSections.join(", ")}`,
+        );
+      }
+      if (Array.isArray(structuredResult.missingPaths) && structuredResult.missingPaths.length > 0) {
+        reasonParts.push(
+          `missing required path(s): ${structuredResult.missingPaths.join(", ")}`,
+        );
+      }
+      if (Array.isArray(structuredResult.typeViolations) && structuredResult.typeViolations.length > 0) {
+        reasonParts.push(structuredResult.typeViolations.join("; "));
+      }
+
+      const contentDiffers = structuredResult.mergedContent !== actualContent;
+      const hasMissingSections =
+        Array.isArray(structuredResult.missingSections) &&
+        structuredResult.missingSections.length > 0;
+      const hasViolations =
+        hasMissingSections ||
+        Array.isArray(structuredResult.typeViolations) &&
+        structuredResult.typeViolations.length > 0;
+      if (!contentDiffers && !hasViolations) {
+        unchangedCount += 1;
+        continue;
+      }
+
+      mismatches.push({
+        path: normalizePath(entry.targetRelativePath),
+        targetPath,
+        expectedContent: contentDiffers ? structuredResult.mergedContent : actualContent,
+        expectedSource: `structured:${entry.structureContract.kind} (${expected.sourceLabel})`,
+        reason:
+          reasonParts.length > 0
+            ? reasonParts.join("; ")
+            : contentDiffers
+              ? "structured content differs"
+              : "structured contract violation",
+        syncable: structuredResult.syncable === true && contentDiffers,
       });
       continue;
     }
@@ -1014,6 +1552,7 @@ async function run() {
       expectedContent: expected.content,
       expectedSource: expected.sourceLabel,
       reason: targetExists ? "content differs" : "missing target file",
+      syncable: true,
     });
   }
 
@@ -1021,25 +1560,40 @@ async function run() {
     console.error("Managed file drift detected:");
     for (const mismatch of mismatches) {
       console.error(
-        `- ${mismatch.path}: ${mismatch.reason} (expected from ${mismatch.expectedSource})`,
+        `- ${mismatch.path}: ${mismatch.reason} (expected from ${mismatch.expectedSource})${mismatch.syncable === false ? " [manual intervention required]" : ""}`,
       );
     }
   };
 
   const runSync = () => {
     let updatedCount = 0;
+    const skipped = [];
     for (const mismatch of mismatches) {
+      if (mismatch.syncable === false) {
+        skipped.push(mismatch);
+        continue;
+      }
       ensureDir(path.dirname(mismatch.targetPath));
       fs.writeFileSync(mismatch.targetPath, mismatch.expectedContent, "utf8");
       updatedCount += 1;
       console.log(`synced ${mismatch.path} <- ${mismatch.expectedSource}`);
     }
-    console.log(`Managed file sync complete. Updated: ${updatedCount}, unchanged: ${unchangedCount}.`);
-    return updatedCount;
+    console.log(
+      `Managed file sync complete. Updated: ${updatedCount}, unchanged: ${unchangedCount}, manual: ${skipped.length}.`,
+    );
+    return {
+      updatedCount,
+      skipped,
+    };
   };
 
   if (args.mode === "sync") {
-    runSync();
+    const syncResult = runSync();
+    if (syncResult.skipped.length > 0) {
+      fail(
+        `Managed file sync skipped ${syncResult.skipped.length} file(s) requiring manual intervention.`,
+      );
+    }
     if (!args.recheck) {
       return;
     }
@@ -1070,7 +1624,12 @@ async function run() {
     fail("Run: npm run agent:managed -- --fix --recheck");
   }
 
-  runSync();
+  const syncResult = runSync();
+  if (syncResult.skipped.length > 0) {
+    fail(
+      `Managed file fix skipped ${syncResult.skipped.length} file(s) requiring manual intervention.`,
+    );
+  }
 
   if (args.recheck) {
     const verifyArgs = ["check", "--manifest", args.manifestPath];

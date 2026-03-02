@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-02-27.01",
+    "version": "2026-03-02.01",
     "description": "Machine-readable index for startup context retrieval and governance drift checks."
   },
   "startupReadOrder": [
@@ -417,19 +417,14 @@
       "heading": "## Fork Documentation Maintenance"
     },
     {
-      "id": "context_full_stack_gates",
+      "id": "context_delivery_gates",
       "file": ".agents-config/docs/AGENT_CONTEXT.md",
-      "heading": "## Full-Stack Delivery Gates"
+      "heading": "## Delivery Gates"
     },
     {
       "id": "context_database",
       "file": ".agents-config/docs/AGENT_CONTEXT.md",
       "heading": "## Database"
-    },
-    {
-      "id": "context_streaming_integration",
-      "file": ".agents-config/docs/AGENT_CONTEXT.md",
-      "heading": "## Streaming Integration"
     },
     {
       "id": "context_testing",
@@ -494,7 +489,75 @@
     ],
     "activeProfiles": [
       "base"
-    ]
+    ],
+    "requiredRuleIdsByProfile": {
+      "typescript": [
+        "rule_feature_index_required",
+        "rule_test_matrix_required",
+        "rule_route_map_required",
+        "rule_domain_readmes_required",
+        "rule_jsdoc_coverage_required",
+        "rule_logging_contract_required"
+      ],
+      "javascript": [
+        "rule_feature_index_required",
+        "rule_test_matrix_required",
+        "rule_route_map_required",
+        "rule_domain_readmes_required",
+        "rule_jsdoc_coverage_required",
+        "rule_logging_contract_required"
+      ],
+      "typescript-openapi": [
+        "rule_openapi_endpoint_docs_required"
+      ],
+      "python": []
+    },
+    "requiredCommandKeysByProfile": {
+      "typescript": [
+        "featureIndexVerify",
+        "routeMapGenerate",
+        "routeMapVerify",
+        "domainReadmesGenerate",
+        "domainReadmesVerify",
+        "jsdocCoverageGenerate",
+        "jsdocCoverageVerify",
+        "loggingComplianceGenerate",
+        "loggingComplianceVerify",
+        "featureIndexFile",
+        "testMatrixFile",
+        "routeMapFile",
+        "jsdocCoverageFile",
+        "loggingStandardsFile",
+        "routesReadmeFile",
+        "servicesReadmeFile",
+        "frontendFeaturesReadmeFile"
+      ],
+      "javascript": [
+        "featureIndexVerify",
+        "routeMapGenerate",
+        "routeMapVerify",
+        "domainReadmesGenerate",
+        "domainReadmesVerify",
+        "jsdocCoverageGenerate",
+        "jsdocCoverageVerify",
+        "loggingComplianceGenerate",
+        "loggingComplianceVerify",
+        "featureIndexFile",
+        "testMatrixFile",
+        "routeMapFile",
+        "jsdocCoverageFile",
+        "loggingStandardsFile",
+        "routesReadmeFile",
+        "servicesReadmeFile",
+        "frontendFeaturesReadmeFile"
+      ],
+      "typescript-openapi": [
+        "openapiCoverageGenerate",
+        "openapiCoverageVerify",
+        "openapiCoverageFile"
+      ],
+      "python": []
+    }
   },
   "managedFilesCanonical": {
     "manifestFile": ".agents-config/agent-managed.json",
@@ -503,7 +566,8 @@
     "defaultAuthority": "template",
     "allowedAuthorities": [
       "template",
-      "project"
+      "project",
+      "structured"
     ],
     "overrideMode": "explicit_allowlist",
     "overrideReservedPaths": [

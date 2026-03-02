@@ -59,6 +59,7 @@ Profile summary:
 - `typescript-openapi`: OpenAPI coverage contract; implies `typescript`.
 - `javascript`: route-map/domain-readme/jsdoc/logging/feature-index contracts for JS web/backend repos.
 - `python`: reserved for Python-specific contracts (no additional seeded artifacts yet).
+- Bootstrap writes profile-relevant npm scripts only; inactive profile script entries are removed when they still match template-managed values.
 
 ## Bootstrap Inside an Existing Target Repo
 
@@ -80,14 +81,17 @@ npm run bootstrap -- --mode existing --target-path ../<project-name> --project-i
 - Known override surfaces are explicit: managed entries must set `allow_override: true` before override payload files are accepted.
 - Override payloads default to adjacent files next to managed targets (`<managed-file>.override.<ext>` for full replacement and `<managed-file>.append.<ext>` for additive merge), and can be remapped per entry via `override_path`.
 - Bootstrap does not auto-seed managed override payloads; overrides are opt-in local artifacts.
-- Existing-mode bootstrap preserves project-owned managed files when local content differs from the template seed source.
+- Existing-mode bootstrap preserves non-template managed files (`project` and `structured`) when local content differs from the template seed source.
 - Unknown/non-allowlisted override payload files (adjacent `.override`/`.append`) fail `npm run agent:managed -- --mode check`.
-- Optional non-template ownership can be declared per entry with `authority: "project"` when a file is intentionally project-local.
+- Optional non-template ownership can be declared per entry:
+- `authority: "project"` for seed-once project-local files.
+- `authority: "structured"` for template-defined section/key contracts where project content remains local.
 - Project-specific architecture and process details should be maintained in local docs/policy files, not hard-forked template scripts.
 
 ### Canonical Rule IDs
 
 - Canonical rule IDs/statements live in `.agents-config/contracts/rules/canonical-ruleset.json`.
+- Required rule IDs and required context-index command keys are profile-scoped via `contracts.ruleCatalog.requiredIdsByProfile` and `contracts.contextIndex.requiredCommandKeysByProfile`.
 - Drift is checked by ID + hash lineage against policy/doc sources with `npm run rules:canonical:verify`.
 - Template maintainers can regenerate canonical lineage after intentional policy/rule changes with `npm run rules:canonical:sync`.
 - Project-local rule overrides (local-only IDs) must use `.agents-config/rule-overrides.json` and validate against `.agents-config/rule-overrides.schema.json`.

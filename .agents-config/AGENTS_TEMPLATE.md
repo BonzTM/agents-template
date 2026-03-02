@@ -2,6 +2,18 @@
 
 Bootstrap contract for AI coding agents in this repository.
 
+## Quick Reference (Startup)
+
+Use this quick path at session start:
+
+1. Follow `## Required Startup Order` and run `npm run agent:preflight`.
+2. Treat preflight policy failures as blocking before implementation.
+3. Plan execution work in `.agents/EXECUTION_QUEUE.json` before changing code.
+4. Use `### Definition of Done` in `.agents-config/docs/AGENT_RULES.md` as the closeout gate.
+5. Use the remaining sections below as full reference when needed.
+
+## Full Contract Reference
+
 ## Local AGENTS Mode Picker
 
 Local repository naming is the definitive mode selector:
@@ -101,22 +113,9 @@ Simplified plan architecture:
 - optional legacy historical artifact: `PLAN.md` (non-authoritative)
 - Optional when needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
 - Legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files are valid historical formats.
-- Required `PLAN.json` metadata includes lifecycle fields (`status`, `updated_at`, `planning_stages`), authoritative narrative fields (`narrative.spec_outline`, `narrative.refined_spec`, `narrative.implementation_plan`, `narrative.pre_spec_outline`), `plan_ref`, and subagent fields (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`).
-- `PLAN.json.narrative.spec_outline` must be an object: `{ "summary": string, "full_spec_outline": SpecOutlineEntry[] }`.
-- `PLAN.json.narrative.refined_spec` must be an object: `{ "summary": string, "full_refined_spec": RefinedSpecEntry[] }`.
-- `PLAN.json.narrative.implementation_plan` must be an object: `{ "summary": string, "steps": ImplementationStep[] }`.
-- `PLAN.json.narrative.pre_spec_outline` must be an object with required string fields: `{ "purpose_goals": string, "non_goals": string }`.
-- `SpecOutlineEntry` contract: required `id` (non-empty string), `objective` (non-empty string), `deliverable` (non-empty string), `acceptance_criteria` (array of non-empty strings; minimum one), and `references` (array of non-empty strings; minimum one).
-- `RefinedSpecEntry` contract: required `id` (non-empty string), `decision` (non-empty string), `rationale` (non-empty string), `acceptance_criteria` (array of non-empty strings; minimum one), and `references` (array of non-empty strings; minimum one).
-- `ImplementationStep` contract: required `status` (non-empty allowlisted string), `deliverable` (non-empty non-placeholder string), `acceptance_criteria` (array of non-empty strings), `references` (non-empty string array; minimum one concrete reference), and `completion_summary` object containing `delivered` (array), `files_functions_hooks_touched` (array), and `verification_testing` (array).
-- `PLAN.json.narrative.*` is the authoritative active planning context; `PLAN.md` prose is legacy historical context only.
-- For policy-configured statuses requiring narrative content (default: `in_progress`, `complete`), each required narrative summary must meet the configured minimum length (default: `24` characters), include at least the configured minimum step count (default: `1`), and `narrative.pre_spec_outline.purpose_goals`/`narrative.pre_spec_outline.non_goals` must meet the configured pre-spec minimum length (default: `24` characters each).
-- Additional policy status gates:
-  - For policy-configured plan statuses requiring structured spec entries (default: `in_progress`, `complete`), `narrative.spec_outline.full_spec_outline` and `narrative.refined_spec.full_refined_spec` must each contain at least the configured minimum entry count (default: `1`).
-  - For policy-configured step statuses requiring acceptance criteria (default: `in_progress`, `complete`), `acceptance_criteria` must include at least the configured minimum count of non-empty entries (default: `1`).
-  - `narrative.pre_spec_outline.non_goals` must be non-empty for policy-configured statuses (default: `ready`, `deferred`).
-  - For complete implementation steps, `completion_summary.delivered`, `completion_summary.files_functions_hooks_touched`, and `completion_summary.verification_testing` must all be non-empty arrays.
-  - Status coherence minimums: if any implementation step is `in_progress`, plan `status` must be `in_progress`; if plan `status` is `complete`, all implementation steps must be `complete`; if plan `status` is `deferred`, no implementation step may be `in_progress`.
+- Treat `.agents-config/docs/CONTEXT_INDEX.json` `sessionArtifacts.planMachineContract` as the authoritative machine schema + status-gate contract.
+- Treat `.agents-config/docs/AGENT_RULES.md` `### Planning and Small-Batch Execution` as the authoritative human-readable planning contract.
+- `npm run agent:preflight` remains the canonical command that normalizes and enforces plan-machine contract shape before execution.
 
 ## Orchestrator/Subagent Contract Pointer
 
@@ -185,11 +184,9 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Release workflow rule: `release:prepare` must promote `## [Unreleased]` into `## [<version>] - <date>` and recreate a fresh empty `## [Unreleased]` scaffold (`Added`, `Changed`, `Fixed`).
 - Release notes source rule: `release:notes` must read items from the corresponding `CHANGELOG.md` version section (plain-English changelog bullets are canonical).
 - Release notes content rule: summarize changes in plain English and avoid raw commit-jargon wording.
-- Route map generator: `npm run route-map:generate`
-- Domain readmes generator: `npm run domain-readmes:generate`
-- JSDoc coverage verify: `npm run jsdoc-coverage:verify`
-- OpenAPI coverage verify: `npm run openapi-coverage:verify`
-- Logging compliance verify: `npm run logging:compliance:verify`
+- Profile-scoped governance artifacts and command requirements are enforced from active policy profiles.
+- Profile-scoped for `typescript` and `javascript`: `npm run feature-index:verify`, `npm run route-map:verify`, `npm run domain-readmes:verify`, `npm run jsdoc-coverage:verify`, and `npm run logging:compliance:verify`.
+- Profile-scoped for `typescript-openapi`: `npm run openapi-coverage:verify`.
 - Logging policy requirement: runtime code paths should not ship without appropriate scoped logging coverage.
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
 - CI template gate: meaningful workflow-path changes must carry `Template-Impact` declaration (`yes` with `Template-Ref`, or `none` with `Template-Impact-Reason`).

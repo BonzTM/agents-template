@@ -74,29 +74,25 @@ For this repository, documentation updates are part of done for behavior-changin
 - Treat `CHANGELOG.md` as the release-notes source of truth.
 - Run `npm run release:prepare -- --version <X.Y.Z>` before release publication.
 - Generate release notes with `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`.
-- Keep `.agents-config/docs/FEATURE_INDEX.json`, `.agents-config/docs/TEST_MATRIX.md`, `.agents-config/docs/ROUTE_MAP.md`, `.agents-config/docs/JSDOC_COVERAGE.md`, `.agents-config/docs/OPENAPI_COVERAGE.md`, and `.agents-config/docs/LOGGING_STANDARDS.md` current.
+- Keep profile-scoped governance artifacts current as required by active policy profiles.
+- For `typescript` and `javascript` profiles, keep `.agents-config/docs/FEATURE_INDEX.json`, `.agents-config/docs/TEST_MATRIX.md`, `.agents-config/docs/ROUTE_MAP.md`, `.agents-config/docs/JSDOC_COVERAGE.md`, and `.agents-config/docs/LOGGING_STANDARDS.md` current.
+- For `typescript-openapi`, keep `.agents-config/docs/OPENAPI_COVERAGE.md` current.
 - Keep `.agents-config/contracts/rules/canonical-ruleset.json` and `.agents-config/rule-overrides.schema.json` synchronized with policy/rules updates (`npm run rules:canonical:verify`).
 - Keep per-domain start-here docs current in `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/README.md`.
 - Maintain canonical continuity in `.agents/CONTINUITY.md` and queue state in `.agents/EXECUTION_QUEUE.json`.
 
-## Full-Stack Delivery Gates
+## Delivery Gates
 
 For changes touching API/auth/routing/integration boundaries:
 
 - Document end-to-end request path in active plan context.
 - Validate both backend-direct and frontend/proxy paths where applicable.
-- Include at least one explicit full-stack verification checkpoint task.
+- Include at least one explicit end-to-end verification checkpoint task.
 - Convert production trace failures into deterministic regression tests before closeout.
 
 ## Database
 
 Document schema ownership, migration process, and operational constraints.
-
-## Streaming Integration
-
-If applicable, document streaming/integration architecture and provider-specific contracts.
-
-If not applicable, mark this section explicitly as not in scope for this project.
 
 ## Testing
 

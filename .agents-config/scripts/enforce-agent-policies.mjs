@@ -337,6 +337,122 @@ function checkRequiredSequenceSnippets(config) {
   }
 }
 
+function checkPlaceholderMarkers(config) {
+  const rules = config?.checks?.placeholderMarkers ?? [];
+  const activeProfiles = getActiveProfiles(config);
+  const activeBootstrapFile = toNonEmptyString(
+    config?.contracts?.documentationModel?.bootstrapFile,
+  );
+
+  for (let ruleIndex = 0; ruleIndex < rules.length; ruleIndex += 1) {
+    const rule = rules[ruleIndex];
+    if (!profileScopeIsActive(activeProfiles, rule?.profiles)) {
+      continue;
+    }
+
+    const skipBootstrapFiles = normalizeStringArray(rule?.skipWhenBootstrapFileIs);
+    if (
+      activeBootstrapFile &&
+      skipBootstrapFiles.length > 0 &&
+      skipBootstrapFiles.includes(activeBootstrapFile)
+    ) {
+      continue;
+    }
+
+    const content = readFileIfPresent(rule?.file, Boolean(rule?.optional));
+    if (content === null) {
+      continue;
+    }
+
+    const literalPatterns = normalizeStringArray(rule?.patterns);
+    const regexPatternTexts = normalizeStringArray(rule?.regexPatterns);
+    const compiledRegexPatterns = compileRegexPatternList(
+      regexPatternTexts,
+      `checks.placeholderMarkers[${ruleIndex}].regexPatterns`,
+    );
+
+    if (literalPatterns.length === 0 && compiledRegexPatterns.length === 0) {
+      addWarning(
+        `placeholderMarkers rule for ${rule?.file ?? "<unknown>"} has no patterns.`,
+      );
+      continue;
+    }
+
+    const sectionHeadingRegexPattern =
+      toNonEmptyString(rule?.sectionHeadingRegex) ?? "^##\\s+.+$";
+    let sectionHeadingRegex = null;
+    try {
+      sectionHeadingRegex = new RegExp(sectionHeadingRegexPattern);
+    } catch (error) {
+      addFailure(
+        `checks.placeholderMarkers[${ruleIndex}].sectionHeadingRegex is invalid: ${error.message}`,
+      );
+      continue;
+    }
+
+    const failureMode = toNonEmptyString(rule?.failureMode) ?? "warn";
+    if (!["warn", "fail"].includes(failureMode)) {
+      addFailure(
+        `checks.placeholderMarkers[${ruleIndex}].failureMode must be either "warn" or "fail".`,
+      );
+      continue;
+    }
+
+    const lines = content.split(/\r?\n/);
+    const matches = [];
+    let activeSection = "(top-level)";
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
+      const trimmed = line.trim();
+      if (sectionHeadingRegex.test(trimmed)) {
+        activeSection = trimmed;
+      }
+
+      const literalMatch = literalPatterns.find((pattern) => line.includes(pattern));
+      let regexMatch = null;
+      if (!literalMatch) {
+        regexMatch = compiledRegexPatterns.find((pattern) => pattern.test(line)) ?? null;
+      }
+
+      if (!literalMatch && !regexMatch) {
+        continue;
+      }
+
+      matches.push({
+        section: activeSection,
+        line: lineIndex + 1,
+        matchedPattern: literalMatch ?? regexMatch.toString(),
+      });
+    }
+
+    if (matches.length === 0) {
+      continue;
+    }
+
+    const sectionSummary = [...new Set(matches.map((entry) => entry.section))]
+      .slice(0, 8)
+      .join(", ");
+    const matchSummary = matches
+      .slice(0, 5)
+      .map(
+        (entry) =>
+          `${entry.section} (line ${entry.line}, pattern ${entry.matchedPattern})`,
+      )
+      .join("; ");
+    const baseMessage =
+      toNonEmptyString(rule?.message) ??
+      `Placeholder marker detected in ${rule?.file ?? "<unknown>"}.`;
+    const combinedMessage = `${baseMessage} Sections: ${sectionSummary}. Sample matches: ${matchSummary}.`;
+
+    if (failureMode === "fail") {
+      addFailure(combinedMessage);
+    } else {
+      addWarning(combinedMessage);
+    }
+  }
+}
+
 function checkContinuityEntryFormat(config) {
   const rule = config?.checks?.continuityEntryFormat;
   if (!rule) {
@@ -676,6 +792,23 @@ function getActiveProfiles(config) {
   ]);
 }
 
+function getAvailableProfiles(config) {
+  const profilesContract = config?.contracts?.profiles;
+  const configuredProfiles = normalizeStringArray(
+    profilesContract?.availableProfiles,
+  );
+  if (configuredProfiles.length > 0) {
+    return configuredProfiles;
+  }
+  return [
+    "base",
+    "typescript",
+    "typescript-openapi",
+    "javascript",
+    "python",
+  ];
+}
+
 function normalizeStringArray(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -719,6 +852,65 @@ function profileScopeIsActive(activeProfiles, requiredProfiles) {
     return true;
   }
   return required.some((profile) => activeProfiles.has(profile));
+}
+
+function resolveProfileScopedRequiredStrings({
+  config,
+  baseValues,
+  baseFieldPath,
+  byProfileValues,
+  byProfileFieldPath,
+}) {
+  const requiredBaseValues = validateStringArray(baseValues, baseFieldPath);
+  const activeProfiles = getActiveProfiles(config);
+  const availableProfiles = new Set(getAvailableProfiles(config));
+  const requiredProfileValuesByProfile = new Map();
+
+  if (byProfileValues !== undefined) {
+    if (!isPlainObject(byProfileValues)) {
+      addFailure(`${byProfileFieldPath} must be an object when provided.`);
+    } else {
+      for (const [profile, values] of Object.entries(byProfileValues)) {
+        if (!availableProfiles.has(profile)) {
+          addFailure(
+            `${byProfileFieldPath} contains unknown profile "${profile}".`,
+          );
+          continue;
+        }
+        const normalizedValues = validateStringArray(
+          values,
+          `${byProfileFieldPath}.${profile}`,
+        );
+        requiredProfileValuesByProfile.set(profile, normalizedValues);
+      }
+    }
+  }
+
+  const combinedValues = [];
+  const seenValues = new Set();
+  const appendUnique = (value) => {
+    if (seenValues.has(value)) {
+      return;
+    }
+    seenValues.add(value);
+    combinedValues.push(value);
+  };
+
+  for (const value of requiredBaseValues) {
+    appendUnique(value);
+  }
+
+  for (const profile of activeProfiles) {
+    for (const value of requiredProfileValuesByProfile.get(profile) ?? []) {
+      appendUnique(value);
+    }
+  }
+
+  return {
+    requiredBaseValues,
+    requiredProfileValuesByProfile,
+    requiredValues: combinedValues,
+  };
 }
 
 function isContractEnabled(config, contract) {
@@ -1812,9 +2004,18 @@ function checkContextIndexContract(config) {
     pathName: `${contract.indexFile}.startupReadOrder`,
   });
 
-  const requiredCommandKeys = validateStringArray(
-    contract.requiredCommandKeys,
-    `${contractPath}.requiredCommandKeys`,
+  if (!isPlainObject(contract.requiredCommandKeysByProfile)) {
+    addFailure(`${contractPath}.requiredCommandKeysByProfile must be an object.`);
+  }
+
+  const { requiredValues: requiredCommandKeys } = resolveProfileScopedRequiredStrings(
+    {
+      config,
+      baseValues: contract.requiredCommandKeys,
+      baseFieldPath: `${contractPath}.requiredCommandKeys`,
+      byProfileValues: contract.requiredCommandKeysByProfile,
+      byProfileFieldPath: `${contractPath}.requiredCommandKeysByProfile`,
+    },
   );
 
   if (!index.commands || typeof index.commands !== "object") {
@@ -1824,6 +2025,77 @@ function checkContextIndexContract(config) {
       const command = index.commands[key];
       if (typeof command !== "string" || command.trim() === "") {
         addFailure(`${contract.indexFile}.commands.${key} must be a non-empty string.`);
+      }
+    }
+  }
+
+  if (!isPlainObject(index.profiles)) {
+    addFailure(`${contract.indexFile}.profiles must be an object.`);
+  } else {
+    const profilesContract = config?.contracts?.profiles;
+    const expectedAvailableProfiles = normalizeStringArray(
+      profilesContract?.availableProfiles,
+    );
+    if (expectedAvailableProfiles.length > 0) {
+      checkExactOrderedArray({
+        value: index.profiles.availableProfiles,
+        expected: expectedAvailableProfiles,
+        pathName: `${contract.indexFile}.profiles.availableProfiles`,
+      });
+    }
+
+    const expectedActiveProfiles = normalizeStringArray(
+      profilesContract?.activeProfiles,
+    );
+    if (expectedActiveProfiles.length > 0) {
+      checkExactOrderedArray({
+        value: index.profiles.activeProfiles,
+        expected: expectedActiveProfiles,
+        pathName: `${contract.indexFile}.profiles.activeProfiles`,
+      });
+    }
+
+    const expectedRequiredRuleIdsByProfile = isPlainObject(
+      config?.contracts?.ruleCatalog?.requiredIdsByProfile,
+    )
+      ? config.contracts.ruleCatalog.requiredIdsByProfile
+      : {};
+    const actualRequiredRuleIdsByProfile = isPlainObject(
+      index.profiles.requiredRuleIdsByProfile,
+    )
+      ? index.profiles.requiredRuleIdsByProfile
+      : null;
+    if (!actualRequiredRuleIdsByProfile) {
+      addFailure(`${contract.indexFile}.profiles.requiredRuleIdsByProfile must be an object.`);
+    } else {
+      for (const profile of Object.keys(expectedRequiredRuleIdsByProfile)) {
+        checkExactOrderedArray({
+          value: actualRequiredRuleIdsByProfile[profile],
+          expected: normalizeStringArray(expectedRequiredRuleIdsByProfile[profile]),
+          pathName: `${contract.indexFile}.profiles.requiredRuleIdsByProfile.${profile}`,
+        });
+      }
+    }
+
+    const expectedRequiredCommandKeysByProfile = isPlainObject(
+      contract.requiredCommandKeysByProfile,
+    )
+      ? contract.requiredCommandKeysByProfile
+      : {};
+    const actualRequiredCommandKeysByProfile = isPlainObject(
+      index.profiles.requiredCommandKeysByProfile,
+    )
+      ? index.profiles.requiredCommandKeysByProfile
+      : null;
+    if (!actualRequiredCommandKeysByProfile) {
+      addFailure(`${contract.indexFile}.profiles.requiredCommandKeysByProfile must be an object.`);
+    } else {
+      for (const profile of Object.keys(expectedRequiredCommandKeysByProfile)) {
+        checkExactOrderedArray({
+          value: actualRequiredCommandKeysByProfile[profile],
+          expected: normalizeStringArray(expectedRequiredCommandKeysByProfile[profile]),
+          pathName: `${contract.indexFile}.profiles.requiredCommandKeysByProfile.${profile}`,
+        });
       }
     }
   }
@@ -6614,7 +6886,7 @@ function checkManagedFilesCanonicalContract(config) {
 
   const allowedAuthorities = normalizeStringArray(contract.allowedAuthorities);
   const allowedAuthoritySet = new Set(allowedAuthorities);
-  for (const requiredAuthority of ["template", "project"]) {
+  for (const requiredAuthority of ["template", "project", "structured"]) {
     if (!allowedAuthoritySet.has(requiredAuthority)) {
       addFailure(
         `${contractPath}.allowedAuthorities is missing required value: ${requiredAuthority}.`,
@@ -6654,10 +6926,18 @@ function checkManagedFilesCanonicalContract(config) {
     );
   }
 
-  const requiredCommandKeys = normalizeStringArray(contextContract?.requiredCommandKeys);
+  const { requiredValues: requiredCommandKeys } = resolveProfileScopedRequiredStrings({
+    config,
+    baseValues: contextContract?.requiredCommandKeys,
+    baseFieldPath: "contracts.contextIndex.requiredCommandKeys",
+    byProfileValues: contextContract?.requiredCommandKeysByProfile,
+    byProfileFieldPath: "contracts.contextIndex.requiredCommandKeysByProfile",
+  });
   for (const commandKey of [contextIndexCheckCommandKey, contextIndexFixCommandKey]) {
     if (!requiredCommandKeys.includes(commandKey)) {
-      addFailure(`contracts.contextIndex.requiredCommandKeys must include ${commandKey}.`);
+      addFailure(
+        `contracts.contextIndex required command keys must include ${commandKey} for active profiles.`,
+      );
     }
   }
 
@@ -6716,7 +6996,7 @@ function checkManagedFilesCanonicalContract(config) {
       }
 
       const sectionAllowedAuthorities = normalizeStringArray(section.allowedAuthorities);
-      for (const requiredAuthority of ["template", "project"]) {
+      for (const requiredAuthority of ["template", "project", "structured"]) {
         if (!sectionAllowedAuthorities.includes(requiredAuthority)) {
           addFailure(
             `${contextIndexPath}.${contextIndexSection}.allowedAuthorities must include ${requiredAuthority}.`,
@@ -6777,7 +7057,7 @@ function checkManagedFilesCanonicalContract(config) {
     const manifestAllowedAuthorities = normalizeStringArray(
       manifestContract.allowed_authorities,
     );
-    for (const requiredAuthority of ["template", "project"]) {
+    for (const requiredAuthority of ["template", "project", "structured"]) {
       if (!manifestAllowedAuthorities.includes(requiredAuthority)) {
         addFailure(
           `${filePath}.${canonicalContractField}.allowed_authorities must include ${requiredAuthority}.`,
@@ -6828,6 +7108,104 @@ function checkManagedFilesCanonicalContract(config) {
       if (!allowedAuthoritySet.has(authority)) {
         addFailure(
           `${filePath}.managed_files[${index}].${entryAuthorityField} must be one of ${[...allowedAuthoritySet].join(", ")}.`,
+        );
+      }
+
+      const hasStructureContract = Object.prototype.hasOwnProperty.call(
+        entry,
+        "structure_contract",
+      );
+      if (authority === "structured") {
+        const structureContract = entry.structure_contract;
+        if (
+          !structureContract ||
+          typeof structureContract !== "object" ||
+          Array.isArray(structureContract)
+        ) {
+          addFailure(
+            `${filePath}.managed_files[${index}].structure_contract is required when ${entryAuthorityField}=structured.`,
+          );
+        } else {
+          const kind = toNonEmptyString(structureContract.kind);
+          if (!["markdown_sections", "json_required_paths"].includes(kind ?? "")) {
+            addFailure(
+              `${filePath}.managed_files[${index}].structure_contract.kind must be markdown_sections or json_required_paths.`,
+            );
+          } else if (kind === "markdown_sections") {
+            const requiredSections = Array.isArray(structureContract.required_sections)
+              ? structureContract.required_sections
+              : [];
+            if (requiredSections.length === 0) {
+              addFailure(
+                `${filePath}.managed_files[${index}].structure_contract.required_sections must be a non-empty array.`,
+              );
+            } else {
+              for (const sectionHeading of requiredSections) {
+                const value = toNonEmptyString(sectionHeading);
+                if (!value || !value.startsWith("##")) {
+                  addFailure(
+                    `${filePath}.managed_files[${index}].structure_contract.required_sections entries must be markdown headings beginning with ##.`,
+                  );
+                  break;
+                }
+              }
+            }
+          } else if (kind === "json_required_paths") {
+            const requiredPaths = Array.isArray(structureContract.required_paths)
+              ? structureContract.required_paths
+              : [];
+            if (requiredPaths.length === 0) {
+              addFailure(
+                `${filePath}.managed_files[${index}].structure_contract.required_paths must be a non-empty array.`,
+              );
+            } else {
+              for (const pathRule of requiredPaths) {
+                if (!pathRule || typeof pathRule !== "object" || Array.isArray(pathRule)) {
+                  addFailure(
+                    `${filePath}.managed_files[${index}].structure_contract.required_paths entries must be objects.`,
+                  );
+                  break;
+                }
+                const pathValue = toNonEmptyString(pathRule.path);
+                const typeValue = toNonEmptyString(pathRule.type);
+                if (!pathValue) {
+                  addFailure(
+                    `${filePath}.managed_files[${index}].structure_contract.required_paths entries must define non-empty path values.`,
+                  );
+                  break;
+                }
+                if (!["object", "array", "string", "number", "boolean"].includes(typeValue ?? "")) {
+                  addFailure(
+                    `${filePath}.managed_files[${index}].structure_contract.required_paths path ${pathValue} must define type object|array|string|number|boolean.`,
+                  );
+                  break;
+                }
+                if (
+                  Object.prototype.hasOwnProperty.call(pathRule, "min_items") &&
+                  pathRule.min_items !== null &&
+                  pathRule.min_items !== undefined
+                ) {
+                  const minItems = Number(pathRule.min_items);
+                  if (!Number.isInteger(minItems) || minItems < 0) {
+                    addFailure(
+                      `${filePath}.managed_files[${index}].structure_contract.required_paths path ${pathValue} min_items must be a non-negative integer.`,
+                    );
+                    break;
+                  }
+                  if (typeValue !== "array") {
+                    addFailure(
+                      `${filePath}.managed_files[${index}].structure_contract.required_paths path ${pathValue} cannot set min_items unless type=array.`,
+                    );
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else if (hasStructureContract) {
+        addFailure(
+          `${filePath}.managed_files[${index}].structure_contract is only valid when ${entryAuthorityField}=structured.`,
         );
       }
 
@@ -7033,6 +7411,7 @@ const POLICY_ENFORCEMENT_CHECK_IDS = new Set([
   "checkRequiredTextSnippets",
   "checkRequiredMarkdownSections",
   "checkRequiredSequenceSnippets",
+  "checkPlaceholderMarkers",
   "checkContinuityEntryFormat",
   "checkForbiddenTextPatterns",
   "checkDisallowedTrackedPathPrefixes",
@@ -7164,10 +7543,22 @@ function checkRuleCatalogContract(config) {
     return;
   }
 
-  const requiredIds = validateStringArray(
-    contract.requiredIds,
-    `${contractPath}.requiredIds`,
-  );
+  if (!isPlainObject(contract.requiredIdsByProfile)) {
+    addFailure(`${contractPath}.requiredIdsByProfile must be an object.`);
+  }
+
+  const { requiredValues: requiredIds } = resolveProfileScopedRequiredStrings({
+    config,
+    baseValues: contract.requiredIds,
+    baseFieldPath: `${contractPath}.requiredIds`,
+    byProfileValues: contract.requiredIdsByProfile,
+    byProfileFieldPath: `${contractPath}.requiredIdsByProfile`,
+  });
+  if (requiredIds.length === 0) {
+    addFailure(
+      `${contractPath} must define at least one required rule id across base and active profile scopes.`,
+    );
+  }
 
   const rulesContent = readFileIfPresent(contract.file);
   if (rulesContent === null) {
@@ -7183,14 +7574,14 @@ function checkRuleCatalogContract(config) {
     const enforcingChecks = inferRuleEnforcementChecks(id);
     if (enforcingChecks.length === 0) {
       addFailure(
-        `${contractPath}.requiredIds entry ${id} has no enforcement-check mapping; update inferRuleEnforcementChecks.`,
+        `${contractPath} required rule id ${id} has no enforcement-check mapping; update inferRuleEnforcementChecks.`,
       );
       continue;
     }
     for (const checkId of enforcingChecks) {
       if (!POLICY_ENFORCEMENT_CHECK_IDS.has(checkId)) {
         addFailure(
-          `${contractPath}.requiredIds entry ${id} maps to unknown enforcement check ${checkId}.`,
+          `${contractPath} required rule id ${id} maps to unknown enforcement check ${checkId}.`,
         );
       }
     }
@@ -7616,6 +8007,36 @@ function checkPolicyRuleQuality(config) {
       seen.add(snippet);
     }
   }
+
+  const placeholderRules = config?.checks?.placeholderMarkers ?? [];
+  for (const rule of placeholderRules) {
+    const patterns = normalizeStringArray(rule?.patterns);
+    const regexPatterns = normalizeStringArray(rule?.regexPatterns);
+    if (patterns.length === 0 && regexPatterns.length === 0) {
+      addWarning(`placeholderMarkers rule for ${rule.file} has no patterns.`);
+      continue;
+    }
+
+    const seen = new Set();
+    for (const pattern of patterns) {
+      if (seen.has(pattern)) {
+        addWarning(
+          `Duplicate placeholder literal pattern in policy config for ${rule.file}: ${pattern}`,
+        );
+      }
+      seen.add(pattern);
+    }
+
+    const seenRegex = new Set();
+    for (const pattern of regexPatterns) {
+      if (seenRegex.has(pattern)) {
+        addWarning(
+          `Duplicate placeholder regex pattern in policy config for ${rule.file}: ${pattern}`,
+        );
+      }
+      seenRegex.add(pattern);
+    }
+  }
 }
 
 function runPolicyChecks(activeConfigPath = configPath, options = {}) {
@@ -7670,6 +8091,7 @@ function runPolicyChecks(activeConfigPath = configPath, options = {}) {
   checkRequiredTextSnippets(config);
   checkRequiredMarkdownSections(config);
   checkRequiredSequenceSnippets(config);
+  checkPlaceholderMarkers(config);
   checkContinuityEntryFormat(config);
   checkForbiddenTextPatterns(config, trackedFiles, trackedFilesReliable);
   checkDisallowedTrackedPathPrefixes(config, trackedFiles, trackedFilesReliable);

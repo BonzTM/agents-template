@@ -37,13 +37,25 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_tdd_default`: Prefer true TDD and document deviations when strict TDD is impractical.
 - `rule_coverage_default_100`: Treat 100% coverage as default bar unless user-approved exception exists.
 - `rule_scope_completeness_gate`: Explicitly map outcomes to all in-scope user requests before closeout.
+
+Profile-scoped rule IDs (enforced only when the profile is active):
+
+`typescript`/`javascript`:
 - `rule_feature_index_required`: Maintain `.agents-config/docs/FEATURE_INDEX.json` as the canonical machine-readable feature map.
 - `rule_test_matrix_required`: Maintain `.agents-config/docs/TEST_MATRIX.md` as the canonical targeted test-command matrix.
 - `rule_route_map_required`: Maintain `.agents-config/docs/ROUTE_MAP.md` as the canonical generated backend/frontend route map.
 - `rule_domain_readmes_required`: Maintain per-domain start-here READMEs in `backend/src/routes`, `backend/src/services`, and `frontend/features/*`.
 - `rule_jsdoc_coverage_required`: Maintain `.agents-config/docs/JSDOC_COVERAGE.md` as the generated exported-symbol documentation drift tracker.
-- `rule_openapi_endpoint_docs_required`: Maintain `.agents-config/docs/OPENAPI_COVERAGE.md` as the generated OpenAPI endpoint/spec coverage drift tracker.
 - `rule_logging_contract_required`: Maintain `.agents-config/docs/LOGGING_STANDARDS.md` and enforce logging compliance checks across frontend/backend/python runtime code.
+
+`typescript-openapi`:
+- `rule_openapi_endpoint_docs_required`: Maintain `.agents-config/docs/OPENAPI_COVERAGE.md` as the generated OpenAPI endpoint/spec coverage drift tracker.
+
+`python`:
+- No additional profile-specific rule IDs are currently required beyond base contracts.
+
+Global rule IDs (all profiles):
+
 - `rule_release_notes_template_required`: Enforce canonical release-notes template + generator workflow, section order, and plain-English non-jargon summaries through policy checks.
 - `rule_release_notes_changelog_source_required`: Treat `CHANGELOG.md` as release-notes source of truth and rotate `Unreleased` during `release:prepare`.
 - `orch_single_orchestrator_authority`: Enforce exactly one orchestrator context owner per session; subagents do not orchestrate.
@@ -53,6 +65,8 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `orch_concise_subagent_briefs`: Enforce concise subagent payload/addendum shape with explicit verbosity budgets.
 - `orch_spec_refined_plan_verbosity`: Enforce concise spec outline/refined spec/implementation-plan verbosity ladder.
 - `orch_claude_model_default`: Claude model routing is role/risk-based: orchestrator uses `claude-opus-4-6`, subagents use `claude-opus-4-6` (or `claude-sonnet-4-6` for lighter tasks), and `claude-haiku-4-5` is reserved for low-risk loops. Claude orchestrators may delegate to Codex subagents via `codex exec`.
+
+Framework-specific rule IDs are profile-scoped in policy contracts.
 
 ## Global Operating Agreements (All LLMs)
 
@@ -114,19 +128,19 @@ These rules are cross-agent defaults for this workspace and apply unless the use
 
 ### Feature and Test Discoverability (Required)
 
-- Treat `.agents-config/docs/FEATURE_INDEX.json` as the canonical machine-readable feature map and ownership/findability index.
-- Treat `.agents-config/docs/TEST_MATRIX.md` as the canonical map from feature domains to targeted test commands.
-- Treat `.agents-config/docs/ROUTE_MAP.md` as the canonical generated map for backend endpoints and frontend routes.
-- Keep `.agents-config/docs/JSDOC_COVERAGE.md` current via `npm run jsdoc-coverage:verify` whenever exported-symbol surface changes.
-- Keep `.agents-config/docs/OPENAPI_COVERAGE.md` current via `npm run openapi-coverage:verify` whenever OpenAPI spec or route surface changes.
-- Regenerate route map artifacts with `npm run route-map:generate` whenever backend route handlers, route mounts, or frontend app routes change.
-- Maintain per-domain start-here READMEs in `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md`.
-- Whenever a feature is introduced, changed significantly, or removed, update or explicitly verify the impacted entry in `.agents-config/docs/FEATURE_INDEX.json`.
-- Whenever test entrypoints or reliable targeted commands change, update `.agents-config/docs/TEST_MATRIX.md` in the same change set.
+- For `typescript` and `javascript` profiles, treat `.agents-config/docs/FEATURE_INDEX.json` as the canonical machine-readable feature map and ownership/findability index.
+- For `typescript` and `javascript` profiles, treat `.agents-config/docs/TEST_MATRIX.md` as the canonical map from feature domains to targeted test commands.
+- For `typescript` and `javascript` profiles, treat `.agents-config/docs/ROUTE_MAP.md` as the canonical generated map for backend endpoints and frontend routes.
+- For `typescript` and `javascript` profiles, keep `.agents-config/docs/JSDOC_COVERAGE.md` current via `npm run jsdoc-coverage:verify` whenever exported-symbol surface changes.
+- For `typescript-openapi` profile, keep `.agents-config/docs/OPENAPI_COVERAGE.md` current via `npm run openapi-coverage:verify` whenever OpenAPI spec or route surface changes.
+- For `typescript` and `javascript` profiles, regenerate route map artifacts with `npm run route-map:generate` whenever backend route handlers, route mounts, or frontend app routes change.
+- For `typescript` and `javascript` profiles, maintain per-domain start-here READMEs in `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md`.
+- For `typescript` and `javascript` profiles, whenever a feature is introduced, changed significantly, or removed, update or explicitly verify the impacted entry in `.agents-config/docs/FEATURE_INDEX.json`.
+- For `typescript` and `javascript` profiles, whenever test entrypoints or reliable targeted commands change, update `.agents-config/docs/TEST_MATRIX.md` in the same change set.
 
 ### Logging Standards Contract (Required)
 
-- Treat `.agents-config/docs/LOGGING_STANDARDS.md` as the canonical logging policy for frontend, backend, and Python sidecars.
+- For `typescript` and `javascript` profiles, treat `.agents-config/docs/LOGGING_STANDARDS.md` as the canonical logging policy for frontend, backend, and Python sidecars.
 - Everything in project runtime code should be logged appropriately with shared logging helpers; do not leave silent failure paths or raw logging drift.
 - Use shared logging helpers by default:
   - frontend: `frontend/lib/logger.ts`

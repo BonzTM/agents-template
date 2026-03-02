@@ -220,6 +220,97 @@ function normalizeArrayOfStrings(value) {
   return out;
 }
 
+function normalizeUniqueArrayOfStrings(value) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of normalizeArrayOfStrings(value)) {
+    if (seen.has(entry)) {
+      continue;
+    }
+    seen.add(entry);
+    out.push(entry);
+  }
+  return out;
+}
+
+function getAvailableProfiles(policy) {
+  const availableProfiles = normalizeUniqueArrayOfStrings(
+    policy?.contracts?.profiles?.availableProfiles,
+  );
+  if (availableProfiles.length > 0) {
+    return availableProfiles;
+  }
+  return ["base", "typescript", "typescript-openapi", "javascript", "python"];
+}
+
+function getActiveProfiles(policy) {
+  const activeProfiles = normalizeUniqueArrayOfStrings(
+    policy?.contracts?.profiles?.activeProfiles,
+  );
+  if (activeProfiles.length > 0) {
+    return activeProfiles;
+  }
+  return getAvailableProfiles(policy);
+}
+
+function resolveProfileScopedRequiredRuleIds(policy, errors) {
+  const ruleCatalog = policy?.contracts?.ruleCatalog;
+  const requiredIds = normalizeUniqueArrayOfStrings(ruleCatalog?.requiredIds);
+  const availableProfiles = new Set(getAvailableProfiles(policy));
+  const activeProfiles = getActiveProfiles(policy);
+  const requiredIdsByProfile = new Map();
+  const rawRequiredIdsByProfile = ruleCatalog?.requiredIdsByProfile;
+
+  if (rawRequiredIdsByProfile !== undefined) {
+    if (
+      !rawRequiredIdsByProfile ||
+      typeof rawRequiredIdsByProfile !== "object" ||
+      Array.isArray(rawRequiredIdsByProfile)
+    ) {
+      errors.push("Policy contract contracts.ruleCatalog.requiredIdsByProfile must be an object when present.");
+    } else {
+      for (const [profile, ids] of Object.entries(rawRequiredIdsByProfile)) {
+        if (!availableProfiles.has(profile)) {
+          errors.push(
+            `Policy contract contracts.ruleCatalog.requiredIdsByProfile contains unknown profile: ${profile}`,
+          );
+          continue;
+        }
+        requiredIdsByProfile.set(profile, normalizeUniqueArrayOfStrings(ids));
+      }
+    }
+  }
+
+  const combinedIds = [];
+  const seenIds = new Set();
+  const appendUnique = (id) => {
+    if (seenIds.has(id)) {
+      return;
+    }
+    seenIds.add(id);
+    combinedIds.push(id);
+  };
+  for (const id of requiredIds) {
+    appendUnique(id);
+  }
+  for (const profile of activeProfiles) {
+    for (const id of requiredIdsByProfile.get(profile) ?? []) {
+      appendUnique(id);
+    }
+  }
+
+  if (combinedIds.length === 0) {
+    errors.push(
+      "Policy contract contracts.ruleCatalog.requiredIds (plus active profile scoped IDs) is missing or empty.",
+    );
+  }
+
+  return {
+    requiredIds: combinedIds,
+    activeProfiles,
+  };
+}
+
 function buildExpectedCanonical({
   policy,
   ruleCatalogStatements,
@@ -228,10 +319,10 @@ function buildExpectedCanonical({
   const errors = [];
   const warnings = [];
 
-  const requiredIds = normalizeArrayOfStrings(policy?.contracts?.ruleCatalog?.requiredIds);
-  if (requiredIds.length === 0) {
-    errors.push("Policy contract contracts.ruleCatalog.requiredIds is missing or empty.");
-  }
+  const { requiredIds, activeProfiles } = resolveProfileScopedRequiredRuleIds(
+    policy,
+    errors,
+  );
 
   const orchestratorRulesRaw = Array.isArray(policy?.contracts?.orchestratorSubagent?.rules)
     ? policy.contracts.orchestratorSubagent.rules
@@ -272,11 +363,12 @@ function buildExpectedCanonical({
         ? "policy.orchestratorSubagent.rules"
         : statementFromDocs
           ? "docs.ruleCatalog"
-          : "policy.ruleCatalog.requiredIds",
+          : "policy.ruleCatalog.requiredIds(+ByProfile)",
     });
   }
 
   const policyRequiredIdsHash = sha256(JSON.stringify(requiredIds));
+  const policyActiveProfilesHash = sha256(JSON.stringify(activeProfiles));
   const policyOrchestratorRulesHash = sha256(
     JSON.stringify(
       orchestratorRulesRaw
@@ -311,8 +403,10 @@ function buildExpectedCanonical({
       toNonEmptyString(existingMetadata.description) ??
       "Canonical governance rule catalog used for policy and drift checks.",
     generated_from: [DEFAULT_POLICY_FILE, DEFAULT_RULES_FILE],
+    active_profiles: activeProfiles,
     lineage: {
       policy_required_ids_sha256: policyRequiredIdsHash,
+      policy_active_profiles_sha256: policyActiveProfilesHash,
       policy_orchestrator_rules_sha256: policyOrchestratorRulesHash,
       rules_doc_catalog_sha256: docCatalogHash,
       canonical_rules_sha256: canonicalRulesHash,
@@ -325,6 +419,7 @@ function buildExpectedCanonical({
       rules,
     },
     requiredIds,
+    activeProfiles,
     errors,
     warnings,
   };
@@ -362,12 +457,17 @@ function validateCanonicalRules({
         errors.push(`canonical.metadata.generated_from must include ${requiredSource}.`);
       }
     }
+    const activeProfiles = normalizeArrayOfStrings(metadata.active_profiles);
+    if (activeProfiles.length === 0) {
+      errors.push("canonical.metadata.active_profiles must be a non-empty string array.");
+    }
     const lineage = metadata.lineage;
     if (!lineage || typeof lineage !== "object") {
       errors.push("canonical.metadata.lineage must be an object.");
     } else {
       for (const fieldName of [
         "policy_required_ids_sha256",
+        "policy_active_profiles_sha256",
         "policy_orchestrator_rules_sha256",
         "rules_doc_catalog_sha256",
         "canonical_rules_sha256",
@@ -697,6 +797,7 @@ export function verifyCanonicalRuleset({
 
   const expectedCanonical = expectedResult.expectedCanonical;
   const requiredIds = expectedResult.requiredIds;
+  const activeProfiles = expectedResult.activeProfiles;
   let canonical = canonicalBaseline;
 
   if (mode === "write") {
@@ -759,6 +860,7 @@ export function verifyCanonicalRuleset({
     },
     counts: {
       requiredRuleIds: requiredIds.length,
+      activeProfiles: activeProfiles.length,
       ruleCatalogStatements: ruleCatalogStatements.size,
     },
   };
@@ -779,7 +881,7 @@ function printResult(result, { json = false, quiet = false } = {}) {
   }
   if (!quiet) {
     console.log(
-      `Required rule IDs: ${result.counts.requiredRuleIds}, documented catalog statements: ${result.counts.ruleCatalogStatements}`,
+      `Required rule IDs: ${result.counts.requiredRuleIds}, active profiles: ${result.counts.activeProfiles}, documented catalog statements: ${result.counts.ruleCatalogStatements}`,
     );
   }
   for (const warning of result.warnings) {

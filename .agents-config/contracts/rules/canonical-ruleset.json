@@ -7,11 +7,15 @@
       ".agents-config/policies/agent-governance.json",
       ".agents-config/docs/AGENT_RULES.md"
     ],
+    "active_profiles": [
+      "base"
+    ],
     "lineage": {
-      "policy_required_ids_sha256": "0d679488c8590ed893ea58ba9cd866262d9df0b322e67fbcd2a81d20f3745dc0",
+      "policy_required_ids_sha256": "fa5c0af89d6f7c30b39abbd2a118ad31800b92caa4e64774563ef4f55e9c39a9",
+      "policy_active_profiles_sha256": "d3754f9182d9a1e86bd910514dda0370b4fab06bc478e9e1823e0134d1626744",
       "policy_orchestrator_rules_sha256": "5d6bae98890860e9cc1118216be111b377a40c9e3553f4e457eac8e2d29888d2",
       "rules_doc_catalog_sha256": "5d7252cfe39666bae5acdae60b5e1da0442ceea558fbce787a29fa1d658abc78",
-      "canonical_rules_sha256": "d65d57bf15c30099b465313bdb45861d9261887d90af7bd0533fed26536b1b39"
+      "canonical_rules_sha256": "060e3a2862d3adb81129a69b2b15941676c370e90b408e14df0e87d6155ac0b9"
     }
   },
   "rules": [
@@ -248,22 +252,6 @@
       "source": "docs.ruleCatalog"
     },
     {
-      "id": "rule_feature_index_required",
-      "statement": "Maintain `.agents-config/docs/FEATURE_INDEX.json` as the canonical machine-readable feature map.",
-      "category": ".agents-config/docs",
-      "severity": "error",
-      "overrideable": true,
-      "source": "docs.ruleCatalog"
-    },
-    {
-      "id": "rule_test_matrix_required",
-      "statement": "Maintain `.agents-config/docs/TEST_MATRIX.md` as the canonical targeted test-command matrix.",
-      "category": ".agents-config/docs",
-      "severity": "error",
-      "overrideable": true,
-      "source": "docs.ruleCatalog"
-    },
-    {
       "id": "rule_release_notes_template_required",
       "statement": "Enforce canonical release-notes template + generator workflow, section order, and plain-English non-jargon summaries through policy checks.",
       "category": "release",
@@ -277,14 +265,6 @@
       "category": "release",
       "severity": "error",
       "overrideable": false,
-      "source": "docs.ruleCatalog"
-    },
-    {
-      "id": "rule_logging_contract_required",
-      "statement": "Maintain `.agents-config/docs/LOGGING_STANDARDS.md` and enforce logging compliance checks across frontend/backend/python runtime code.",
-      "category": "logging",
-      "severity": "error",
-      "overrideable": true,
       "source": "docs.ruleCatalog"
     },
     {
@@ -438,38 +418,6 @@
       "severity": "error",
       "overrideable": false,
       "source": "policy.orchestratorSubagent.rules"
-    },
-    {
-      "id": "rule_route_map_required",
-      "statement": "Maintain `.agents-config/docs/ROUTE_MAP.md` as the canonical generated backend/frontend route map.",
-      "category": ".agents-config/docs",
-      "severity": "error",
-      "overrideable": true,
-      "source": "docs.ruleCatalog"
-    },
-    {
-      "id": "rule_domain_readmes_required",
-      "statement": "Maintain per-domain start-here READMEs in `backend/src/routes`, `backend/src/services`, and `frontend/features/*`.",
-      "category": ".agents-config/docs",
-      "severity": "error",
-      "overrideable": true,
-      "source": "docs.ruleCatalog"
-    },
-    {
-      "id": "rule_jsdoc_coverage_required",
-      "statement": "Maintain `.agents-config/docs/JSDOC_COVERAGE.md` as the generated exported-symbol documentation drift tracker.",
-      "category": ".agents-config/docs",
-      "severity": "error",
-      "overrideable": true,
-      "source": "docs.ruleCatalog"
-    },
-    {
-      "id": "rule_openapi_endpoint_docs_required",
-      "statement": "Maintain `.agents-config/docs/OPENAPI_COVERAGE.md` as the generated OpenAPI endpoint/spec coverage drift tracker.",
-      "category": "governance",
-      "severity": "error",
-      "overrideable": false,
-      "source": "docs.ruleCatalog"
     }
   ]
 }
