@@ -274,23 +274,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Release runtime contract command: `npm run release:contract:check`
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
 - CI template gate: meaningful workflow-path changes require `Template-Impact` PR metadata (`yes` + `Template-Ref`, or `none` + `Template-Impact-Reason`).
-
-When policy expectations change, update all relevant governance artifacts in the same change set:
-
-1. `.agents-config/templates/AGENTS.md` (bootstrap contract)
-2. `.agents-config/docs/AGENT_RULES.md` (human-readable rules contract)
-3. `.agents-config/docs/AGENT_CONTEXT.md` (human-readable context contract, when impacted)
-4. `.agents-config/docs/CONTEXT_INDEX.json` (machine-readable context map)
-5. `.agents-config/agent-managed.json` and `.agents-config/tools/bootstrap/managed-files.template.json` (managed workflow canonical contract + downstream seed)
-6. `.agents-config/config/project-tooling.json` (project-owned tooling defaults consumed by template-managed scripts, when impacted)
-7. `.agents-config/docs/FEATURE_INDEX.json` (machine-readable feature map, when impacted)
-8. `.agents-config/docs/TEST_MATRIX.md` (targeted test command map, when impacted)
-9. `.agents-config/docs/ROUTE_MAP.md` (generated backend/frontend route map, when impacted)
-10. `.agents-config/docs/JSDOC_COVERAGE.md` (generated exported-symbol JSDoc coverage tracker, when impacted)
-11. `.agents-config/docs/OPENAPI_COVERAGE.md` (generated OpenAPI endpoint/spec coverage tracker, when impacted)
-12. `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md` (domain start-here guides, when impacted)
-13. `.agents-config/policies/agent-governance.json` (machine-readable source of truth)
-14. `.agents-config/scripts/enforce-agent-policies.mjs` (enforcement logic)
+- Template-maintainer-only governance-change file checklist is intentionally kept out of downstream startup docs and maintained in the upstream `agents-template` local `AGENTS.md`.
 
 ## LLM Continuity and Execution Discipline
 
@@ -337,26 +321,10 @@ When policy expectations change, update all relevant governance artifacts in the
   - optional as needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
   - legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files remain valid historical formats.
 - Legacy `PLAN.md` artifacts (when present) should preserve explicit `Spec outline`, `Refined spec`, and `Detailed implementation plan` sections for historical auditability.
-- `PLAN.json` is the machine-authoritative lifecycle record and must include:
-  - lifecycle/status metadata (`status`, `updated_at`, `planning_stages`)
-  - authoritative narrative context fields (`narrative.spec_outline`, `narrative.refined_spec`, `narrative.implementation_plan`, `narrative.pre_spec_outline`)
-  - the plan reference link (`plan_ref`)
-  - subagent policy/ownership metadata (`subagent.requirement`, `subagent.primary_agent`, `subagent.execution_agents`, `subagent.last_executor`)
-- `PLAN.json.narrative.spec_outline` must be an object: `{ "summary": string, "full_spec_outline": SpecOutlineEntry[] }`.
-- `PLAN.json.narrative.refined_spec` must be an object: `{ "summary": string, "full_refined_spec": RefinedSpecEntry[] }`.
-- `PLAN.json.narrative.implementation_plan` must be an object: `{ "summary": string, "steps": ImplementationStep[] }`.
-- `PLAN.json.narrative.pre_spec_outline` must be an object with required string fields: `{ "purpose_goals": string, "non_goals": string }`.
-- `SpecOutlineEntry` contract: required `id` (non-empty string), `objective` (non-empty string), `deliverable` (non-empty string), `acceptance_criteria` (array of non-empty strings; minimum one), and `references` (array of non-empty strings; minimum one).
-- `RefinedSpecEntry` contract: required `id` (non-empty string), `decision` (non-empty string), `rationale` (non-empty string), `acceptance_criteria` (array of non-empty strings; minimum one), and `references` (array of non-empty strings; minimum one).
-- `ImplementationStep` contract: required `status` (non-empty allowlisted string), `deliverable` (non-empty non-placeholder string), `acceptance_criteria` (array of non-empty strings), `references` (non-empty string array; minimum one concrete reference), and `completion_summary` object containing `delivered` (array), `files_functions_hooks_touched` (array), and `verification_testing` (array).
-- Policy status gates:
-  - For policy-configured plan statuses requiring structured spec entries (default: `in_progress`, `complete`), `narrative.spec_outline.full_spec_outline` and `narrative.refined_spec.full_refined_spec` must each contain at least the configured minimum entry count (default: `1`).
-  - For policy-configured step statuses requiring acceptance criteria (default: `in_progress`, `complete`), `acceptance_criteria` must include at least the configured minimum count of non-empty entries (default: `1`).
-  - `narrative.pre_spec_outline.non_goals` must be non-empty for policy-configured statuses (default: `ready`, `deferred`).
-  - For complete implementation steps, `completion_summary.delivered`, `completion_summary.files_functions_hooks_touched`, and `completion_summary.verification_testing` must all be non-empty arrays.
-  - Status coherence minimums: if any implementation step is `in_progress`, plan `status` must be `in_progress`; if plan `status` is `complete`, all implementation steps must be `complete`; if plan `status` is `deferred`, no implementation step may be `in_progress`.
+- `PLAN.json` is the machine-authoritative lifecycle record for active/deferred feature plans; `PLAN.md` is legacy historical context only.
+- Field-level contracts (including `SpecOutlineEntry`, `RefinedSpecEntry`, `ImplementationStep`, narrative object shapes, status gates, coherence rules, and required minimums) are defined in `.agents-config/policies/agent-governance.json` at `contracts.sessionArtifacts.planMachineContract`.
+- `npm run agent:preflight` is the canonical normalizer/enforcer for that plan-machine contract, and policy checks must fail on contract drift or invalid plan state.
 - Treat `PLAN.json.narrative.*` as the authoritative active planning prose context (replacing active `PLAN.md` prose authority).
-- For configured required statuses (default: `in_progress`, `complete`), each required narrative summary must satisfy the policy minimum length (default: `24` characters), meet the configured minimum step count (default: `1`), and `narrative.pre_spec_outline.purpose_goals`/`narrative.pre_spec_outline.non_goals` must satisfy the policy pre-spec minimum length (default: `24` characters each).
 
 ### Re-Context and Retrospective Checks
 
@@ -411,56 +379,15 @@ When policy expectations change, update all relevant governance artifacts in the
 
 ### Session Artifact Contracts (Required)
 
-- Workspace layout contract:
-  - Bootstrap defaults to external workfiles mode: `.agents` is a symlink to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`).
-  - Local `.agents` directory mode is allowed only when bootstrap is explicitly set to `--agents-mode local`.
-  - If running from a worktree, `.agents` in that worktree must be a symlink to the canonical root.
-  - Keep all non-primary worktrees under `../<repo-name>.worktrees`.
-- Keep canonical machine-readable execution queue in `.agents/EXECUTION_QUEUE.json`:
-  - top-level: `version`, `created_at`, `updated_at`, `last_updated`, `state`, `feature_id`, `task_id`, `objective`, `in_scope`, `out_of_scope`, `acceptance_criteria`, `constraints`, `references`, `open_questions`, `deferred_reason`, `cancel_reason`, `items`.
-  - top-level `state` values: `active`, `deferred`, `pending`, `complete`.
-  - each item: `id`, `idempotency_key`, `feature_id`, `subscope`, `title`, `type`, `state`, `created_at`, `updated_at`, `planned_at`, `owner`, `acceptance_criteria`, `constraints`, `references`, `depends_on`, `plan_ref`, `execution_started_at`, `completed_at`, `claimed_by`, `claimed_at`, `lease_expires_at`, `attempt_count`, `last_attempt_at`, `last_error`, `retry_after`, `outputs`, `evidence`, `resolution_summary`, `deferred_reason`, `cancel_reason`.
-  - item `state` values: `active`, `deferred`, `pending`, `complete`.
-- Single queue authority:
-  - `.agents/EXECUTION_QUEUE.json` is the only active scope/queue authority for orchestrator and subagents.
-  - Do not maintain parallel queue/scope state files.
-- Plan-to-queue synchronization:
-  - `npm run agent:preflight` must auto-register every `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` as queue items (state defaults: `pending` for current, `deferred` for deferred).
-  - Each plan track must include `.agents/plans/<root>/<feature_id>/PLAN.json` as the machine lifecycle contract; preflight seeds/normalizes it and policy checks fail if missing/invalid.
-  - If `PLAN.md` exists in current/deferred plan tracks, preflight must convert/migrate it into canonical `PLAN.json`; Markdown remains historical only.
-- During migration, preflight should extract `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` section text into `PLAN.json.narrative.<section>.summary` when present, migrate legacy `spec_outline.steps`/`refined_spec.steps` to `full_spec_outline`/`full_refined_spec`, deterministically normalize legacy spec/refined entry shapes (for example plain strings and `{text: ...}` objects) into required structured entry contracts, normalize legacy implementation-step objects into the required implementation-step shape, backfill missing implementation-step references from concrete context when available, initialize missing implementation-step `acceptance_criteria` deterministically from available step context when possible (otherwise `[]`), and backfill `narrative.pre_spec_outline.purpose_goals` from `narrative.spec_outline.summary` when no explicit pre-spec purpose/goals text is available.
-  - `PLAN.json` must keep `plan_ref` aligned to the canonical queue-tracked plan artifact (`PLAN.json`) and include canonical planning stage + narrative + subagent fields (`subagent.last_executor` must be null or a non-empty string, and must be non-empty when plan `status` is `in_progress` or `complete`).
-  - Policy enforcement must fail if any current/deferred plan directory lacks a corresponding queue item `plan_ref`.
-  - `npm run agent:preflight` must also backfill archived feature plans (`.agents/plans/archived/*/PLAN.json`) into `.agents/EXECUTION_ARCHIVE_INDEX.json` and the corresponding `.agents/archives/<feature_id>.jsonl` shard.
-- Scoped queue read discipline:
-  - Load required top-level fields first (`state`, `feature_id`, `task_id`, `objective`, `last_updated`, `updated_at`, `in_scope`, `out_of_scope`, `open_questions`), then select only relevant queue items for the current work item/feature.
-  - Prefer selectors `id`, `plan_ref`, `owner`, and dependency closure via `depends_on`; avoid loading the full `items` array when not required.
-- Queue execution-state gate:
-  - no item may enter execution states unless it was first planned in queue with valid `planned_at`.
-  - item states `active`/`complete` require `execution_started_at`; state `complete` requires `completed_at`, non-empty `outputs`/`evidence`, non-empty `resolution_summary`, and at least one verification evidence entry prefixed `verify:`.
-  - item state `active` requires a valid claim lease triplet: `claimed_by`, `claimed_at`, `lease_expires_at`.
-  - queue or item state `deferred` requires `deferred_reason`.
-- Archive-on-complete gate:
-  - when an item enters `complete`, move it out of `.agents/EXECUTION_QUEUE.json` into `.agents/archives/<feature_id>.jsonl` in the same session.
-  - when a feature/top-level queue enters `complete`, archive the feature snapshot and reset hot queue state from `complete`.
-  - maintain `.agents/EXECUTION_ARCHIVE_INDEX.json` as lookup metadata for archived records.
-  - do not read archive shards during normal startup; load archive files only for explicit historical/regression lookup.
-- CONTEXT_INDEX drift guard:
-  - Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with `.agents-config/templates/AGENTS.md`, policy contracts, and command map entries.
-  - Policy checks must fail if `.agents-config/docs/CONTEXT_INDEX.json` paths/headings/commands drift from canonical contracts.
-- Idempotency contract:
-  - `id` and `idempotency_key` must be stable and unique per item.
-  - retries/restarts must update the same queue item identity rather than creating duplicate logical work.
-- Consolidation boundary:
-  - `.agents/EXECUTION_QUEUE.json` is authoritative for atomic execution state.
-  - `.agents/MEMORY.md` records durable decisions/outcomes/history, not queue status.
-  - `.agents/SESSION_LOG.md` records implementation trace entries, not queue status.
-- `PLAN.json` files are machine-authoritative plan lifecycle and narrative-context records.
-- Optional `PLAN.md` files are legacy historical context and must not be treated as authoritative state.
-- Stale-link hygiene:
-  - Run an automated stale reference scan for `.agents/plans/**` paths; unresolved references must fail preflight/policy checks by default.
-- Treat `.agents/SESSION_BRIEF.json` as a required generated artifact from preflight, not a hand-authored policy source.
-- Validate `.agents/SESSION_BRIEF.json` schema and freshness; stale or missing briefs are CI/local failures until refreshed via preflight.
+- Keep `.agents/EXECUTION_QUEUE.json` as the single active execution queue authority for orchestrator and subagents.
+- Plan execution work in `.agents/EXECUTION_QUEUE.json` before implementation starts.
+- Treat `.agents/**` as shared multi-writer state and apply semantic merges; never blind-overwrite concurrent state.
+- Keep all non-primary worktrees under `../<repo-name>.worktrees`; `.agents` in non-primary worktrees must point to the canonical shared root.
+- `PLAN.json` is machine-authoritative lifecycle context; `PLAN.md` remains historical-only context.
+- Run `npm run agent:preflight` before non-trivial execution and after compaction to sync plan/queue state and refresh `.agents/SESSION_BRIEF.json`.
+- Do not read archive shards during normal startup; read `.agents/archives/<feature_id>.jsonl` only for explicit historical lookup.
+- Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with policy contracts and command map entries.
+- Full queue/plan/session schemas, status gates, migration behavior, and freshness rules are canonical in `.agents-config/policies/agent-governance.json` at `contracts.sessionArtifacts`.
 
 ### MEMORY.md and SESSION_LOG.md Contracts (Required)
 

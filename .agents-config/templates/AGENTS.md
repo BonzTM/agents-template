@@ -38,6 +38,7 @@ Always read these in order, no matter how trivial the work:
 ## Canonical Sources and Precedence
 
 - Machine-readable canonical policy: `.agents-config/policies/agent-governance.json`
+- Upstream bootstrap-source path for this document: `.agents-config/templates/AGENTS.md`
 - Enforcement runner: `.agents-config/scripts/enforce-agent-policies.mjs`
 - Session preflight generator: `.agents-config/scripts/agent-session-preflight.mjs`
 - Canonical rule catalog: `.agents-config/contracts/rules/canonical-ruleset.json`
@@ -97,11 +98,10 @@ Queue-first execution rule:
 
 - Before implementation/investigation execution starts, all planned work must exist as atomic entries in `.agents/EXECUTION_QUEUE.json`.
 - `.agents/EXECUTION_QUEUE.json` is authoritative for task state/order; `PLAN.json` is the machine-authoritative lifecycle companion for each plan, and `PLAN.md` is legacy historical context only.
-- `npm run agent:preflight` auto-syncs `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` into queue items.
-- `npm run agent:preflight` seeds/normalizes `.agents/plans/*/*/PLAN.json` and enforces `status`, `planning_stages`, `narrative`, and `subagent` metadata fields including `subagent.last_executor` (null/non-empty string; required non-empty when plan `status` is `in_progress` or `complete`) and `narrative.pre_spec_outline` (`purpose_goals`/`non_goals` string fields).
-- If `PLAN.md` exists in current/deferred plan tracks, preflight migrates it into canonical `PLAN.json`, extracting `Spec outline`, `Refined spec`, and `Detailed implementation plan`/`Implementation plan` sections into `narrative.<section>.summary`, migrating legacy `spec_outline.steps`/`refined_spec.steps` into `full_spec_outline`/`full_refined_spec`, and deterministically normalizing legacy entry shapes (for example plain strings and `{text: ...}` objects) into required structured entry contracts with best-effort field mapping. Implementation-step objects are also normalized into the required implementation-step shape; when possible, preflight backfills missing step references from concrete context, initializes missing step `acceptance_criteria` from available step context (otherwise `[]`), and avoids placeholder deliverables during normalization (best effort). When `narrative.pre_spec_outline` is missing, preflight backfills `purpose_goals` from existing `narrative.spec_outline.summary` (or legacy extracted spec outline text) where available; Markdown remains legacy history.
+- `npm run agent:preflight` auto-syncs `.agents/plans/current/*/PLAN.json` and `.agents/plans/deferred/*/PLAN.json` into queue items, and normalizes legacy plan artifacts into canonical `PLAN.json` state.
+- Detailed PLAN machine-contract fields and status-gate rules are canonical in `.agents-config/policies/agent-governance.json` at `contracts.sessionArtifacts.planMachineContract`; use that contract as source of truth instead of restating field-by-field schema here.
 - Policy enforcement requires each current/deferred plan directory to have a corresponding queue item via `plan_ref`.
-- `npm run agent:preflight` also backfills `.agents/plans/archived/*/PLAN.json` into `.agents/EXECUTION_ARCHIVE_INDEX.json` + feature shard archives idempotently.
+- `npm run agent:preflight` also maintains `.agents/EXECUTION_ARCHIVE_INDEX.json` and feature shard archives from `.agents/plans/archived/*/PLAN.json`.
 - Queue state model is explicit and idempotent: top-level and per-item `state` use `active`/`deferred`/`pending`/`complete`, and items keep stable `id` + `idempotency_key`.
 - When a task or feature becomes `complete`, move it from hot queue into feature shard archive.
 - Do not read archive shards during normal startup; read archive on-demand for historical lookup only.
@@ -126,27 +126,7 @@ Simplified plan architecture:
 Canonical enforceable source for orchestrator/subagent behavior:
 `contracts.orchestratorSubagent` in `.agents-config/policies/agent-governance.json`
 
-Policy-canonical rule IDs:
-
-- `orch_hybrid_instruction_contract`
-- `orch_scope_tightness`
-- `orch_machine_payload_authoritative`
-- `orch_delegate_substantive_work`
-- `orch_operator_subagent_default`
-- `orch_subagent_delegation_required_when_possible`
-- `orch_human_nuance_addendum`
-- `orch_atomic_task_delegation`
-- `orch_dual_channel_result_envelope`
-- `orch_orchestrator_coordination_only`
-- `orch_release_idle_subagents_required`
-- `orch_default_cli_routing`
-- `orch_unconfirmed_unknowns`
-- `orch_atomic_single_objective_scope`
-- `orch_single_orchestrator_authority`
-- `orch_concise_subagent_briefs`
-- `orch_spec_refined_plan_verbosity`
-- `orch_codex_model_default`
-- `orch_claude_model_default`
+For the full orchestrator rule-ID catalog and behavioral contract details, see `.agents-config/docs/AGENT_RULES.md` `### Orchestrator/Subagent Instruction Contract (Required)`.
 
 Single-orchestrator topology is required: one orchestrator agent owns cross-task coordination/context and subagents execute delegated atomic tasks only.
 Orchestrators should make complex decisions, but must delegate discovery and implementation work to subagents whenever possible.
@@ -205,28 +185,3 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Logging baseline metadata identity is project-owned at `.agents-config/config/project-tooling.json.loggingCompliance.baselineMetadataId`.
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
 - CI template gate: meaningful workflow-path changes must carry `Template-Impact` declaration (`yes` with `Template-Ref`, or `none` with `Template-Impact-Reason`).
-- If process expectations change, update all of:
-  - `.agents-config/templates/AGENTS.md`
-  - `.agents-config/docs/AGENT_RULES.md`
-  - `.agents-config/docs/AGENT_CONTEXT.md`
-  - `.agents-config/docs/CONTEXT_INDEX.json`
-  - `.agents-config/agent-managed.json`
-  - `.agents-config/tools/bootstrap/managed-files.template.json`
-  - `.agents-config/config/project-tooling.json`
-  - `.agents-config/contracts/rules/canonical-ruleset.json`
-  - `.agents-config/rule-overrides.schema.json`
-  - `.agents-config/docs/FEATURE_INDEX.json`
-  - `.agents-config/docs/TEST_MATRIX.md`
-  - `.agents-config/docs/ROUTE_MAP.md`
-  - `.agents-config/docs/JSDOC_COVERAGE.md`
-  - `.agents-config/docs/OPENAPI_COVERAGE.md`
-  - `.agents-config/docs/LOGGING_STANDARDS.md`
-  - `backend/src/routes/README.md`
-  - `backend/src/services/README.md`
-  - `frontend/features/README.md`
-  - `frontend/features/*/README.md`
-  - `.agents-config/policies/agent-governance.json`
-  - `.agents-config/scripts/enforce-agent-policies.mjs`
-  - `.agents-config/tools/rules/verify-canonical-ruleset.mjs`
-  - `.agents-config/scripts/generate-release-notes.mjs`
-  - `.agents-config/scripts/verify-logging-compliance.mjs`

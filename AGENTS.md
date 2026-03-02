@@ -66,3 +66,32 @@ Read downstream template sources only when intentionally changing downstream con
   - `npm run rules:canonical:verify`
   - `npm run rules:canonical:sync`
   - `npm run agent:preflight`
+
+## Template Governance Change Checklist
+
+When policy/process expectations change in `agents-template`, update all impacted governance artifacts in the same change set:
+
+1. `.agents-config/templates/AGENTS.md`
+2. `.agents-config/docs/AGENT_RULES.md`
+3. `.agents-config/docs/AGENT_CONTEXT.md`
+4. `.agents-config/docs/CONTEXT_INDEX.json`
+5. `.agents-config/agent-managed.json`
+6. `.agents-config/tools/bootstrap/managed-files.template.json`
+7. `.agents-config/config/project-tooling.json`
+8. `.agents-config/contracts/rules/canonical-ruleset.json`
+9. `.agents-config/rule-overrides.schema.json`
+10. `.agents-config/docs/FEATURE_INDEX.json`
+11. `.agents-config/docs/TEST_MATRIX.md`
+12. `.agents-config/docs/ROUTE_MAP.md`
+13. `.agents-config/docs/JSDOC_COVERAGE.md`
+14. `.agents-config/docs/OPENAPI_COVERAGE.md`
+15. `.agents-config/docs/LOGGING_STANDARDS.md`
+16. `backend/src/routes/README.md`
+17. `backend/src/services/README.md`
+18. `frontend/features/README.md`
+19. `frontend/features/*/README.md`
+20. `.agents-config/policies/agent-governance.json`
+21. `.agents-config/scripts/enforce-agent-policies.mjs`
+22. `.agents-config/tools/rules/verify-canonical-ruleset.mjs`
+23. `.agents-config/scripts/generate-release-notes.mjs`
+24. `.agents-config/scripts/verify-logging-compliance.mjs`

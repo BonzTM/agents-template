@@ -7155,18 +7155,6 @@ function checkOrchestratorSubagentContracts(config) {
     }
   }
 
-  const bootstrapFilePath =
-    toNonEmptyString(config?.contracts?.documentationModel?.bootstrapFile) ?? "AGENTS.md";
-  const agentsContent = readFileIfPresent(bootstrapFilePath);
-  if (agentsContent !== null) {
-    for (const requiredRuleId of requiredRuleIds) {
-      const idSnippet = `\`${requiredRuleId}\``;
-      if (!agentsContent.includes(idSnippet)) {
-        addFailure(`${bootstrapFilePath} must reference contract id ${idSnippet}.`);
-      }
-    }
-  }
-
   const rulesContent = readFileIfPresent(".agents-config/docs/AGENT_RULES.md");
   if (rulesContent !== null) {
     for (const requiredRuleId of requiredRuleIds) {
