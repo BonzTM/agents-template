@@ -429,13 +429,10 @@ Maintain one canonical session trace file for this workspace: `.agents/SESSION_L
 - Read `.agents/MEMORY.md` at session start and after any context compaction before implementation.
 - Do not require re-reading `.agents/MEMORY.md` every turn when no compaction/reset occurred.
 - Treat `.agents/MEMORY.md` as canonical context after compaction; do not rely on prior chat/tool output unless reflected there.
-- `.agents/MEMORY.md` is curated semantic memory and the reference point for all memory artifacts, not an append-only transcript.
-- Keep `.agents/MEMORY.md` bounded and high-signal; edit/remove stale items instead of appending history forever.
-- Structure `.agents/MEMORY.md` with curated sections:
-  - `## User Directives`
-  - `## Architecture Decisions`
-  - `## Known Gotchas`
-  - `## Submemory Index`
+- `.agents/MEMORY.md` is curated semantic memory and a reference/index point for all memory artifacts, not an append-only transcript.
+- Keep `.agents/MEMORY.md` bounded and high-signal; keep only short reference text plus the index section.
+- `.agents/MEMORY.md` must be index-only at level 2: keep only `## Submemory Index`.
+- Do not add additional level-2 sections (including `## User Directives`, `## Architecture Decisions`, or `## Known Gotchas`) to `.agents/MEMORY.md`.
 - `## Submemory Index` is the lookup table for memory directories so agents can find one memory without reading all memory files.
 - Submemory index entry format (one line per memory):
   - `- mNNN | .agents/memory/mNNN/_submemory.md | One sentence description.`
@@ -462,5 +459,5 @@ A task is done when all of the following are true:
   - Any FAIL phase must be resolved or explicitly listed as out-of-scope with rationale before task closeout.
 - Documentation is updated for impacted areas.
 - Follow-ups are listed for intentionally deferred work.
-- `.agents/MEMORY.md` is curated to reflect active directives/decisions/gotchas, and `.agents/SESSION_LOG.md` reflects implementation trace activity.
+- `.agents/MEMORY.md` remains index-only (reference point + `## Submemory Index`), and `.agents/SESSION_LOG.md` reflects implementation trace activity.
 - Scope-completeness check is reported against the user request, with no in-scope requested item left unaccounted for.

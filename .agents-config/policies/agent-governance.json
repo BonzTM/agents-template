@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-03-02.05",
+    "version": "2026-03-02.06",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
@@ -1341,9 +1341,6 @@
         "file": ".agents/MEMORY.md",
         "optional": false,
         "sections": [
-          "## User Directives",
-          "## Architecture Decisions",
-          "## Known Gotchas",
           "## Submemory Index"
         ]
       },
@@ -1447,6 +1444,7 @@
       "file": ".agents/MEMORY.md",
       "optional": false,
       "sectionHeader": "## Submemory Index",
+      "disallowAdditionalLevelTwoHeadings": true,
       "noneEntry": "- None recorded.",
       "entryRegex": "^- (?<id>m[0-9]{3}) \\| (?<path>\\.agents\\/memory\\/m[0-9]{3}\\/_submemory\\.md) \\| (?<description>[^\\r\\n]+[.!?])$",
       "directoryRoot": ".agents/memory",

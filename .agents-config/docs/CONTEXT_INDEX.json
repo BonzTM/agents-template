@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-context-index",
-    "version": "2026-03-02.06",
+    "version": "2026-03-02.07",
     "description": "Machine-readable agent-facing context index for startup lookup and command discovery."
   },
   "startupReadOrder": [

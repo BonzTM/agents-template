@@ -512,6 +512,15 @@ function checkMemoryIndexContract(config) {
     addFailure("checks.memoryIndexContract.sectionHeader must be a non-empty string.");
     return;
   }
+  if (
+    rule.disallowAdditionalLevelTwoHeadings !== undefined &&
+    typeof rule.disallowAdditionalLevelTwoHeadings !== "boolean"
+  ) {
+    addFailure(
+      "checks.memoryIndexContract.disallowAdditionalLevelTwoHeadings must be a boolean when provided.",
+    );
+  }
+  const disallowAdditionalLevelTwoHeadings = rule.disallowAdditionalLevelTwoHeadings === true;
   const noneEntry = toNonEmptyString(rule.noneEntry) ?? "- None recorded.";
   const entryRegexText = toNonEmptyString(rule.entryRegex);
   if (!entryRegexText) {
@@ -547,6 +556,38 @@ function checkMemoryIndexContract(config) {
   }
 
   const lines = memoryContent.split(/\r?\n/);
+  if (disallowAdditionalLevelTwoHeadings) {
+    const levelTwoHeadings = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const trimmed = lines[i].trim();
+      if (trimmed.startsWith("## ")) {
+        levelTwoHeadings.push({ line: i + 1, heading: trimmed });
+      }
+    }
+
+    const unexpectedLevelTwoHeadings = levelTwoHeadings.filter(
+      (entry) => entry.heading !== sectionHeader,
+    );
+    if (unexpectedLevelTwoHeadings.length > 0) {
+      const unexpectedSummary = unexpectedLevelTwoHeadings
+        .map((entry) => `${entry.heading} (line ${entry.line})`)
+        .join("; ");
+      addFailure(
+        `${rule.file} must not include level-2 headings beyond ${sectionHeader} when checks.memoryIndexContract.disallowAdditionalLevelTwoHeadings=true. Unexpected headings: ${unexpectedSummary}`,
+      );
+    }
+
+    const matchingSectionHeaders = levelTwoHeadings.filter(
+      (entry) => entry.heading === sectionHeader,
+    );
+    if (matchingSectionHeaders.length > 1) {
+      const duplicateLines = matchingSectionHeaders.map((entry) => entry.line).join(", ");
+      addFailure(
+        `${rule.file} must include exactly one ${sectionHeader} heading when checks.memoryIndexContract.disallowAdditionalLevelTwoHeadings=true (found ${matchingSectionHeaders.length} at lines ${duplicateLines}).`,
+      );
+    }
+  }
+
   let sectionStart = -1;
   for (let i = 0; i < lines.length; i += 1) {
     if (lines[i].trim() === sectionHeader) {
