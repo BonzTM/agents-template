@@ -473,6 +473,7 @@
     "frontendFeaturesReadmeFile": "cat frontend/features/README.md",
     "canonicalRulesVerify": "npm run rules:canonical:verify",
     "canonicalRulesSync": "npm run rules:canonical:sync",
+    "agentSync": "npm run agent:sync",
     "agentManaged": "npm run agent:managed -- --mode check",
     "templateImpactCheck": "npm run agent:template-impact:check -- --base-ref origin/<base-branch>",
     "agentManagedFix": "npm run agent:managed -- --fix --recheck",

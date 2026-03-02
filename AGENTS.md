@@ -46,6 +46,8 @@ Read downstream template sources only when intentionally changing downstream con
   - `npm run bootstrap -- --project-name <project-name>`
 - Existing project:
   - `npm run bootstrap -- --mode existing --target-path ../<project-name> --project-id <project-id>`
+- Existing downstream project one-command sync (run inside downstream repo):
+  - `npm run agent:sync`
 - Managed workflow:
   - `npm run agent:managed -- --mode check`
   - `npm run agent:managed -- --fix --recheck`

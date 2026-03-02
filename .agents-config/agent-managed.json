@@ -144,6 +144,10 @@
             "type": "object"
           },
           {
+            "path": "commands.agentSync",
+            "type": "string"
+          },
+          {
             "path": "sessionArtifacts",
             "type": "object"
           }
@@ -302,6 +306,12 @@
     },
     {
       "path": ".agents-config/tools/bootstrap/agent-managed-files.mjs",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/tools/bootstrap/agent-sync.mjs",
       "profiles": [
         "base"
       ]

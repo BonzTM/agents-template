@@ -64,6 +64,7 @@
         "changelogFile",
         "canonicalRulesVerify",
         "canonicalRulesSync",
+        "agentSync",
         "agentManaged",
         "agentManagedFix",
         "templateImpactCheck",

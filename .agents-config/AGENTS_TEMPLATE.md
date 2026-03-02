@@ -170,9 +170,12 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Session preflight: `npm run agent:preflight`
 - Canonical rules verify: `npm run rules:canonical:verify`
 - Canonical rules sync: `npm run rules:canonical:sync`
+- Full downstream sync/fix/verify: `npm run agent:sync`
 - Managed workflow check: `npm run agent:managed -- --mode check`
 - Managed workflow fix/recheck: `npm run agent:managed -- --fix --recheck`
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
+- Use `agent:sync` when pulling template updates, refreshing profiles/scripts, or switching template refs.
+- Use `agent:managed -- --fix --recheck` when manifest/template source settings are already correct and only managed-file drift needs repair.
 - `AGENTS.md` is template-managed. Do not hand-edit canonical `AGENTS.md`.
 - Use `AGENTS.override.md` for full replacement mode, or `AGENTS.append.md` for additive mode.
 - Bootstrap does not auto-seed managed override payloads; overrides are opt-in local artifacts (`.override`/`.append`) when a project intentionally diverges.

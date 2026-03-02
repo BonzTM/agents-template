@@ -254,8 +254,11 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Session preflight command: `npm run agent:preflight`
 - Canonical ruleset verify command: `npm run rules:canonical:verify`
 - Canonical ruleset sync command: `npm run rules:canonical:sync`
+- Full downstream sync/fix/verify command: `npm run agent:sync`
 - Managed workflow command (check): `npm run agent:managed -- --mode check`
 - Managed workflow command (fix + recheck): `npm run agent:managed -- --fix --recheck`
+- Use `agent:sync` when pulling template updates, refreshing profiles/scripts, or changing template refs.
+- Use `agent:managed -- --fix --recheck` only when manifest/template source settings are already correct and only managed drift needs repair.
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
 - Template-impact declaration gate: `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Logging compliance command: `npm run logging:compliance:verify`

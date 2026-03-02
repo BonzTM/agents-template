@@ -7,6 +7,7 @@
     "policy:check:ci": "node .agents-config/scripts/enforce-agent-policies.mjs --ci",
     "rules:canonical:verify": "node .agents-config/tools/rules/verify-canonical-ruleset.mjs --check",
     "rules:canonical:sync": "node .agents-config/tools/rules/verify-canonical-ruleset.mjs --write",
+    "agent:sync": "node .agents-config/tools/bootstrap/agent-sync.mjs",
     "agent:managed": "node .agents-config/tools/bootstrap/agent-managed-files.mjs",
     "agent:template-impact:check": "node .agents-config/tools/bootstrap/check-template-impact.mjs",
     "agent:preflight": "node .agents-config/scripts/agent-session-preflight.mjs",

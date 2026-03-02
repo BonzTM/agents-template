@@ -69,6 +69,28 @@ Apply bootstrap wiring to an existing repo from `agents-template` root:
 npm run bootstrap -- --mode existing --target-path ../<project-name> --project-id <project-id>
 ```
 
+## One-Command Downstream Sync (Recommended)
+
+From the downstream repo root, run:
+
+```bash
+npm run agent:sync
+```
+
+What `agent:sync` does:
+
+- runs existing-mode bootstrap against the current repo using profile/template settings from `.agents-config/agent-managed.json`
+- runs managed workflow fix/recheck
+- runs policy check
+- runs session preflight
+
+Common flags:
+
+- `--prefer-remote` (forwarded to `agent:managed -- --fix --recheck`)
+- `--template-ref <ref>` (temporarily override template ref for this run)
+- `--template-repo <owner/repo>` (temporarily override template repo for this run)
+- `--profiles <csv>` (temporarily override active profiles for this run)
+
 ## Canonical + Overrides Model
 
 - Managed workflow files are declared in `.agents-config/agent-managed.json`.
@@ -97,6 +119,12 @@ npm run bootstrap -- --mode existing --target-path ../<project-name> --project-i
 - Project-local rule overrides (local-only IDs) must use `.agents-config/rule-overrides.json` and validate against `.agents-config/rule-overrides.schema.json`.
 
 ## Drift Controls
+
+Perform full downstream template sync/fix/verify:
+
+```bash
+npm run agent:sync
+```
 
 Check managed workflow drift:
 

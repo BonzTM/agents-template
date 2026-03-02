@@ -5,8 +5,8 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 
 ## Summary
 
-- Managed entries: 42
-- Template-owned managed entries: 28
+- Managed entries: 43
+- Template-owned managed entries: 29
 - Structured managed entries: 11
 - Project-owned managed entries: 3
 - Overrideable managed entries: 2
@@ -59,6 +59,7 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 | `.agents-config/scripts/release-version-sync.mjs` | `base` | `template` |
 | `.agents-config/scripts/repair-queue-verification-evidence.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/agent-managed-files.mjs` | `base` | `template` |
+| `.agents-config/tools/bootstrap/agent-sync.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/bootstrap-project.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/bootstrap-runtime.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/bootstrap.mjs` | `base` | `template` |
