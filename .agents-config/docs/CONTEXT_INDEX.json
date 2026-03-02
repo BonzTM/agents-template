@@ -5,7 +5,7 @@
     "description": "Machine-readable agent-facing context index for startup lookup and command discovery."
   },
   "startupReadOrder": [
-    ".agents-config/AGENTS_TEMPLATE.md",
+    ".agents-config/templates/AGENTS.md",
     ".agents-config/docs/AGENT_RULES.md",
     ".agents-config/docs/CONTEXT_INDEX.json",
     ".agents-config/docs/AGENT_CONTEXT.md",
@@ -13,7 +13,7 @@
     ".agents/MEMORY.md"
   ],
   "primaryContracts": {
-    "bootstrapFile": ".agents-config/AGENTS_TEMPLATE.md",
+    "bootstrapFile": ".agents-config/templates/AGENTS.md",
     "rulesFile": ".agents-config/docs/AGENT_RULES.md",
     "contextFile": ".agents-config/docs/AGENT_CONTEXT.md",
     "canonicalRulesFile": ".agents-config/contracts/rules/canonical-ruleset.json",

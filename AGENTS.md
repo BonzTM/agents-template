@@ -1,8 +1,12 @@
 # AGENTS.md - agents-template Local Maintainer Contract
 
+IMPORTANT: This file defines the mandatory startup sequence for ALL agent work in this repository. You MUST complete the full startup order below before doing ANY work — including answering questions, reading code, or making changes. This is a blocking requirement that applies to every agent (Claude, Codex, or any other LLM agent), every session, and every task regardless of complexity. Do not skip, defer, or partially complete the startup sequence under any circumstances.
+
+After every context compaction or session reset, treat it as a fresh startup: re-read this file and complete the full startup order again, including re-reading `.agents/MEMORY.md` and any relevant submemory files, before resuming work.
+
 This file is repository-local for maintaining `agents-template` itself.
 
-Downstream bootstrap contract source: `.agents-config/AGENTS_TEMPLATE.md`.
+Downstream bootstrap contract source: `.agents-config/templates/AGENTS.md`.
 During bootstrap/sync, downstream projects receive that file as `AGENTS.md`.
 
 ## Required Startup Order (This Repository)
@@ -14,14 +18,14 @@ Always read these in order, no matter how trivial the work:
 3. `.agents-config/docs/CONTEXT_INDEX.json`
 4. `.agents-config/docs/AGENT_CONTEXT.md`
 5. `.agents/EXECUTION_QUEUE.json` (when present)
-6. `.agents/MEMORY.md`
+6. `.agents/MEMORY.md` (canonical memory reference point and submemory index)
 7. Run `npm run agent:preflight`
 
-Treat `.agents/MEMORY.md` as the reference point for memories and for the indexed submemory directories under `.agents/memory/`.
+Treat `.agents/MEMORY.md` as the reference point for persistent memories and for the indexed submemory directories under `.agents/memory/`. After compaction, re-read `.agents/MEMORY.md` and any submemory files relevant to the active task before resuming implementation.
 
 Read downstream template sources only when intentionally changing downstream contract content:
 
-- `.agents-config/AGENTS_TEMPLATE.md`
+- `.agents-config/templates/AGENTS.md`
 - `.agents-config/templates/CLAUDE.md`
 - `.agents-config/tools/bootstrap/managed-files.template.json`
 - `.agents-config/agent-managed.json`
@@ -33,7 +37,7 @@ Read downstream template sources only when intentionally changing downstream con
   - `AGENTS.md`
   - `CLAUDE.md`
 - Downstream template sources live in:
-  - `.agents-config/AGENTS_TEMPLATE.md` -> downstream `AGENTS.md`
+  - `.agents-config/templates/AGENTS.md` -> downstream `AGENTS.md`
   - `.agents-config/templates/CLAUDE.md` -> downstream `CLAUDE.md`
 - Do not place template-maintainer-only instructions in downstream template sources.
 

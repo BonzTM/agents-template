@@ -23,7 +23,7 @@
     },
     {
       "path": "AGENTS.md",
-      "source_path": ".agents-config/AGENTS_TEMPLATE.md",
+      "source_path": ".agents-config/templates/AGENTS.md",
       "profiles": [
         "base"
       ],

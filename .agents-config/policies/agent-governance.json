@@ -6,7 +6,7 @@
   },
   "contracts": {
     "documentationModel": {
-      "bootstrapFile": ".agents-config/AGENTS_TEMPLATE.md",
+      "bootstrapFile": ".agents-config/templates/AGENTS.md",
       "humanRulesFile": ".agents-config/docs/AGENT_RULES.md",
       "humanContextFile": ".agents-config/docs/AGENT_CONTEXT.md",
       "contextIndexFile": ".agents-config/docs/CONTEXT_INDEX.json",
@@ -15,7 +15,7 @@
       "sessionPreflightScript": ".agents-config/scripts/agent-session-preflight.mjs",
       "sessionPreflightCommand": "npm run agent:preflight",
       "startupReadOrder": [
-        ".agents-config/AGENTS_TEMPLATE.md",
+        ".agents-config/templates/AGENTS.md",
         ".agents-config/docs/AGENT_RULES.md",
         ".agents-config/docs/CONTEXT_INDEX.json",
         ".agents-config/docs/AGENT_CONTEXT.md",
@@ -44,7 +44,7 @@
         "commands"
       ],
       "requiredStartupReadOrder": [
-        ".agents-config/AGENTS_TEMPLATE.md",
+        ".agents-config/templates/AGENTS.md",
         ".agents-config/docs/AGENT_RULES.md",
         ".agents-config/docs/CONTEXT_INDEX.json",
         ".agents-config/docs/AGENT_CONTEXT.md",
@@ -1028,7 +1028,7 @@
   "checks": {
     "requiredTextSnippets": [
       {
-        "file": ".agents-config/AGENTS_TEMPLATE.md",
+        "file": ".agents-config/templates/AGENTS.md",
         "snippets": [
           "## Required Startup Order",
           ".agents-config/docs/AGENT_RULES.md",
@@ -1057,7 +1057,7 @@
         ]
       },
       {
-        "file": ".agents-config/AGENTS_TEMPLATE.md",
+        "file": ".agents-config/templates/AGENTS.md",
         "profiles": [
           "typescript",
           "javascript"
@@ -1072,7 +1072,7 @@
         ]
       },
       {
-        "file": ".agents-config/AGENTS_TEMPLATE.md",
+        "file": ".agents-config/templates/AGENTS.md",
         "profiles": [
           "typescript-openapi"
         ],
@@ -1224,7 +1224,7 @@
     ],
     "requiredMarkdownSections": [
       {
-        "file": ".agents-config/AGENTS_TEMPLATE.md",
+        "file": ".agents-config/templates/AGENTS.md",
         "sections": [
           "## Quick Reference (Startup)",
           "## Full Contract Reference",
@@ -1395,7 +1395,7 @@
       {
         "file": ".agents-config/docs/AGENT_RULES.md",
         "sequence": [
-          "1. Re-read `.agents-config/AGENTS_TEMPLATE.md`, `.agents-config/docs/AGENT_RULES.md`, `.agents-config/docs/CONTEXT_INDEX.json`, and `.agents-config/docs/AGENT_CONTEXT.md`.",
+          "1. Re-read `.agents-config/templates/AGENTS.md`, `.agents-config/docs/AGENT_RULES.md`, `.agents-config/docs/CONTEXT_INDEX.json`, and `.agents-config/docs/AGENT_CONTEXT.md`.",
           "2. Confirm branch + workspace state (`git rev-parse --abbrev-ref HEAD`, `git status --short`).",
           "3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/MEMORY.md`; both are required startup artifacts.",
           "4. Run `npm run agent:preflight` to regenerate `.agents/SESSION_BRIEF.json`.",
@@ -1478,7 +1478,7 @@
         "failureMode": "warn",
         "message": "AGENT_CONTEXT.md still contains unresolved template placeholder text. Replace placeholders with project-specific context.",
         "skipWhenBootstrapFileIs": [
-          ".agents-config/AGENTS_TEMPLATE.md"
+          ".agents-config/templates/AGENTS.md"
         ]
       }
     ]

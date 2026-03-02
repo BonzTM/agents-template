@@ -277,7 +277,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 
 When policy expectations change, update all relevant governance artifacts in the same change set:
 
-1. `.agents-config/AGENTS_TEMPLATE.md` (bootstrap contract)
+1. `.agents-config/templates/AGENTS.md` (bootstrap contract)
 2. `.agents-config/docs/AGENT_RULES.md` (human-readable rules contract)
 3. `.agents-config/docs/AGENT_CONTEXT.md` (human-readable context contract, when impacted)
 4. `.agents-config/docs/CONTEXT_INDEX.json` (machine-readable context map)
@@ -296,7 +296,7 @@ When policy expectations change, update all relevant governance artifacts in the
 
 ### Persistent Rules
 
-- If the user adds or changes a process rule, update `.agents-config/AGENTS_TEMPLATE.md` and `.agents-config/docs/AGENT_RULES.md` in the same change set and enforce it via policy-as-code (`.agents-config/policies/agent-governance.json` and `.agents-config/scripts/enforce-agent-policies.mjs`).
+- If the user adds or changes a process rule, update `.agents-config/templates/AGENTS.md` and `.agents-config/docs/AGENT_RULES.md` in the same change set and enforce it via policy-as-code (`.agents-config/policies/agent-governance.json` and `.agents-config/scripts/enforce-agent-policies.mjs`).
 - Work exhaustively with zero guesswork: if a required fact is unknown, explicitly look it up/verify it before proceeding.
 - Do not trim or skip relevant context; preserve complete context for correctness-critical work unless the user explicitly asks to narrow scope.
 - Record material findings/decisions in persistent context artifacts (`.agents/MEMORY.md`, `.agents/SESSION_LOG.md`, `.agents/EXECUTION_QUEUE.json`, and plan files) to survive context compaction.
@@ -379,7 +379,7 @@ When policy expectations change, update all relevant governance artifacts in the
 
 - Treat every context-compaction recovery as a fresh startup sequence before doing new implementation work.
 - Complete this checklist in order:
-  1. Re-read `.agents-config/AGENTS_TEMPLATE.md`, `.agents-config/docs/AGENT_RULES.md`, `.agents-config/docs/CONTEXT_INDEX.json`, and `.agents-config/docs/AGENT_CONTEXT.md`.
+  1. Re-read `.agents-config/templates/AGENTS.md`, `.agents-config/docs/AGENT_RULES.md`, `.agents-config/docs/CONTEXT_INDEX.json`, and `.agents-config/docs/AGENT_CONTEXT.md`.
   2. Confirm branch + workspace state (`git rev-parse --abbrev-ref HEAD`, `git status --short`).
   3. Load `.agents/EXECUTION_QUEUE.json` and `.agents/MEMORY.md`; both are required startup artifacts.
   4. Run `npm run agent:preflight` to regenerate `.agents/SESSION_BRIEF.json`.
@@ -446,7 +446,7 @@ When policy expectations change, update all relevant governance artifacts in the
   - maintain `.agents/EXECUTION_ARCHIVE_INDEX.json` as lookup metadata for archived records.
   - do not read archive shards during normal startup; load archive files only for explicit historical/regression lookup.
 - CONTEXT_INDEX drift guard:
-  - Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with `.agents-config/AGENTS_TEMPLATE.md`, policy contracts, and command map entries.
+  - Keep `.agents-config/docs/CONTEXT_INDEX.json` synchronized with `.agents-config/templates/AGENTS.md`, policy contracts, and command map entries.
   - Policy checks must fail if `.agents-config/docs/CONTEXT_INDEX.json` paths/headings/commands drift from canonical contracts.
 - Idempotency contract:
   - `id` and `idempotency_key` must be stable and unique per item.

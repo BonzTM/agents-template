@@ -959,7 +959,7 @@ function main() {
     ["charts/project", `charts/${helmChartName}`],
   ]);
   const downstreamDocFileReplacements = new Map([
-    [".agents-config/AGENTS_TEMPLATE.md", "AGENTS.md"],
+    [".agents-config/templates/AGENTS.md", "AGENTS.md"],
     [".agents-config/templates/CLAUDE.md", "CLAUDE.md"],
   ]);
   const templatePolicyChecks = resolveTemplatePolicyChecks({
@@ -1170,7 +1170,7 @@ function main() {
     ["../agent-workfiles/<project-id>", canonicalAgentsRootRel],
     ["../agents-workfiles/project-template", canonicalAgentsRootRel],
     ["../agent-workfiles/project-template", canonicalAgentsRootRel],
-    [".agents-config/AGENTS_TEMPLATE.md", "AGENTS.md"],
+    [".agents-config/templates/AGENTS.md", "AGENTS.md"],
     [".agents-config/templates/CLAUDE.md", "CLAUDE.md"],
   ];
   for (const docPath of [FILES.agentsDoc, FILES.rulesDoc, FILES.contextDoc, FILES.readme]) {

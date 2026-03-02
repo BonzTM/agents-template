@@ -1,10 +1,10 @@
-# AGENTS_TEMPLATE.md - Repository Agent Bootstrap
+# AGENTS.md - Repository Agent Bootstrap
 
-Bootstrap contract for AI coding agents in this repository.
+IMPORTANT: This file defines the mandatory startup sequence for ALL agent work in this repository. You MUST complete the full startup order below before doing ANY work — including answering questions, reading code, or making changes. This is a blocking requirement that applies to every agent (Claude, Codex, or any other LLM agent), every session, and every task regardless of complexity. Do not skip, defer, or partially complete the startup sequence under any circumstances.
+
+After every context compaction or session reset, treat it as a fresh startup: re-read this file and complete the full startup order again, including re-reading `.agents/MEMORY.md` and any relevant submemory files, before resuming work.
 
 ## Quick Reference (Startup)
-
-Use this quick path at session start:
 
 1. Follow `## Required Startup Order` and run `npm run agent:preflight`.
 2. Treat preflight policy failures as blocking before implementation.
@@ -80,8 +80,8 @@ Canonical local artifact roots are under `.agents/`:
 - Feature-sharded cold archive: `.agents/archives/<feature_id>.jsonl`
 - Archive index for historical lookup: `.agents/EXECUTION_ARCHIVE_INDEX.json`
 - Generated startup brief: `.agents/SESSION_BRIEF.json`
-- Memory ledger: `.agents/MEMORY.md` (reference point for persistent memories and the submemory index)
-- Topic memory root: `.agents/memory/`
+- Memory ledger: `.agents/MEMORY.md` (canonical reference point for persistent memories and the submemory index; must be re-read after every context compaction before resuming work)
+- Topic memory root: `.agents/memory/` (indexed submemory directories; re-read task-relevant submemories after compaction)
 - Session implementation log: `.agents/SESSION_LOG.md`
 - Submemory convention: each memory directory uses a short ID (`mNNN`) and stores freeform content in `_submemory.md`.
 - Plan roots: `.agents/plans/current/`, `.agents/plans/deferred/`, `.agents/plans/archived/`
@@ -206,7 +206,7 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
 - CI template gate: meaningful workflow-path changes must carry `Template-Impact` declaration (`yes` with `Template-Ref`, or `none` with `Template-Impact-Reason`).
 - If process expectations change, update all of:
-  - `.agents-config/AGENTS_TEMPLATE.md`
+  - `.agents-config/templates/AGENTS.md`
   - `.agents-config/docs/AGENT_RULES.md`
   - `.agents-config/docs/AGENT_CONTEXT.md`
   - `.agents-config/docs/CONTEXT_INDEX.json`

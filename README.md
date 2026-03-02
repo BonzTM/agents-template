@@ -6,7 +6,7 @@ This template provides policy-as-code enforcement, startup/preflight contracts, 
 
 ## Agent Clients
 
-- `.agents-config/AGENTS_TEMPLATE.md` is the downstream cross-agent startup-contract source and is synced as downstream `AGENTS.md`.
+- `.agents-config/templates/AGENTS.md` is the downstream cross-agent startup-contract source and is synced as downstream `AGENTS.md`.
 - Downstream projects can choose local AGENTS mode by filename:
 - `AGENTS.override.md` for full replacement mode.
 - `AGENTS.append.md` for additive mode (read after canonical `AGENTS.md` when no `.override.md` is present).
