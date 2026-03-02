@@ -23,7 +23,7 @@ Local repository naming is the definitive mode selector:
 
 ## Required Startup Order
 
-Read these in order before non-trivial work:
+Always read these in order, no matter how trivial the work:
 
 1. `AGENTS.md`
 2. `AGENTS.override.md` (when present; override mode, then skip step 3)

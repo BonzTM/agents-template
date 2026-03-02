@@ -7,7 +7,7 @@ During bootstrap/sync, downstream projects receive that file as `AGENTS.md`.
 
 ## Required Startup Order (This Repository)
 
-Read these in order before non-trivial work:
+Always read these in order, no matter how trivial the work:
 
 1. `AGENTS.md` (this file)
 2. `.agents-config/docs/AGENT_RULES.md`
