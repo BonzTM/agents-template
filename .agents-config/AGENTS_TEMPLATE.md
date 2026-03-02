@@ -50,6 +50,7 @@ Read these in order before non-trivial work:
 - Release notes source of truth: `CHANGELOG.md`
 - Release notes template artifact: `.agents-config/docs/RELEASE_NOTES_TEMPLATE.md`
 - Release notes generator: `.agents-config/scripts/generate-release-notes.mjs`
+- Project tooling config for template-managed scripts: `.agents-config/config/project-tooling.json`
 - Feature index artifact: `.agents-config/docs/FEATURE_INDEX.json`
 - Test matrix artifact: `.agents-config/docs/TEST_MATRIX.md`
 - Route map artifact: `.agents-config/docs/ROUTE_MAP.md`
@@ -173,24 +174,30 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Full downstream sync/fix/verify: `npm run agent:sync`
 - Managed workflow check: `npm run agent:managed -- --mode check`
 - Managed workflow fix/recheck: `npm run agent:managed -- --fix --recheck`
-- Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
+- Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `authority`, `allow_override`, and `structure_contract` fields).
+- Structured markdown contracts may include `placeholder_patterns` and `placeholder_failure_mode` to surface unfilled template placeholders by required section.
 - Use `agent:sync` when pulling template updates, refreshing profiles/scripts, or switching template refs.
 - Use `agent:managed -- --fix --recheck` when manifest/template source settings are already correct and only managed-file drift needs repair.
 - `AGENTS.md` is template-managed. Do not hand-edit canonical `AGENTS.md`.
 - Use `AGENTS.override.md` for full replacement mode, or `AGENTS.append.md` for additive mode.
 - Bootstrap does not auto-seed managed override payloads; overrides are opt-in local artifacts (`.override`/`.append`) when a project intentionally diverges.
-- Managed override gate: unknown/non-allowlisted managed override payload files (adjacent `.override`/`.append`) fail managed checks.
+- Managed override eligibility: `allow_override=true` is valid only for template-authority entries.
+- Managed override exclusivity: do not keep both `<managed-file>.override.*` and `<managed-file>.append.*` for the same managed path.
+- Managed override gate: unknown/non-allowlisted managed override payload files (adjacent `.override`/`.append`) fail managed checks, and deprecated `.replace` payload names are rejected.
 - Template-impact declaration gate (PR metadata): `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Release prep (changelog rotation): `npm run release:prepare -- --version <X.Y.Z>`
-- Release notes generator: `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`
+- Release notes generator: `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>] [--summary <text>] [--known-issue <text>] [--compat-note <text>]`
 - Release runtime contract check: `npm run release:contract:check`
 - Release workflow rule: `release:prepare` must promote `## [Unreleased]` into `## [<version>] - <date>` and recreate a fresh empty `## [Unreleased]` scaffold (`Added`, `Changed`, `Fixed`).
+- Release notes input validation: `--version` must be semver without a `v` prefix, and `--from`/`--to` refs must resolve to commits.
+- Release notes URL resolution: prefer `git remote.origin.url`, then fallback to `.agents-config/config/project-tooling.json.releaseNotes.defaultRepoWebUrl`.
 - Release notes source rule: `release:notes` must read items from the corresponding `CHANGELOG.md` version section (plain-English changelog bullets are canonical).
 - Release notes content rule: summarize changes in plain English and avoid raw commit-jargon wording.
 - Profile-scoped governance artifacts and command requirements are enforced from active policy profiles.
 - Profile-scoped for `typescript` and `javascript`: `npm run feature-index:verify`, `npm run route-map:verify`, `npm run domain-readmes:verify`, `npm run jsdoc-coverage:verify`, and `npm run logging:compliance:verify`.
 - Profile-scoped for `typescript-openapi`: `npm run openapi-coverage:verify`.
 - Logging policy requirement: runtime code paths should not ship without appropriate scoped logging coverage.
+- Logging baseline metadata identity is project-owned at `.agents-config/config/project-tooling.json.loggingCompliance.baselineMetadataId`.
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
 - CI template gate: meaningful workflow-path changes must carry `Template-Impact` declaration (`yes` with `Template-Ref`, or `none` with `Template-Impact-Reason`).
 - If process expectations change, update all of:
@@ -200,6 +207,7 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
   - `.agents-config/docs/CONTEXT_INDEX.json`
   - `.agents-config/agent-managed.json`
   - `.agents-config/tools/bootstrap/managed-files.template.json`
+  - `.agents-config/config/project-tooling.json`
   - `.agents-config/contracts/rules/canonical-ruleset.json`
   - `.agents-config/rule-overrides.schema.json`
   - `.agents-config/docs/FEATURE_INDEX.json`
@@ -211,7 +219,9 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
   - `backend/src/routes/README.md`
   - `backend/src/services/README.md`
   - `frontend/features/README.md`
+  - `frontend/features/*/README.md`
   - `.agents-config/policies/agent-governance.json`
   - `.agents-config/scripts/enforce-agent-policies.mjs`
   - `.agents-config/tools/rules/verify-canonical-ruleset.mjs`
+  - `.agents-config/scripts/generate-release-notes.mjs`
   - `.agents-config/scripts/verify-logging-compliance.mjs`

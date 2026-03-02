@@ -73,7 +73,9 @@ For this repository, documentation updates are part of done for behavior-changin
 - Update `CHANGELOG.md` under `## [Unreleased]` for user-visible behavior changes.
 - Treat `CHANGELOG.md` as the release-notes source of truth.
 - Run `npm run release:prepare -- --version <X.Y.Z>` before release publication.
-- Generate release notes with `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`.
+- Generate release notes with `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>] [--summary <text>] [--known-issue <text>] [--compat-note <text>]`.
+- `release:notes` validates `--version` as semver without a `v` prefix and validates `--from`/`--to` refs as commits.
+- Keep `.agents-config/config/project-tooling.json` current for release/logging script defaults (`releaseNotes.defaultRepoWebUrl`, `loggingCompliance.baselineMetadataId`).
 - Keep profile-scoped governance artifacts current as required by active policy profiles.
 - For `typescript` and `javascript` profiles, keep `.agents-config/docs/FEATURE_INDEX.json`, `.agents-config/docs/TEST_MATRIX.md`, `.agents-config/docs/ROUTE_MAP.md`, `.agents-config/docs/JSDOC_COVERAGE.md`, and `.agents-config/docs/LOGGING_STANDARDS.md` current.
 - For `typescript-openapi`, keep `.agents-config/docs/OPENAPI_COVERAGE.md` current.

@@ -21,6 +21,9 @@ Read downstream template sources only when intentionally changing downstream con
 
 - `.agents-config/AGENTS_TEMPLATE.md`
 - `.agents-config/templates/CLAUDE.md`
+- `.agents-config/tools/bootstrap/managed-files.template.json`
+- `.agents-config/agent-managed.json`
+- `.agents-config/config/project-tooling.json`
 
 ## Local vs Downstream Contract
 
@@ -46,6 +49,7 @@ Read downstream template sources only when intentionally changing downstream con
   - `npm run bootstrap -- --project-name <project-name>`
 - Existing project:
   - `npm run bootstrap -- --mode existing --target-path ../<project-name> --project-id <project-id>`
+  - Existing-mode prerequisite: `.agents-config/config/project-tooling.json` must exist in target repo (plus TS/JS profile artifacts like feature index/logging baseline when those profiles are active).
 - Existing downstream project one-command sync (run inside downstream repo):
   - `npm run agent:sync`
 - Managed workflow:

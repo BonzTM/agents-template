@@ -49,11 +49,10 @@ const FILES = {
   contextIndex: ".agents-config/docs/CONTEXT_INDEX.json",
   featureIndex: ".agents-config/docs/FEATURE_INDEX.json",
   loggingBaseline: ".agents-config/policies/logging-compliance-baseline.json",
+  toolingConfig: ".agents-config/config/project-tooling.json",
   packageJson: "package.json",
   packageLock: "package-lock.json",
   releaseTemplate: ".agents-config/docs/RELEASE_NOTES_TEMPLATE.md",
-  generateReleaseNotes: ".agents-config/scripts/generate-release-notes.mjs",
-  verifyLoggingCompliance: ".agents-config/scripts/verify-logging-compliance.mjs",
   agentsDoc: "AGENTS.md",
   rulesDoc: ".agents-config/docs/AGENT_RULES.md",
   contextDoc: ".agents-config/docs/AGENT_CONTEXT.md",
@@ -661,12 +660,6 @@ function rewriteTextToken(filePath, replacements) {
   fs.writeFileSync(filePath, text, "utf8");
 }
 
-function rewriteTextRegex(filePath, pattern, replacement) {
-  const text = fs.readFileSync(filePath, "utf8");
-  const next = text.replace(pattern, replacement);
-  fs.writeFileSync(filePath, next, "utf8");
-}
-
 function updateReleaseNotesRequiredTextSnippet(
   policy,
   { repoName, helmRepoUrl, helmChartName, helmRepoName, helmReleaseName },
@@ -895,6 +888,7 @@ function main() {
   const contextIndexPath = path.resolve(repoRoot, FILES.contextIndex);
   const featureIndexPath = path.resolve(repoRoot, FILES.featureIndex);
   const loggingBaselinePath = path.resolve(repoRoot, FILES.loggingBaseline);
+  const toolingConfigPath = path.resolve(repoRoot, FILES.toolingConfig);
   const managedTemplatePath = path.resolve(repoRoot, FILES.managedTemplate);
   const webDocsProfilesEnabled = profiles.includes("typescript") || profiles.includes("javascript");
 
@@ -902,6 +896,7 @@ function main() {
   const contextIndex = readJson(contextIndexPath);
   const featureIndex = readJsonIfPresent(featureIndexPath);
   const loggingBaseline = readJsonIfPresent(loggingBaselinePath);
+  const toolingConfig = readJsonIfPresent(toolingConfigPath);
   const managedTemplate = readJson(managedTemplatePath);
   const managedEntryIndex = buildManagedEntryIndex(managedTemplate);
   const preservedProjectManagedPaths = new Set();
@@ -918,6 +913,9 @@ function main() {
   if (webDocsProfilesEnabled && loggingBaseline === null) {
     fail(`Missing required file for typescript/javascript profiles: ${FILES.loggingBaseline}`);
   }
+  if (toolingConfig === null) {
+    fail(`Missing required file for base profile: ${FILES.toolingConfig}`);
+  }
 
   const replacements = new Map([
     ["../agents-workfiles/agents-template", canonicalAgentsRootRel],
@@ -930,6 +928,7 @@ function main() {
     ["agents-template-context-index", `${projectId}-agent-context-index`],
     ["agents-template-feature-index", `${projectId}-feature-index`],
     ["agents-template-logging-compliance-baseline", `${projectId}-logging-compliance-baseline`],
+    ["agents-template-tooling-config", `${projectId}-tooling-config`],
     ["https://example.github.io/project", helmRepoUrl],
     ["project/project", `${helmRepoName}/${helmChartName}`],
     ["charts/project", `charts/${helmChartName}`],
@@ -1016,6 +1015,25 @@ function main() {
   if (rewrittenLoggingBaseline) {
     rewrittenLoggingBaseline.metadata.id = `${projectId}-logging-compliance-baseline`;
   }
+  const rewrittenToolingConfig =
+    toolingConfig === null ? null : deepReplaceStrings(toolingConfig, replacements);
+  if (rewrittenToolingConfig) {
+    rewrittenToolingConfig.metadata =
+      isPlainObject(rewrittenToolingConfig.metadata) ? rewrittenToolingConfig.metadata : {};
+    rewrittenToolingConfig.metadata.id = `${projectId}-tooling-config`;
+    rewrittenToolingConfig.releaseNotes = isPlainObject(rewrittenToolingConfig.releaseNotes)
+      ? rewrittenToolingConfig.releaseNotes
+      : {};
+    rewrittenToolingConfig.releaseNotes.defaultRepoWebUrl =
+      `https://github.com/${repoOwner}/${repoName}`;
+    rewrittenToolingConfig.loggingCompliance = isPlainObject(
+      rewrittenToolingConfig.loggingCompliance,
+    )
+      ? rewrittenToolingConfig.loggingCompliance
+      : {};
+    rewrittenToolingConfig.loggingCompliance.baselineMetadataId =
+      `${projectId}-logging-compliance-baseline`;
+  }
 
   const rewrittenManagedManifest = deepReplaceStrings(managedTemplate, replacements);
   rewrittenManagedManifest.profiles = profiles;
@@ -1100,6 +1118,9 @@ function main() {
   if (rewrittenLoggingBaseline && !preserveNonTemplateManaged(FILES.loggingBaseline)) {
     writeJson(loggingBaselinePath, rewrittenLoggingBaseline);
   }
+  if (rewrittenToolingConfig && !preserveNonTemplateManaged(FILES.toolingConfig)) {
+    writeJson(toolingConfigPath, rewrittenToolingConfig);
+  }
   writeJson(path.resolve(repoRoot, FILES.managedManifest), rewrittenManagedManifest);
   writeJson(path.resolve(repoRoot, FILES.packageJson), packageJson);
   writeJson(path.resolve(repoRoot, FILES.packageLock), packageLock);
@@ -1115,27 +1136,6 @@ function main() {
       helmRepoName,
       helmReleaseName,
     });
-  }
-
-  const generateReleaseNotesPath = path.resolve(repoRoot, FILES.generateReleaseNotes);
-  if (fs.existsSync(generateReleaseNotesPath) && !preserveNonTemplateManaged(FILES.generateReleaseNotes)) {
-    rewriteTextRegex(
-      generateReleaseNotesPath,
-      /const DEFAULT_REPO_WEB_URL = "https:\/\/github\.com\/[^"]+";/,
-      `const DEFAULT_REPO_WEB_URL = "https://github.com/${repoOwner}/${repoName}";`,
-    );
-  }
-
-  const verifyLoggingCompliancePath = path.resolve(repoRoot, FILES.verifyLoggingCompliance);
-  if (
-    fs.existsSync(verifyLoggingCompliancePath) &&
-    !preserveNonTemplateManaged(FILES.verifyLoggingCompliance)
-  ) {
-    rewriteTextRegex(
-      verifyLoggingCompliancePath,
-      /id: "[^"]+-logging-compliance-baseline"/,
-      `id: "${projectId}-logging-compliance-baseline"`,
-    );
   }
 
   const agentDocReplacements = [

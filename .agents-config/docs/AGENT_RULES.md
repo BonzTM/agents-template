@@ -30,7 +30,7 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_canonical_ruleset_contract_required`: Maintain canonical rule IDs/statements in `.agents-config/contracts/rules/canonical-ruleset.json` with hash lineage tied to policy and rules docs.
 - `rule_local_rule_overrides_contract_required`: Allow local-only override IDs only through `.agents-config/rule-overrides.json`, validated against `.agents-config/rule-overrides.schema.json`.
 - `rule_managed_files_canonical_contract_required`: Keep managed workflow manifests (`.agents-config/agent-managed.json` and `.agents-config/tools/bootstrap/managed-files.template.json`) canonical with explicit `canonical_contract` defaults and authority modes.
-- `rule_managed_files_known_overrides_only`: Permit managed-file override payloads only for explicitly allowlisted entries (`allow_override=true`) and fail unknown/non-allowlisted override payload files (adjacent `.override`/`.append`).
+- `rule_managed_files_known_overrides_only`: Permit managed-file override payloads only for explicitly allowlisted template-authority entries (`allow_override=true`), enforce one override mode per managed path, and fail unknown/non-allowlisted payload files (adjacent `.override`/`.append`) including deprecated `.replace` naming.
 - `rule_canonical_agents_root`: Treat `.agents` as the canonical project-local agent-context path; bootstrap defaults to external workfiles mode where `.agents` symlinks to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`), and local `.agents` mode is explicit via `--agents-mode local`.
 - `rule_worktree_root_required`: Keep all non-primary Git worktrees under `../<repo-name>.worktrees`.
 - `rule_agents_semantic_merge_required`: `.agents/**` is shared multi-session state; every `.agents/**` edit must be semantically merged against latest on-disk state.
@@ -117,7 +117,9 @@ These rules are cross-agent defaults for this workspace and apply unless the use
 - Prepare releases with `npm run release:prepare -- --version <X.Y.Z>` before generating release notes.
 - `release:prepare` must promote `## [Unreleased]` into `## [<version>] - <date>` and recreate a fresh empty `## [Unreleased]` scaffold with `### Added`, `### Changed`, and `### Fixed`.
 - Treat `.agents-config/docs/RELEASE_NOTES_TEMPLATE.md` as the canonical release-notes structure.
-- Generate release notes with `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]`.
+- Generate release notes with `npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>] [--summary <text>] [--known-issue <text>] [--compat-note <text>]`.
+- `release:notes` validates `--version` as semver without a `v` prefix and requires `--from`/`--to` to resolve as commit refs.
+- `release:notes` resolves repo web URL from `git remote.origin.url`, then falls back to `.agents-config/config/project-tooling.json.releaseNotes.defaultRepoWebUrl` when needed.
 - `release:notes` must read Fixed/Added/Changed/Admin/Breaking bullets from the matching `CHANGELOG.md` version section.
 - Keep section order fixed: `Release Summary`, `Fixed`, `Added`, `Changed`, `Admin/Operations`, `Deployment and Distribution`, `Breaking Changes`, `Known Issues`, `Compatibility and Migration`, `Full Changelog`.
 - Summarize release-note items in plain English for operators/users; do not copy raw commit-jargon wording as release-note bullets.
@@ -150,6 +152,8 @@ These rules are cross-agent defaults for this workspace and apply unless the use
 - Enforce raw logging drift checks with:
   - `npm run logging:compliance:verify` (strict)
   - `npm run logging:compliance:generate` (baseline refresh after intentional migrations)
+- Logging compliance verification scans tracked files from `git ls-files`, excludes test/script/helper logger paths, and supports inline allow markers (`logging-allow: raw`) on the same or previous line for intentional exceptions.
+- Logging baseline metadata identity is project-owned via `.agents-config/config/project-tooling.json.loggingCompliance.baselineMetadataId`.
 
 ### Container-First Policy (Required)
 
@@ -192,9 +196,11 @@ At task start, explicitly determine:
 
 - Treat `.agents-config/agent-managed.json` and `.agents-config/tools/bootstrap/managed-files.template.json` as canonical machine-readable workflow surface declarations.
 - Keep `canonical_contract.default_authority` as `template` and explicitly declare any non-template behavior using the per-entry `authority` field.
-- Override payload files are adjacent to managed files by default (`<managed-file>.override.<ext>` for full replacement, `<managed-file>.append.<ext>` for additive merge) and are valid only when the managed entry sets `allow_override=true`.
+- Override payload files are adjacent to managed files by default (`<managed-file>.override.<ext>` for full replacement, `<managed-file>.append.<ext>` for additive merge) and are valid only when the managed entry sets `allow_override=true` on a template-authority entry.
 - Bootstrap must not auto-seed managed override payloads; overrides are opt-in local artifacts (`.override`/`.append`) when local divergence is intentional.
-- Unknown or non-allowlisted override payload files (adjacent `.override`/`.append`) must fail `npm run agent:managed -- --mode check`.
+- Do not keep both override modes for one managed path (`.override` and `.append` simultaneously).
+- Unknown or non-allowlisted override payload files (adjacent `.override`/`.append`) must fail `npm run agent:managed -- --mode check`; deprecated `.replace` naming is rejected.
+- Structured markdown contracts can declare `placeholder_patterns` with `placeholder_failure_mode` (`warn` or `fail`) to detect unfilled template placeholders in required sections.
 
 ### Orchestrator/Subagent Instruction Contract (Required)
 
@@ -259,7 +265,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Managed workflow command (fix + recheck): `npm run agent:managed -- --fix --recheck`
 - Use `agent:sync` when pulling template updates, refreshing profiles/scripts, or changing template refs.
 - Use `agent:managed -- --fix --recheck` only when manifest/template source settings are already correct and only managed drift needs repair.
-- Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `allow_override`).
+- Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `authority`, `allow_override`, and `structure_contract`).
 - Template-impact declaration gate: `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Logging compliance command: `npm run logging:compliance:verify`
 - OpenAPI coverage command: `npm run openapi-coverage:verify`
@@ -274,14 +280,15 @@ When policy expectations change, update all relevant governance artifacts in the
 3. `.agents-config/docs/AGENT_CONTEXT.md` (human-readable context contract, when impacted)
 4. `.agents-config/docs/CONTEXT_INDEX.json` (machine-readable context map)
 5. `.agents-config/agent-managed.json` and `.agents-config/tools/bootstrap/managed-files.template.json` (managed workflow canonical contract + downstream seed)
-6. `.agents-config/docs/FEATURE_INDEX.json` (machine-readable feature map, when impacted)
-7. `.agents-config/docs/TEST_MATRIX.md` (targeted test command map, when impacted)
-8. `.agents-config/docs/ROUTE_MAP.md` (generated backend/frontend route map, when impacted)
-9. `.agents-config/docs/JSDOC_COVERAGE.md` (generated exported-symbol JSDoc coverage tracker, when impacted)
-10. `.agents-config/docs/OPENAPI_COVERAGE.md` (generated OpenAPI endpoint/spec coverage tracker, when impacted)
-11. `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md` (domain start-here guides, when impacted)
-12. `.agents-config/policies/agent-governance.json` (machine-readable source of truth)
-13. `.agents-config/scripts/enforce-agent-policies.mjs` (enforcement logic)
+6. `.agents-config/config/project-tooling.json` (project-owned tooling defaults consumed by template-managed scripts, when impacted)
+7. `.agents-config/docs/FEATURE_INDEX.json` (machine-readable feature map, when impacted)
+8. `.agents-config/docs/TEST_MATRIX.md` (targeted test command map, when impacted)
+9. `.agents-config/docs/ROUTE_MAP.md` (generated backend/frontend route map, when impacted)
+10. `.agents-config/docs/JSDOC_COVERAGE.md` (generated exported-symbol JSDoc coverage tracker, when impacted)
+11. `.agents-config/docs/OPENAPI_COVERAGE.md` (generated OpenAPI endpoint/spec coverage tracker, when impacted)
+12. `backend/src/routes/README.md`, `backend/src/services/README.md`, and `frontend/features/*/README.md` (domain start-here guides, when impacted)
+13. `.agents-config/policies/agent-governance.json` (machine-readable source of truth)
+14. `.agents-config/scripts/enforce-agent-policies.mjs` (enforcement logic)
 
 ## LLM Continuity and Execution Discipline
 

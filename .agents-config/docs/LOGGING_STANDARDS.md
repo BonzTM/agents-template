@@ -28,6 +28,8 @@ Canonical logging contract for frontend, backend, and Python sidecars/runtime se
 - Baseline generation: `npm run logging:compliance:generate`
 - Strict verification: `npm run logging:compliance:verify`
 - Policy enforcement: `node .agents-config/scripts/enforce-agent-policies.mjs`
+- Verification input scope is tracked files from `git ls-files`; tests, script directories, and shared logger helper files are excluded by contract.
+- Intentional one-off exceptions may use inline marker `logging-allow: raw` on the same line or the previous line.
 
 ## Migration to 100% Coverage
 

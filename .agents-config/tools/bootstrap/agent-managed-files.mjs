@@ -150,6 +150,66 @@ function findFirstLaterRequiredBlockIndex(blocks, requiredSectionSet, requiredSe
   return blocks.length;
 }
 
+function findMarkdownPlaceholderMatches({ blocks, requiredSections, placeholderPatterns }) {
+  if (!Array.isArray(placeholderPatterns) || placeholderPatterns.length === 0) {
+    return [];
+  }
+
+  const matches = [];
+  const seen = new Set();
+  for (const heading of requiredSections) {
+    const blockIndex = findBlockIndexByHeading(blocks, heading);
+    if (blockIndex === -1) {
+      continue;
+    }
+    const block = blocks[blockIndex];
+    const sectionBody = Array.isArray(block?.lines)
+      ? block.lines.slice(1).join("\n")
+      : "";
+    const normalizedBody = sectionBody.toLowerCase();
+    for (const pattern of placeholderPatterns) {
+      const normalizedPattern = pattern.toLowerCase();
+      if (!normalizedPattern || !normalizedBody.includes(normalizedPattern)) {
+        continue;
+      }
+      const key = `${heading}::${pattern}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      matches.push({
+        heading,
+        pattern,
+      });
+    }
+  }
+  return matches;
+}
+
+function summarizePlaceholderMatches(matches) {
+  if (!Array.isArray(matches) || matches.length === 0) {
+    return "";
+  }
+  const grouped = new Map();
+  for (const match of matches) {
+    const heading = toNonEmptyString(match?.heading) ?? "<unknown>";
+    const pattern = toNonEmptyString(match?.pattern) ?? "<unknown>";
+    if (!grouped.has(heading)) {
+      grouped.set(heading, []);
+    }
+    const bucket = grouped.get(heading);
+    if (!bucket.includes(pattern)) {
+      bucket.push(pattern);
+    }
+  }
+
+  const parts = [];
+  for (const [heading, patterns] of grouped.entries()) {
+    parts.push(`${heading}: ${patterns.join(", ")}`);
+  }
+  return parts.join("; ");
+}
+
 function normalizeJsonPath(pathText, entryLabel) {
   const value = toNonEmptyString(pathText);
   if (!value) {
@@ -693,11 +753,49 @@ function resolveStructuredContract(entry, normalizedTargetPath) {
       requiredSections.push(normalizedHeading);
     }
 
+    const placeholderPatterns = [];
+    if (Object.prototype.hasOwnProperty.call(raw, "placeholder_patterns")) {
+      if (!Array.isArray(raw.placeholder_patterns)) {
+        fail(`${entryLabel} structure_contract.placeholder_patterns must be an array when set.`);
+      }
+      const seenPatterns = new Set();
+      for (const rawPattern of raw.placeholder_patterns) {
+        const patternText = toNonEmptyString(rawPattern);
+        if (!patternText) {
+          fail(
+            `${entryLabel} structure_contract.placeholder_patterns entries must be non-empty strings.`,
+          );
+        }
+        if (seenPatterns.has(patternText)) {
+          continue;
+        }
+        seenPatterns.add(patternText);
+        placeholderPatterns.push(patternText);
+      }
+    }
+
+    const placeholderFailureMode = toNonEmptyString(raw.placeholder_failure_mode) ?? "warn";
+    if (!["warn", "fail"].includes(placeholderFailureMode)) {
+      fail(
+        `${entryLabel} structure_contract.placeholder_failure_mode must be "warn" or "fail".`,
+      );
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(raw, "placeholder_failure_mode") &&
+      placeholderPatterns.length === 0
+    ) {
+      fail(
+        `${entryLabel} structure_contract.placeholder_failure_mode requires non-empty placeholder_patterns.`,
+      );
+    }
+
     return {
       kind,
       ordered: raw.ordered !== false,
       seedMissingSections: raw.seed_missing_sections !== false,
       requiredSections,
+      placeholderPatterns,
+      placeholderFailureMode,
     };
   }
 
@@ -853,11 +951,18 @@ function buildStructuredMarkdownContent({
     preambleLines: parsedActual.preambleLines,
     blocks,
   });
+  const placeholderMatches = findMarkdownPlaceholderMatches({
+    blocks,
+    requiredSections: contract.requiredSections,
+    placeholderPatterns: contract.placeholderPatterns,
+  });
 
   return {
     mergedContent,
     missingSections,
     reorderedSections,
+    placeholderMatches,
+    placeholderFailureMode: contract.placeholderFailureMode,
     syncable: true,
   };
 }
@@ -1395,6 +1500,7 @@ async function run() {
 
   let unchangedCount = 0;
   const mismatches = [];
+  const structuredWarnings = [];
 
   for (const entry of activeEntries) {
     const targetPath = path.resolve(repoRoot, entry.targetRelativePath);
@@ -1501,6 +1607,23 @@ async function run() {
       if (Array.isArray(structuredResult.typeViolations) && structuredResult.typeViolations.length > 0) {
         reasonParts.push(structuredResult.typeViolations.join("; "));
       }
+      const placeholderMatches = Array.isArray(structuredResult.placeholderMatches)
+        ? structuredResult.placeholderMatches
+        : [];
+      const placeholderFailureMode =
+        structuredResult.placeholderFailureMode === "fail" ? "fail" : "warn";
+      const hasPlaceholderFailures =
+        placeholderMatches.length > 0 && placeholderFailureMode === "fail";
+      if (placeholderMatches.length > 0) {
+        const placeholderSummary = summarizePlaceholderMatches(placeholderMatches);
+        if (hasPlaceholderFailures) {
+          reasonParts.push(`placeholder pattern(s) detected: ${placeholderSummary}`);
+        } else {
+          structuredWarnings.push(
+            `${normalizePath(entry.targetRelativePath)}: placeholder pattern(s) detected (${placeholderSummary})`,
+          );
+        }
+      }
 
       const contentDiffers = structuredResult.mergedContent !== actualContent;
       const hasMissingSections =
@@ -1508,6 +1631,7 @@ async function run() {
         structuredResult.missingSections.length > 0;
       const hasViolations =
         hasMissingSections ||
+        hasPlaceholderFailures ||
         Array.isArray(structuredResult.typeViolations) &&
         structuredResult.typeViolations.length > 0;
       if (!contentDiffers && !hasViolations) {
@@ -1526,7 +1650,7 @@ async function run() {
             : contentDiffers
               ? "structured content differs"
               : "structured contract violation",
-        syncable: structuredResult.syncable === true && contentDiffers,
+        syncable: structuredResult.syncable === true && contentDiffers && !hasPlaceholderFailures,
       });
       continue;
     }
@@ -1564,6 +1688,15 @@ async function run() {
       );
     }
   };
+  const printStructuredWarnings = () => {
+    if (structuredWarnings.length === 0) {
+      return;
+    }
+    console.error("Managed structured placeholder warnings:");
+    for (const warning of structuredWarnings) {
+      console.error(`- ${warning}`);
+    }
+  };
 
   const runSync = () => {
     let updatedCount = 0;
@@ -1588,6 +1721,7 @@ async function run() {
   };
 
   if (args.mode === "sync") {
+    printStructuredWarnings();
     const syncResult = runSync();
     if (syncResult.skipped.length > 0) {
       fail(
@@ -1615,10 +1749,12 @@ async function run() {
   }
 
   if (mismatches.length === 0) {
+    printStructuredWarnings();
     console.log(`Managed file drift check passed (${activeEntries.length} files).`);
     return;
   }
 
+  printStructuredWarnings();
   printMismatches();
   if (args.ci || !args.fix) {
     fail("Run: npm run agent:managed -- --fix --recheck");

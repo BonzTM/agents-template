@@ -5,10 +5,10 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 
 ## Summary
 
-- Managed entries: 43
-- Template-owned managed entries: 29
+- Managed entries: 44
+- Template-owned managed entries: 31
 - Structured managed entries: 11
-- Project-owned managed entries: 3
+- Project-owned managed entries: 2
 - Overrideable managed entries: 2
 
 ## Overrideable Managed Files
@@ -22,9 +22,8 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 
 | Path | Profiles | Authority |
 | --- | --- | --- |
+| `.agents-config/config/project-tooling.json` | `base` | `project` |
 | `.agents-config/policies/logging-compliance-baseline.json` | `typescript, javascript` | `project` |
-| `.agents-config/scripts/generate-release-notes.mjs` | `base` | `project` |
-| `.agents-config/scripts/verify-logging-compliance.mjs` | `typescript, javascript` | `project` |
 
 ## Structured Managed Files
 
@@ -53,11 +52,13 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 | `.agents-config/scripts/agent-session-preflight.mjs` | `base` | `template` |
 | `.agents-config/scripts/changelog-utils.mjs` | `base` | `template` |
 | `.agents-config/scripts/enforce-agent-policies.mjs` | `base` | `template` |
+| `.agents-config/scripts/generate-release-notes.mjs` | `base` | `template` |
 | `.agents-config/scripts/generate-subagent-payload-stub.mjs` | `base` | `template` |
 | `.agents-config/scripts/prepare-helm-chart-release.mjs` | `base` | `template` |
 | `.agents-config/scripts/release-contract-check.mjs` | `base` | `template` |
 | `.agents-config/scripts/release-version-sync.mjs` | `base` | `template` |
 | `.agents-config/scripts/repair-queue-verification-evidence.mjs` | `base` | `template` |
+| `.agents-config/scripts/verify-logging-compliance.mjs` | `typescript, javascript` | `template` |
 | `.agents-config/tools/bootstrap/agent-managed-files.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/agent-sync.mjs` | `base` | `template` |
 | `.agents-config/tools/bootstrap/bootstrap-project.mjs` | `base` | `template` |

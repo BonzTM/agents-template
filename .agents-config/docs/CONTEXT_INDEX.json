@@ -21,7 +21,8 @@
     "enforcerFile": ".agents-config/scripts/enforce-agent-policies.mjs",
     "preflightFile": ".agents-config/scripts/agent-session-preflight.mjs",
     "managedManifestFile": ".agents-config/agent-managed.json",
-    "managedManifestTemplateFile": ".agents-config/tools/bootstrap/managed-files.template.json"
+    "managedManifestTemplateFile": ".agents-config/tools/bootstrap/managed-files.template.json",
+    "projectToolingConfigFile": ".agents-config/config/project-tooling.json"
   },
   "sessionArtifacts": {
     "executionQueueFile": ".agents/EXECUTION_QUEUE.json",
@@ -460,7 +461,7 @@
     "loggingComplianceVerify": "npm run logging:compliance:verify",
     "releasePrepare": "npm run release:prepare -- --version <X.Y.Z>",
     "releaseVerify": "npm run release:verify -- --version <X.Y.Z>",
-    "releaseNotes": "npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]",
+    "releaseNotes": "npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>] [--summary <text>] [--known-issue <text>] [--compat-note <text>]",
     "changelogFile": "cat CHANGELOG.md",
     "featureIndexFile": "cat .agents-config/docs/FEATURE_INDEX.json",
     "testMatrixFile": "cat .agents-config/docs/TEST_MATRIX.md",
@@ -468,6 +469,7 @@
     "jsdocCoverageFile": "cat .agents-config/docs/JSDOC_COVERAGE.md",
     "openapiCoverageFile": "cat .agents-config/docs/OPENAPI_COVERAGE.md",
     "loggingStandardsFile": "cat .agents-config/docs/LOGGING_STANDARDS.md",
+    "projectToolingFile": "cat .agents-config/config/project-tooling.json",
     "routesReadmeFile": "cat backend/src/routes/README.md",
     "servicesReadmeFile": "cat backend/src/services/README.md",
     "frontendFeaturesReadmeFile": "cat frontend/features/README.md",
@@ -576,6 +578,14 @@
     ],
     "entryAllowOverrideField": "allow_override",
     "entryAuthorityField": "authority",
+    "entryStructureContractField": "structure_contract",
+    "markdownPlaceholderPatternsField": "placeholder_patterns",
+    "markdownPlaceholderFailureModeField": "placeholder_failure_mode",
+    "allowOverrideTemplateAuthorityOnly": true,
+    "overrideModeExclusivity": "single_mode_per_managed_path",
+    "deprecatedOverrideSuffixes": [
+      ".replace"
+    ],
     "checkCommandKey": "agentManaged",
     "fixCommandKey": "agentManagedFix"
   }

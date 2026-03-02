@@ -135,7 +135,7 @@
       "generatorScript": ".agents-config/scripts/generate-release-notes.mjs",
       "npmScriptName": "release:notes",
       "npmScriptCommand": "node .agents-config/scripts/generate-release-notes.mjs",
-      "commandExample": "npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]",
+      "commandExample": "npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>] [--summary <text>] [--known-issue <text>] [--compat-note <text>]",
       "plainEnglishSummariesRequired": true,
       "requiredSections": [
         "## Release Summary",
@@ -1004,6 +1004,14 @@
       ],
       "entryAllowOverrideField": "allow_override",
       "entryAuthorityField": "authority",
+      "entryStructureContractField": "structure_contract",
+      "markdownPlaceholderPatternsField": "placeholder_patterns",
+      "markdownPlaceholderFailureModeField": "placeholder_failure_mode",
+      "allowOverrideTemplateAuthorityOnly": true,
+      "overrideModeExclusivity": "single_mode_per_managed_path",
+      "deprecatedOverrideSuffixes": [
+        ".replace"
+      ],
       "checkCommand": "npm run agent:managed -- --mode check",
       "fixCommand": "npm run agent:managed -- --fix --recheck",
       "contextIndexSection": "managedFilesCanonical",

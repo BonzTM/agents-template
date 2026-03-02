@@ -108,6 +108,21 @@
         "kind": "markdown_sections",
         "ordered": true,
         "seed_missing_sections": true,
+        "placeholder_patterns": [
+          "Replace this section",
+          "<license>",
+          "<org>/<repo>",
+          "Describe the high-level runtime topology and request/data flow here.",
+          "Document the primary runtime stack by domain.",
+          "Document canonical code locations and boundaries.",
+          "Document local coding and architecture conventions",
+          "Track reusable abstractions and where to find them.",
+          "Document schema ownership, migration process, and operational constraints.",
+          "Document canonical test layout and commands by domain.",
+          "Document local infrastructure and app startup commands.",
+          "Document frequent contributor workflows, for example:"
+        ],
+        "placeholder_failure_mode": "warn",
         "required_sections": [
           "## Project Overview",
           "## Architecture",
@@ -135,9 +150,71 @@
         "seed_missing_paths_from_template": true,
         "required_paths": [
           {
+            "path": "metadata",
+            "type": "object"
+          },
+          {
+            "path": "metadata.id",
+            "type": "string"
+          },
+          {
+            "path": "metadata.version",
+            "type": "string"
+          },
+          {
             "path": "startupReadOrder",
             "type": "array",
             "min_items": 1
+          },
+          {
+            "path": "primaryContracts",
+            "type": "object"
+          },
+          {
+            "path": "primaryContracts.bootstrapFile",
+            "type": "string"
+          },
+          {
+            "path": "primaryContracts.rulesFile",
+            "type": "string"
+          },
+          {
+            "path": "primaryContracts.contextFile",
+            "type": "string"
+          },
+          {
+            "path": "primaryContracts.projectToolingConfigFile",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts",
+            "type": "object"
+          },
+          {
+            "path": "sessionArtifacts.planMachineContract",
+            "type": "object"
+          },
+          {
+            "path": "sessionArtifacts.planMachineContract.enabled",
+            "type": "boolean"
+          },
+          {
+            "path": "sessionArtifacts.planMachineContract.planFileName",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.planMachineContract.requiredTopLevelFields",
+            "type": "array",
+            "min_items": 1
+          },
+          {
+            "path": "sessionArtifacts.planMachineContract.requiredPlanningStages",
+            "type": "array",
+            "min_items": 1
+          },
+          {
+            "path": "sessionArtifacts.workspaceLayout",
+            "type": "object"
           },
           {
             "path": "commands",
@@ -148,8 +225,75 @@
             "type": "string"
           },
           {
-            "path": "sessionArtifacts",
+            "path": "commands.releaseNotes",
+            "type": "string"
+          },
+          {
+            "path": "commands.projectToolingFile",
+            "type": "string"
+          },
+          {
+            "path": "profiles",
             "type": "object"
+          },
+          {
+            "path": "profiles.availableProfiles",
+            "type": "array",
+            "min_items": 1
+          },
+          {
+            "path": "profiles.activeProfiles",
+            "type": "array",
+            "min_items": 1
+          },
+          {
+            "path": "profiles.requiredRuleIdsByProfile",
+            "type": "object"
+          },
+          {
+            "path": "profiles.requiredCommandKeysByProfile",
+            "type": "object"
+          },
+          {
+            "path": "managedFilesCanonical",
+            "type": "object"
+          },
+          {
+            "path": "managedFilesCanonical.manifestFile",
+            "type": "string"
+          },
+          {
+            "path": "managedFilesCanonical.checkCommandKey",
+            "type": "string"
+          },
+          {
+            "path": "managedFilesCanonical.fixCommandKey",
+            "type": "string"
+          },
+          {
+            "path": "managedFilesCanonical.entryStructureContractField",
+            "type": "string"
+          },
+          {
+            "path": "managedFilesCanonical.markdownPlaceholderPatternsField",
+            "type": "string"
+          },
+          {
+            "path": "managedFilesCanonical.markdownPlaceholderFailureModeField",
+            "type": "string"
+          },
+          {
+            "path": "managedFilesCanonical.allowOverrideTemplateAuthorityOnly",
+            "type": "boolean"
+          },
+          {
+            "path": "managedFilesCanonical.overrideModeExclusivity",
+            "type": "string"
+          },
+          {
+            "path": "managedFilesCanonical.deprecatedOverrideSuffixes",
+            "type": "array",
+            "min_items": 1
           }
         ]
       }
@@ -227,6 +371,12 @@
     },
     {
       "path": ".agents-config/scripts/generate-release-notes.mjs",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/config/project-tooling.json",
       "profiles": [
         "base"
       ],
@@ -513,8 +663,7 @@
       "profiles": [
         "typescript",
         "javascript"
-      ],
-      "authority": "project"
+      ]
     },
     {
       "path": ".agents-config/policies/logging-compliance-baseline.json",
@@ -618,6 +767,12 @@
     },
     {
       "path": ".agents-config/scripts/generate-release-notes.mjs",
+      "profiles": [
+        "base"
+      ]
+    },
+    {
+      "path": ".agents-config/config/project-tooling.json",
       "profiles": [
         "base"
       ]

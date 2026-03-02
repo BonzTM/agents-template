@@ -3247,7 +3247,7 @@ function checkReleaseNotesContract(config) {
     npmScriptName: "release:notes",
     npmScriptCommand: "node .agents-config/scripts/generate-release-notes.mjs",
     commandExample:
-      "npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>]",
+      "npm run release:notes -- --version <X.Y.Z> --from <tag> [--to <ref>] [--output <path>] [--summary <text>] [--known-issue <text>] [--compat-note <text>]",
   };
 
   for (const [fieldName, expectedValue] of Object.entries(requiredStrings)) {
@@ -6831,6 +6831,17 @@ function checkManagedFilesCanonicalContract(config) {
   const overrideMode = toNonEmptyString(contract.overrideMode);
   const entryAllowOverrideField = toNonEmptyString(contract.entryAllowOverrideField);
   const entryAuthorityField = toNonEmptyString(contract.entryAuthorityField);
+  const entryStructureContractField = toNonEmptyString(contract.entryStructureContractField);
+  const markdownPlaceholderPatternsField = toNonEmptyString(
+    contract.markdownPlaceholderPatternsField,
+  );
+  const markdownPlaceholderFailureModeField = toNonEmptyString(
+    contract.markdownPlaceholderFailureModeField,
+  );
+  const allowOverrideTemplateAuthorityOnly =
+    contract.allowOverrideTemplateAuthorityOnly === true;
+  const overrideModeExclusivity = toNonEmptyString(contract.overrideModeExclusivity);
+  const deprecatedOverrideSuffixes = normalizeStringArray(contract.deprecatedOverrideSuffixes);
   const npmScriptName = toNonEmptyString(contract.npmScriptName);
   const npmScriptCommand = toNonEmptyString(contract.npmScriptCommand);
   const contextIndexSection =
@@ -6864,6 +6875,32 @@ function checkManagedFilesCanonicalContract(config) {
   }
   if (entryAuthorityField !== "authority") {
     addFailure(`${contractPath}.entryAuthorityField must equal "authority".`);
+  }
+  if (entryStructureContractField !== "structure_contract") {
+    addFailure(
+      `${contractPath}.entryStructureContractField must equal "structure_contract".`,
+    );
+  }
+  if (markdownPlaceholderPatternsField !== "placeholder_patterns") {
+    addFailure(
+      `${contractPath}.markdownPlaceholderPatternsField must equal "placeholder_patterns".`,
+    );
+  }
+  if (markdownPlaceholderFailureModeField !== "placeholder_failure_mode") {
+    addFailure(
+      `${contractPath}.markdownPlaceholderFailureModeField must equal "placeholder_failure_mode".`,
+    );
+  }
+  if (!allowOverrideTemplateAuthorityOnly) {
+    addFailure(`${contractPath}.allowOverrideTemplateAuthorityOnly must be true.`);
+  }
+  if (overrideModeExclusivity !== "single_mode_per_managed_path") {
+    addFailure(
+      `${contractPath}.overrideModeExclusivity must equal "single_mode_per_managed_path".`,
+    );
+  }
+  if (!deprecatedOverrideSuffixes.includes(".replace")) {
+    addFailure(`${contractPath}.deprecatedOverrideSuffixes must include ".replace".`);
   }
   if (npmScriptName !== "agent:managed") {
     addFailure(`${contractPath}.npmScriptName must equal "agent:managed".`);
@@ -6983,6 +7020,46 @@ function checkManagedFilesCanonicalContract(config) {
         addFailure(
           `${contextIndexPath}.${contextIndexSection}.entryAuthorityField must equal ${JSON.stringify(entryAuthorityField)}.`,
         );
+      }
+      if (section.entryStructureContractField !== entryStructureContractField) {
+        addFailure(
+          `${contextIndexPath}.${contextIndexSection}.entryStructureContractField must equal ${JSON.stringify(entryStructureContractField)}.`,
+        );
+      }
+      if (section.markdownPlaceholderPatternsField !== markdownPlaceholderPatternsField) {
+        addFailure(
+          `${contextIndexPath}.${contextIndexSection}.markdownPlaceholderPatternsField must equal ${JSON.stringify(markdownPlaceholderPatternsField)}.`,
+        );
+      }
+      if (
+        section.markdownPlaceholderFailureModeField !== markdownPlaceholderFailureModeField
+      ) {
+        addFailure(
+          `${contextIndexPath}.${contextIndexSection}.markdownPlaceholderFailureModeField must equal ${JSON.stringify(markdownPlaceholderFailureModeField)}.`,
+        );
+      }
+      if (
+        section.allowOverrideTemplateAuthorityOnly !==
+        allowOverrideTemplateAuthorityOnly
+      ) {
+        addFailure(
+          `${contextIndexPath}.${contextIndexSection}.allowOverrideTemplateAuthorityOnly must equal ${JSON.stringify(allowOverrideTemplateAuthorityOnly)}.`,
+        );
+      }
+      if (section.overrideModeExclusivity !== overrideModeExclusivity) {
+        addFailure(
+          `${contextIndexPath}.${contextIndexSection}.overrideModeExclusivity must equal ${JSON.stringify(overrideModeExclusivity)}.`,
+        );
+      }
+      const sectionDeprecatedOverrideSuffixes = normalizeStringArray(
+        section.deprecatedOverrideSuffixes,
+      );
+      for (const suffix of deprecatedOverrideSuffixes) {
+        if (!sectionDeprecatedOverrideSuffixes.includes(suffix)) {
+          addFailure(
+            `${contextIndexPath}.${contextIndexSection}.deprecatedOverrideSuffixes must include ${JSON.stringify(suffix)}.`,
+          );
+        }
       }
       if (section.checkCommandKey !== contextIndexCheckCommandKey) {
         addFailure(
@@ -7148,6 +7225,47 @@ function checkManagedFilesCanonicalContract(config) {
                   );
                   break;
                 }
+              }
+            }
+
+            const hasPlaceholderPatterns = Object.prototype.hasOwnProperty.call(
+              structureContract,
+              "placeholder_patterns",
+            );
+            if (hasPlaceholderPatterns) {
+              const placeholderPatterns = Array.isArray(structureContract.placeholder_patterns)
+                ? structureContract.placeholder_patterns
+                : null;
+              if (!placeholderPatterns || placeholderPatterns.length === 0) {
+                addFailure(
+                  `${filePath}.managed_files[${index}].structure_contract.placeholder_patterns must be a non-empty array when set.`,
+                );
+              } else {
+                for (const patternText of placeholderPatterns) {
+                  if (!toNonEmptyString(patternText)) {
+                    addFailure(
+                      `${filePath}.managed_files[${index}].structure_contract.placeholder_patterns entries must be non-empty strings.`,
+                    );
+                    break;
+                  }
+                }
+              }
+            }
+            if (
+              Object.prototype.hasOwnProperty.call(
+                structureContract,
+                "placeholder_failure_mode",
+              )
+            ) {
+              const mode = toNonEmptyString(structureContract.placeholder_failure_mode);
+              if (!["warn", "fail"].includes(mode ?? "")) {
+                addFailure(
+                  `${filePath}.managed_files[${index}].structure_contract.placeholder_failure_mode must be warn or fail when set.`,
+                );
+              } else if (!hasPlaceholderPatterns) {
+                addFailure(
+                  `${filePath}.managed_files[${index}].structure_contract.placeholder_failure_mode requires structure_contract.placeholder_patterns.`,
+                );
               }
             }
           } else if (kind === "json_required_paths") {
