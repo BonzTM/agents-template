@@ -171,6 +171,7 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Session preflight: `npm run agent:preflight`
 - Canonical rules verify: `npm run rules:canonical:verify`
 - Canonical rules sync: `npm run rules:canonical:sync`
+- Canonical ruleset artifact (`.agents-config/contracts/rules/canonical-ruleset.json`) is project-owned and regenerated via `rules:canonical:sync` (do not force-template-clobber it during managed sync).
 - Full downstream sync/fix/verify: `npm run agent:sync`
 - Managed workflow check: `npm run agent:managed -- --mode check`
 - Managed workflow fix/recheck: `npm run agent:managed -- --fix --recheck`

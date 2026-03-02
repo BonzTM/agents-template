@@ -260,6 +260,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Session preflight command: `npm run agent:preflight`
 - Canonical ruleset verify command: `npm run rules:canonical:verify`
 - Canonical ruleset sync command: `npm run rules:canonical:sync`
+- `.agents-config/contracts/rules/canonical-ruleset.json` is a project-owned generated artifact; refresh it with `rules:canonical:sync` when policy/rules/profile state changes.
 - Full downstream sync/fix/verify command: `npm run agent:sync`
 - Managed workflow command (check): `npm run agent:managed -- --mode check`
 - Managed workflow command (fix + recheck): `npm run agent:managed -- --fix --recheck`

@@ -256,7 +256,8 @@
       "path": ".agents-config/contracts/rules/canonical-ruleset.json",
       "profiles": [
         "base"
-      ]
+      ],
+      "authority": "project"
     },
     {
       "path": ".agents-config/rule-overrides.schema.json",

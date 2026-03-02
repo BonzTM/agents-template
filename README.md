@@ -126,6 +126,7 @@ Common flags:
 ### Canonical Rule IDs
 
 - Canonical rule IDs/statements live in `.agents-config/contracts/rules/canonical-ruleset.json`.
+- `.agents-config/contracts/rules/canonical-ruleset.json` is project-owned/generated and should be refreshed with `npm run rules:canonical:sync` instead of template-clobbered.
 - Required rule IDs and required context-index command keys are profile-scoped via `contracts.ruleCatalog.requiredIdsByProfile` and `contracts.contextIndex.requiredCommandKeysByProfile`.
 - Drift is checked by ID + hash lineage against policy/doc sources with `npm run rules:canonical:verify`.
 - Template maintainers can regenerate canonical lineage after intentional policy/rule changes with `npm run rules:canonical:sync`.
