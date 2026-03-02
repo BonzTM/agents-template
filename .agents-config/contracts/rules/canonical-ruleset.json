@@ -14,7 +14,7 @@
       "policy_required_ids_sha256": "b9711015a6a688c5bece0cfe400b1db428b59d6f9efd42283897ae6a0a2f3ed8",
       "policy_active_profiles_sha256": "d3754f9182d9a1e86bd910514dda0370b4fab06bc478e9e1823e0134d1626744",
       "policy_orchestrator_rules_sha256": "5d6bae98890860e9cc1118216be111b377a40c9e3553f4e457eac8e2d29888d2",
-      "rules_doc_catalog_sha256": "0a7645c84c41d4e9671051594978d05375a085f6616aeb919a857030bbd919b6",
+      "rules_doc_catalog_sha256": "02aea78ea66950ec4fddca57cdc7f646c9b735abcc23fb43c75ab4f2656f56fb",
       "canonical_rules_sha256": "6bee37670ab4a485b3c42187a6b8262a7317300f9e49868267ed7992ffd2d242"
     }
   },

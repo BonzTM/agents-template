@@ -630,6 +630,57 @@
         "javascript"
       ],
       "authority": "project"
+    },
+    {
+      "path": ".agents-config/policies/test-coverage-baseline.json",
+      "profiles": [
+        "typescript",
+        "javascript",
+        "python"
+      ],
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "json_required_paths",
+        "seed_missing_paths_from_template": true,
+        "required_paths": [
+          { "path": "metadata", "type": "object" },
+          { "path": "metadata.schema_version", "type": "string" },
+          { "path": "metadata.id", "type": "string" },
+          { "path": "global_thresholds", "type": "object" },
+          { "path": "scopes", "type": "array" }
+        ]
+      }
+    },
+    {
+      "path": ".agents-config/docs/TEST_COVERAGE.md",
+      "profiles": [
+        "typescript",
+        "javascript",
+        "python"
+      ],
+      "authority": "structured",
+      "structure_contract": {
+        "kind": "markdown_sections",
+        "ordered": true,
+        "seed_missing_sections": true,
+        "required_sections": [
+          "## Coverage Summary",
+          "## Scope Details"
+        ],
+        "placeholder_patterns": [
+          "*(no scopes configured)*",
+          "*(Run `npm run test-coverage:run` to populate.)*"
+        ],
+        "placeholder_failure_mode": "warn"
+      }
+    },
+    {
+      "path": ".agents-config/scripts/verify-test-coverage.mjs",
+      "profiles": [
+        "typescript",
+        "javascript",
+        "python"
+      ]
     }
   ],
   "meaningful_paths": [
@@ -832,6 +883,30 @@
       "profiles": [
         "typescript",
         "javascript"
+      ]
+    },
+    {
+      "path": ".agents-config/policies/test-coverage-baseline.json",
+      "profiles": [
+        "typescript",
+        "javascript",
+        "python"
+      ]
+    },
+    {
+      "path": ".agents-config/docs/TEST_COVERAGE.md",
+      "profiles": [
+        "typescript",
+        "javascript",
+        "python"
+      ]
+    },
+    {
+      "path": ".agents-config/scripts/verify-test-coverage.mjs",
+      "profiles": [
+        "typescript",
+        "javascript",
+        "python"
       ]
     }
   ],

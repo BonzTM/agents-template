@@ -29,6 +29,9 @@ jobs:
       - name: Check managed workflow drift
         run: npm run agent:managed -- --mode check
 
+      - name: Verify test coverage baseline
+        run: npm run test-coverage:verify
+
       - name: Verify release runtime contract
         run: npm run release:contract:check
 

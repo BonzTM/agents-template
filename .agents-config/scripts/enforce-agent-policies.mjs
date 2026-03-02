@@ -3827,6 +3827,179 @@ function checkLoggingStandardsContract(config) {
   }
 }
 
+function checkTestCoverageContract(config) {
+  const contractPath = "contracts.testCoverage";
+  const contract = config?.contracts?.testCoverage;
+  if (!isContractEnabled(config, contract)) {
+    return;
+  }
+  if (!contract || typeof contract !== "object") {
+    addFailure(`${contractPath} is required and must be an object.`);
+    return;
+  }
+
+  const requiredStrings = {
+    baselineFile: ".agents-config/policies/test-coverage-baseline.json",
+    reportFile: ".agents-config/docs/TEST_COVERAGE.md",
+    verifyScript: ".agents-config/scripts/verify-test-coverage.mjs",
+    npmRunScriptName: "test-coverage:run",
+    npmRunScriptCommand:
+      "node .agents-config/scripts/verify-test-coverage.mjs --run",
+    npmVerifyScriptName: "test-coverage:verify",
+    npmVerifyScriptCommand:
+      "node .agents-config/scripts/verify-test-coverage.mjs --check",
+    npmWriteScriptName: "test-coverage:write",
+    npmWriteScriptCommand:
+      "node .agents-config/scripts/verify-test-coverage.mjs --write",
+    contextIndexRunCommandKey: "testCoverageRun",
+    contextIndexVerifyCommandKey: "testCoverageVerify",
+    contextIndexBaselineFileCommandKey: "testCoverageBaselineFile",
+    contextIndexReportFileCommandKey: "testCoverageReportFile",
+  };
+
+  for (const [fieldName, expectedValue] of Object.entries(requiredStrings)) {
+    const actualValue = toNonEmptyString(contract[fieldName]);
+    if (!actualValue) {
+      addFailure(`${contractPath}.${fieldName} must be a non-empty string.`);
+      continue;
+    }
+    if (actualValue !== expectedValue) {
+      addFailure(
+        `${contractPath}.${fieldName} must equal "${expectedValue}" (found "${actualValue}").`,
+      );
+    }
+  }
+
+  const reportFile = toNonEmptyString(contract.reportFile);
+  const reportContent = reportFile ? readFileIfPresent(reportFile) : null;
+  if (reportContent !== null) {
+    const requiredSections = validateStringArray(
+      contract.requiredSections,
+      `${contractPath}.requiredSections`,
+    );
+    let cursor = 0;
+    for (const section of requiredSections) {
+      const index = reportContent.indexOf(section, cursor);
+      if (index === -1) {
+        if (reportContent.includes(section)) {
+          addFailure(
+            `${reportFile} contains section out of order relative to ${contractPath}.requiredSections: ${section}`,
+          );
+        } else {
+          addFailure(`${reportFile} is missing required section: ${section}`);
+        }
+        continue;
+      }
+      cursor = index + section.length;
+    }
+  }
+
+  const baselineFile = toNonEmptyString(contract.baselineFile);
+  if (baselineFile) {
+    const baselineContent = readJsonIfPresent(baselineFile);
+    if (baselineContent && typeof baselineContent === "object") {
+      if (!baselineContent.metadata || typeof baselineContent.metadata !== "object") {
+        addFailure(`${baselineFile}.metadata must be an object.`);
+      } else if (baselineContent.metadata.schema_version !== "1.0") {
+        addFailure(
+          `${baselineFile}.metadata.schema_version must be "1.0" (found "${baselineContent.metadata.schema_version}").`,
+        );
+      }
+      if (!Array.isArray(baselineContent.scopes)) {
+        addFailure(`${baselineFile}.scopes must be an array.`);
+      } else {
+        const validRunners = new Set(["jest", "c8", "vitest", "pytest-cov"]);
+        for (let i = 0; i < baselineContent.scopes.length; i++) {
+          const scope = baselineContent.scopes[i];
+          const prefix = `${baselineFile}.scopes[${i}]`;
+          if (scope.runner && !validRunners.has(scope.runner)) {
+            addFailure(
+              `${prefix}.runner must be one of [${[...validRunners].join(", ")}] (found "${scope.runner}").`,
+            );
+          }
+          if (scope.thresholds && typeof scope.thresholds === "object") {
+            for (const key of ["statements", "branches", "functions", "lines"]) {
+              const val = scope.thresholds[key];
+              if (val !== undefined && val !== null) {
+                if (typeof val !== "number" || val < 0 || val > 100) {
+                  addFailure(`${prefix}.thresholds.${key} must be a number 0-100 (found ${val}).`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const verifyScript = toNonEmptyString(contract.verifyScript);
+  if (verifyScript) {
+    readFileIfPresent(verifyScript);
+  }
+
+  const packageJson = readJsonIfPresent("package.json");
+  if (packageJson && typeof packageJson === "object") {
+    const scripts =
+      packageJson.scripts && typeof packageJson.scripts === "object"
+        ? packageJson.scripts
+        : null;
+    if (!scripts) {
+      addFailure("package.json scripts block is required for test coverage wiring.");
+    } else {
+      const scriptPairs = [
+        ["npmRunScriptName", "npmRunScriptCommand"],
+        ["npmVerifyScriptName", "npmVerifyScriptCommand"],
+        ["npmWriteScriptName", "npmWriteScriptCommand"],
+      ];
+      for (const [nameField, cmdField] of scriptPairs) {
+        const scriptName = toNonEmptyString(contract[nameField]);
+        const scriptCommand = toNonEmptyString(contract[cmdField]);
+        if (scriptName && scriptCommand) {
+          const configured = toNonEmptyString(scripts[scriptName]);
+          if (!configured) {
+            addFailure(`package.json scripts must define "${scriptName}".`);
+          } else if (configured !== scriptCommand) {
+            addFailure(
+              `package.json scripts["${scriptName}"] must equal "${scriptCommand}" (found "${configured}").`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  const contextIndex = readJsonIfPresent(".agents-config/docs/CONTEXT_INDEX.json");
+  if (contextIndex && typeof contextIndex === "object") {
+    const commands =
+      contextIndex.commands && typeof contextIndex.commands === "object"
+        ? contextIndex.commands
+        : null;
+    if (!commands) {
+      addFailure(".agents-config/docs/CONTEXT_INDEX.json commands block is required.");
+      return;
+    }
+
+    const commandKeyChecks = [
+      ["contextIndexRunCommandKey", "npm run test-coverage:run"],
+      ["contextIndexVerifyCommandKey", "npm run test-coverage:verify"],
+      ["contextIndexBaselineFileCommandKey", "cat .agents-config/policies/test-coverage-baseline.json"],
+      ["contextIndexReportFileCommandKey", "cat .agents-config/docs/TEST_COVERAGE.md"],
+    ];
+
+    for (const [keyField, expectedCommand] of commandKeyChecks) {
+      const commandKey = toNonEmptyString(contract[keyField]);
+      if (commandKey) {
+        const commandValue = toNonEmptyString(commands[commandKey]);
+        if (commandValue !== expectedCommand) {
+          addFailure(
+            `.agents-config/docs/CONTEXT_INDEX.json.commands.${commandKey} must equal "${expectedCommand}".`,
+          );
+        }
+      }
+    }
+  }
+}
+
 function checkRouteMapContract(config) {
   const contractPath = "contracts.routeMap";
   const contract = config?.contracts?.routeMap;
@@ -6668,6 +6841,7 @@ const POLICY_ENFORCEMENT_CHECK_IDS = new Set([
   "checkJSDocCoverageContract",
   "checkOpenAPICoverageContract",
   "checkLoggingStandardsContract",
+  "checkTestCoverageContract",
   "checkSessionArtifactsContract",
   "checkManagedFilesCanonicalContract",
   "checkCanonicalRulesContract",
@@ -6782,6 +6956,9 @@ function inferRuleEnforcementChecks(ruleId) {
   }
   if (ruleId === "rule_logging_contract_required") {
     return ["checkLoggingStandardsContract"];
+  }
+  if (ruleId === "rule_test_coverage_baseline_required") {
+    return ["checkTestCoverageContract"];
   }
 
   if (
@@ -7345,6 +7522,7 @@ function runPolicyChecks(activeConfigPath = configPath, options = {}) {
   checkJSDocCoverageContract(config);
   checkOpenAPICoverageContract(config);
   checkLoggingStandardsContract(config);
+  checkTestCoverageContract(config);
   checkSessionArtifactsContract(config);
   checkManagedFilesCanonicalContract(config);
   checkCanonicalRulesContract(config, repoRoot, activeConfigPath);

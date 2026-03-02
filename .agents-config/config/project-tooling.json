@@ -9,5 +9,8 @@
   },
   "loggingCompliance": {
     "baselineMetadataId": "agents-template-logging-compliance-baseline"
+  },
+  "testCoverage": {
+    "baselineMetadataId": "agents-template-test-coverage-baseline"
   }
 }

@@ -52,12 +52,13 @@ Profile-scoped rule IDs (enforced only when the profile is active):
 - `rule_domain_readmes_required`: Maintain per-domain start-here READMEs in `backend/src/routes`, `backend/src/services`, and `frontend/features/*`.
 - `rule_jsdoc_coverage_required`: Maintain `.agents-config/docs/JSDOC_COVERAGE.md` as the generated exported-symbol documentation drift tracker.
 - `rule_logging_contract_required`: Maintain `.agents-config/docs/LOGGING_STANDARDS.md` and enforce logging compliance checks across frontend/backend/python runtime code.
+- `rule_test_coverage_baseline_required`: Maintain `.agents-config/policies/test-coverage-baseline.json` as the per-domain test coverage baseline with ratchet-floor enforcement.
 
 `typescript-openapi`:
 - `rule_openapi_endpoint_docs_required`: Maintain `.agents-config/docs/OPENAPI_COVERAGE.md` as the generated OpenAPI endpoint/spec coverage drift tracker.
 
 `python`:
-- No additional profile-specific rule IDs are currently required beyond base contracts.
+- `rule_test_coverage_baseline_required`: Maintain `.agents-config/policies/test-coverage-baseline.json` as the per-domain test coverage baseline with ratchet-floor enforcement.
 
 Global rule IDs (all profiles):
 
@@ -275,6 +276,9 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `authority`, `allow_override`, and `structure_contract`).
 - Template-impact declaration gate: `npm run agent:template-impact:check -- --base-ref origin/<base-branch>`
 - Logging compliance command: `npm run logging:compliance:verify`
+- Test coverage run command: `npm run test-coverage:run`
+- Test coverage verify command: `npm run test-coverage:verify`
+- Test coverage baseline write command: `npm run test-coverage:write`
 - OpenAPI coverage command: `npm run openapi-coverage:verify`
 - Release runtime contract command: `npm run release:contract:check`
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)

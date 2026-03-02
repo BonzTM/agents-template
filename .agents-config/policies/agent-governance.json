@@ -80,6 +80,10 @@
           "jsdocCoverageVerify",
           "loggingComplianceGenerate",
           "loggingComplianceVerify",
+          "testCoverageRun",
+          "testCoverageVerify",
+          "testCoverageBaselineFile",
+          "testCoverageReportFile",
           "featureIndexFile",
           "testMatrixFile",
           "routeMapFile",
@@ -99,6 +103,10 @@
           "jsdocCoverageVerify",
           "loggingComplianceGenerate",
           "loggingComplianceVerify",
+          "testCoverageRun",
+          "testCoverageVerify",
+          "testCoverageBaselineFile",
+          "testCoverageReportFile",
           "featureIndexFile",
           "testMatrixFile",
           "routeMapFile",
@@ -113,7 +121,12 @@
           "openapiCoverageVerify",
           "openapiCoverageFile"
         ],
-        "python": []
+        "python": [
+          "testCoverageRun",
+          "testCoverageVerify",
+          "testCoverageBaselineFile",
+          "testCoverageReportFile"
+        ]
       }
     },
     "releaseNotes": {
@@ -679,7 +692,8 @@
           "rule_route_map_required",
           "rule_domain_readmes_required",
           "rule_jsdoc_coverage_required",
-          "rule_logging_contract_required"
+          "rule_logging_contract_required",
+          "rule_test_coverage_baseline_required"
         ],
         "javascript": [
           "rule_feature_index_required",
@@ -687,12 +701,15 @@
           "rule_route_map_required",
           "rule_domain_readmes_required",
           "rule_jsdoc_coverage_required",
-          "rule_logging_contract_required"
+          "rule_logging_contract_required",
+          "rule_test_coverage_baseline_required"
         ],
         "typescript-openapi": [
           "rule_openapi_endpoint_docs_required"
         ],
-        "python": []
+        "python": [
+          "rule_test_coverage_baseline_required"
+        ]
       }
     },
     "orchestratorSubagent": {
@@ -967,6 +984,33 @@
         "javascript"
       ],
       "enabled": true
+    },
+    "testCoverage": {
+      "baselineFile": ".agents-config/policies/test-coverage-baseline.json",
+      "reportFile": ".agents-config/docs/TEST_COVERAGE.md",
+      "verifyScript": ".agents-config/scripts/verify-test-coverage.mjs",
+      "npmRunScriptName": "test-coverage:run",
+      "npmRunScriptCommand": "node .agents-config/scripts/verify-test-coverage.mjs --run",
+      "npmVerifyScriptName": "test-coverage:verify",
+      "npmVerifyScriptCommand": "node .agents-config/scripts/verify-test-coverage.mjs --check",
+      "npmWriteScriptName": "test-coverage:write",
+      "npmWriteScriptCommand": "node .agents-config/scripts/verify-test-coverage.mjs --write",
+      "contextIndexRunCommandKey": "testCoverageRun",
+      "contextIndexVerifyCommandKey": "testCoverageVerify",
+      "contextIndexBaselineFileCommandKey": "testCoverageBaselineFile",
+      "contextIndexReportFileCommandKey": "testCoverageReportFile",
+      "requiredSections": [
+        "# Test Coverage Baseline",
+        "## Coverage Summary",
+        "## Scope Details"
+      ],
+      "profiles": [
+        "typescript",
+        "javascript",
+        "python"
+      ],
+      "enabled": true,
+      "ratchetMode": "baseline_floor"
     },
     "releaseVersion": {
       "packageTargets": [

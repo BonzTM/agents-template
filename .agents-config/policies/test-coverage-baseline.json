@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "schema_version": "1.0",
+    "id": "test-coverage-baseline",
+    "version": "2026-03-02.01",
+    "generated_at": "2026-03-02T00:00:00.000Z",
+    "description": "Per-domain test coverage baseline with ratchet-floor enforcement."
+  },
+  "global_thresholds": {
+    "statements": 95,
+    "branches": 90,
+    "functions": 95,
+    "lines": 95
+  },
+  "scopes": []
+}

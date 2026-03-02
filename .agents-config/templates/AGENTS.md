@@ -58,6 +58,8 @@ Always read these in order, no matter how trivial the work:
 - Route map artifact: `.agents-config/docs/ROUTE_MAP.md`
 - JSDoc coverage artifact: `.agents-config/docs/JSDOC_COVERAGE.md`
 - OpenAPI coverage artifact: `.agents-config/docs/OPENAPI_COVERAGE.md`
+- Test coverage baseline: `.agents-config/policies/test-coverage-baseline.json`
+- Test coverage report artifact: `.agents-config/docs/TEST_COVERAGE.md`
 - Logging standards source of truth: `.agents-config/docs/LOGGING_STANDARDS.md`
 - Runtime logging rule: everything in project runtime code should be logged appropriately through shared logging helpers.
 - Domain start-here readmes: `backend/src/routes/README.md`, `backend/src/services/README.md`, `frontend/features/*/README.md`
@@ -180,8 +182,9 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Release notes source rule: `release:notes` must read items from the corresponding `CHANGELOG.md` version section (plain-English changelog bullets are canonical).
 - Release notes content rule: summarize changes in plain English and avoid raw commit-jargon wording.
 - Profile-scoped governance artifacts and command requirements are enforced from active policy profiles.
-- Profile-scoped for `typescript` and `javascript`: `npm run feature-index:verify`, `npm run route-map:verify`, `npm run domain-readmes:verify`, `npm run jsdoc-coverage:verify`, and `npm run logging:compliance:verify`.
+- Profile-scoped for `typescript` and `javascript`: `npm run feature-index:verify`, `npm run route-map:verify`, `npm run domain-readmes:verify`, `npm run jsdoc-coverage:verify`, `npm run logging:compliance:verify`, and `npm run test-coverage:verify`.
 - Profile-scoped for `typescript-openapi`: `npm run openapi-coverage:verify`.
+- Profile-scoped for `typescript`, `javascript`, and `python`: `npm run test-coverage:run`, `npm run test-coverage:verify`, `npm run test-coverage:write`.
 - Logging policy requirement: runtime code paths should not ship without appropriate scoped logging coverage.
 - Logging baseline metadata identity is project-owned at `.agents-config/config/project-tooling.json.loggingCompliance.baselineMetadataId`.
 - CI gate: `.github/workflows/pr-checks.yml` job `policy-as-code` (policy + managed drift + template-impact + release-runtime checks)
