@@ -131,6 +131,7 @@ Prerequisites vary by profile — see [Configuration](docs/configuration.md#exis
 
 ## Further Reading
 
+- [How It Works](docs/how-it-works.md) — key behavioral rules and how they're enforced
 - [Configuration & Profiles](docs/configuration.md) — all flags, profile details, agent state placement
 - [Architecture & Concepts](docs/architecture.md) — template vs downstream, canonical+overrides model, directory structure
 - [Command Reference](docs/commands.md) — all npm scripts grouped by category

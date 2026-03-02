@@ -135,4 +135,4 @@ Agent behavior is enforced by executable checks, not just prose guidance:
 - **Enforcement runner**: `.agents-config/scripts/enforce-agent-policies.mjs`
 - **Session preflight**: `.agents-config/scripts/agent-session-preflight.mjs` — validates plan/queue state, generates `SESSION_BRIEF.json`
 
-These checks run locally via npm scripts and in CI via the `pr-checks.yml` workflow. See [Commands](commands.md) for the full command list and [CI Integration](ci-integration.md) for the workflow details.
+These checks run locally via npm scripts and in CI via the `pr-checks.yml` workflow. See [How It Works](how-it-works.md) for what the key rules are and how enforcement works, [Commands](commands.md) for the full command list, and [CI Integration](ci-integration.md) for the workflow details.
