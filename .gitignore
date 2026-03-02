@@ -3,6 +3,7 @@
 .agents/
 .agents/**
 .worktrees/
+.claude/
 
 # Node
 node_modules/
