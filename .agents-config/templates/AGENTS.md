@@ -9,8 +9,9 @@ After every context compaction or session reset, treat it as a fresh startup: re
 1. Follow `## Required Startup Order` and run `npm run agent:preflight`.
 2. Treat preflight policy failures as blocking before implementation.
 3. Plan execution work in `.agents/EXECUTION_QUEUE.json` before changing code.
-4. Use `### Definition of Done` in `.agents-config/docs/AGENT_RULES.md` as the closeout gate.
-5. Use the remaining sections below as full reference when needed.
+4. Apply strict TDD gate from `### Testing and Quality Expectations` in `.agents-config/docs/AGENT_RULES.md`: clarify/confirm acceptance criteria first, ask clarifying questions when unclear, and write failing tests before implementation.
+5. Use `### Definition of Done` in `.agents-config/docs/AGENT_RULES.md` as the closeout gate.
+6. Use the remaining sections below as full reference when needed.
 
 ## Full Contract Reference
 

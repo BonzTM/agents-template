@@ -245,7 +245,12 @@ function inferCategory(ruleId) {
   if (
     ruleId.startsWith("rule_tdd_") ||
     ruleId.startsWith("rule_coverage_") ||
-    ruleId.startsWith("rule_scope_completeness_")
+    ruleId.startsWith("rule_scope_completeness_") ||
+    ruleId.startsWith("rule_debugging_") ||
+    ruleId.startsWith("rule_verification_") ||
+    ruleId.startsWith("rule_code_review_") ||
+    ruleId.startsWith("rule_security_review_") ||
+    ruleId.startsWith("rule_pre_completion_checklist_")
   ) {
     return "quality";
   }

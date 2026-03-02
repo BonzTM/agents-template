@@ -102,6 +102,9 @@ Document canonical test layout and commands by domain.
 
 Default expectations:
 
+- Clarify and confirm acceptance criteria before writing tests or implementation; if criteria are unclear, ask the user clarifying questions first.
+- Strict tests-first TDD for new code and behavior changes: write failing tests first, then implement only until tests pass.
+- Deviation from strict tests-first TDD requires explicit user approval, documented rationale, and focused regression coverage in the same change set.
 - Regression prevention tests for behavior changes.
 - Contract tests for compatibility-sensitive interfaces.
 - Targeted impacted-suite verification before broad suites.

@@ -34,7 +34,12 @@ These IDs are stable cross-references for enforceable behavior and map to policy
 - `rule_canonical_agents_root`: Treat `.agents` as the canonical project-local agent-context path; bootstrap defaults to external workfiles mode where `.agents` symlinks to `<agents-workfiles-path>/<project-id>` (default path `../agents-workfiles`), and local `.agents` mode is explicit via `--agents-mode local`.
 - `rule_worktree_root_required`: Keep all non-primary Git worktrees under `../<repo-name>.worktrees`.
 - `rule_agents_semantic_merge_required`: `.agents/**` is shared multi-session state; every `.agents/**` edit must be semantically merged against latest on-disk state.
-- `rule_tdd_default`: Prefer true TDD and document deviations when strict TDD is impractical.
+- `rule_tdd_default`: Enforce strict tests-first TDD for new code and behavior changes: confirm acceptance criteria first, ask clarifying questions when criteria are unclear before writing tests/implementation, write failing tests first, then implement only until tests pass; deviations require explicit user approval plus documented rationale and regression coverage.
+- `rule_debugging_methodology_required`: Follow phased root-cause investigation before implementing fixes.
+- `rule_verification_evidence_required`: Run verification commands and read output before claiming results.
+- `rule_code_review_standards_required`: Evaluate code review feedback technically; no performative agreement.
+- `rule_security_review_required`: Run proactive security checks when changes touch auth, user input, or data queries.
+- `rule_pre_completion_checklist_required`: Complete structured verification phases before reporting task completion.
 - `rule_coverage_default_100`: Treat 100% coverage as default bar unless user-approved exception exists.
 - `rule_scope_completeness_gate`: Explicitly map outcomes to all in-scope user requests before closeout.
 
@@ -357,8 +362,35 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 
 ### Testing and Quality Expectations
 
-- Prefer true TDD by default: write failing tests first, then implement until tests pass.
-- If strict TDD is impractical, document why and add focused regression-first coverage in the same change set.
+- Strict tests-first gate for new code and behavior changes: clarify and confirm acceptance criteria before writing tests or implementation.
+- If acceptance criteria are unclear or incomplete, pause and ask user clarifying questions; do not draft tests or implementation until criteria are confirmed.
+- Write failing tests first (red) to define expected behavior before changing production code.
+- Implement only after failing tests are in place, and keep implementation scope limited to what is needed for those tests to pass (green).
+- Deviation from strict TDD is allowed only with explicit user approval; document the rationale and add focused regression coverage in the same change set.
+#### Systematic Debugging
+
+- Phased approach before any fix attempt: (1) Investigate - read full error messages, reproduce consistently, trace data flow through call stack; (2) Analyze - compare against similar working code, identify what changed; (3) Hypothesize - form one specific root-cause hypothesis and test it with minimal changes; (4) Implement - apply targeted fix, verify root cause is resolved, not just symptoms masked.
+- Three-failure escalation: if three fix attempts fail, stop and reassess the root-cause hypothesis from scratch; repeated fixes in different locations indicate an architectural problem.
+- Red flags requiring process reset: proposing solutions before investigation, changing multiple things simultaneously, disabling tests to make failures disappear.
+
+#### Verification Evidence Protocol
+
+- Run-then-claim mandate: execute the verification command, read its complete output, confirm the result matches the claim, then state the result with `verify:` prefix. Never claim results from memory or assumption.
+- Red-flag language that must never substitute for evidence: "should work," "probably fine," "looks correct," "I believe this passes."
+- Stale evidence: re-run verification after any subsequent code change; prior verification output is invalidated by later edits.
+
+#### Code Review Standards
+
+- Evaluate review feedback on technical merit. If a suggestion is technically incorrect for this codebase, push back with evidence (test output, code references, architectural rationale) rather than accepting it.
+- Forbidden review behaviors: performative agreement ("You're absolutely right!", "Great point!"), implementing suggestions before verifying them against the codebase, and silent rejection of feedback without stated reasoning.
+- Before implementing review feedback: verify it doesn't break existing functionality, check YAGNI (is the suggestion adding unrequested scope?), and confirm it doesn't conflict with prior user decisions.
+- For multi-item feedback: clarify anything unclear before starting, then implement in order: blocking/security issues first, simple fixes second, complex refactors last. Test each fix individually.
+
+#### Security Review Protocol
+
+- Trigger conditions requiring proactive review: changes to authentication/authorization logic, handling of user-supplied input, database queries or ORM usage, secret/credential management, file system operations with user-controlled paths, and HTTP header or cookie manipulation.
+- When a trigger fires: pause and review the change for injection vectors, auth bypass, and data exposure risks before committing; fix identified issues; scan adjacent code for similar patterns.
+- Pre-commit security check: no hardcoded secrets, no SQL/NoSQL injection vectors, no unvalidated redirects, no debug/admin endpoints in production paths, error messages do not leak internal state.
 - Legacy-test trust boundary: for code and tests authored before 2026-02-16 (inclusive), treat existing tests as potentially incomplete or incorrect until validated against current behavior/contracts; line-referential tests in that time range are advisory only until proven.
 - Regression prevention tests and contract tests are mandatory for behavior-changing work unless the user explicitly bypasses this requirement.
 - Treat 100% actual code coverage as the default bar (lines, branches, functions, statements); only deviate when the user explicitly approves an exception and capture it in the completion summary.
@@ -417,11 +449,17 @@ Maintain one canonical session trace file for this workspace: `.agents/SESSION_L
 A task is done when all of the following are true:
 
 - Requested change is implemented (or question answered) and behavior impact is explained (what changed, where, why).
-- Verification is reported:
-  - build attempted when code changed,
-  - linting run when code changed,
-  - tests/typecheck run as applicable,
-  - remaining warnings/errors are either fixed or explicitly listed as out-of-scope.
+- Verification is reported using run-then-read evidence protocol:
+  - Execute each applicable verification command fresh and read its complete output before claiming results.
+  - Prefix all evidence with `verify:`. Red-flag language ("should work," "probably fine") must never substitute for evidence.
+  - Structured verification phases (report all applicable):
+    1. Build: `verify: build [PASS|FAIL]`
+    2. Types/typecheck: `verify: types [PASS|FAIL]`
+    3. Lint: `verify: lint [PASS|FAIL]`
+    4. Tests (targeted): `verify: tests [PASS|FAIL] - <suite or scope>`
+    5. Security scan (when security-review triggers apply): `verify: security [PASS|FAIL]`
+    6. Diff review (no unintended changes): `verify: diff-review [PASS|FAIL]`
+  - Any FAIL phase must be resolved or explicitly listed as out-of-scope with rationale before task closeout.
 - Documentation is updated for impacted areas.
 - Follow-ups are listed for intentionally deferred work.
 - `.agents/MEMORY.md` is curated to reflect active directives/decisions/gotchas, and `.agents/SESSION_LOG.md` reflects implementation trace activity.

@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "canonical-ruleset",
-    "version": "2026-03-02.04",
+    "version": "2026-03-02.05",
     "description": "Canonical governance rule catalog used for policy and drift checks.",
     "generated_from": [
       ".agents-config/policies/agent-governance.json",
@@ -11,11 +11,11 @@
       "base"
     ],
     "lineage": {
-      "policy_required_ids_sha256": "fa5c0af89d6f7c30b39abbd2a118ad31800b92caa4e64774563ef4f55e9c39a9",
+      "policy_required_ids_sha256": "b9711015a6a688c5bece0cfe400b1db428b59d6f9efd42283897ae6a0a2f3ed8",
       "policy_active_profiles_sha256": "d3754f9182d9a1e86bd910514dda0370b4fab06bc478e9e1823e0134d1626744",
       "policy_orchestrator_rules_sha256": "5d6bae98890860e9cc1118216be111b377a40c9e3553f4e457eac8e2d29888d2",
-      "rules_doc_catalog_sha256": "d9823c86aa57627101707a0b7fa8551113f0b5afc0fb6335eed919c1e893945f",
-      "canonical_rules_sha256": "5388e05430aab933e37982853bb8c1c1c0366c27b6096b92a22cb553c530f259"
+      "rules_doc_catalog_sha256": "0a7645c84c41d4e9671051594978d05375a085f6616aeb919a857030bbd919b6",
+      "canonical_rules_sha256": "6bee37670ab4a485b3c42187a6b8262a7317300f9e49868267ed7992ffd2d242"
     }
   },
   "rules": [
@@ -229,10 +229,50 @@
     },
     {
       "id": "rule_tdd_default",
-      "statement": "Prefer true TDD and document deviations when strict TDD is impractical.",
+      "statement": "Enforce strict tests-first TDD for new code and behavior changes: confirm acceptance criteria first, ask clarifying questions when criteria are unclear before writing tests/implementation, write failing tests first, then implement only until tests pass; deviations require explicit user approval plus documented rationale and regression coverage.",
       "category": "quality",
       "severity": "error",
       "overrideable": true,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_debugging_methodology_required",
+      "statement": "Follow phased root-cause investigation before implementing fixes.",
+      "category": "quality",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_verification_evidence_required",
+      "statement": "Run verification commands and read output before claiming results.",
+      "category": "quality",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_code_review_standards_required",
+      "statement": "Evaluate code review feedback technically; no performative agreement.",
+      "category": "quality",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_security_review_required",
+      "statement": "Run proactive security checks when changes touch auth, user input, or data queries.",
+      "category": "quality",
+      "severity": "error",
+      "overrideable": false,
+      "source": "docs.ruleCatalog"
+    },
+    {
+      "id": "rule_pre_completion_checklist_required",
+      "statement": "Complete structured verification phases before reporting task completion.",
+      "category": "quality",
+      "severity": "error",
+      "overrideable": false,
       "source": "docs.ruleCatalog"
     },
     {

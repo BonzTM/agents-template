@@ -6749,6 +6749,11 @@ function inferRuleEnforcementChecks(ruleId) {
       "rule_hybrid_machine_human_contract",
       "rule_policy_sync_required",
       "rule_tdd_default",
+      "rule_debugging_methodology_required",
+      "rule_verification_evidence_required",
+      "rule_code_review_standards_required",
+      "rule_security_review_required",
+      "rule_pre_completion_checklist_required",
       "rule_coverage_default_100",
       "rule_scope_completeness_gate",
     ].includes(ruleId)

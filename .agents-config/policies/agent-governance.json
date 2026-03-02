@@ -1,7 +1,7 @@
 {
   "metadata": {
     "id": "agents-template-agent-governance",
-    "version": "2026-03-02.04",
+    "version": "2026-03-02.05",
     "description": "Executable governance checks for reusable multi-repository agent workflows."
   },
   "contracts": {
@@ -643,6 +643,11 @@
         "rule_worktree_root_required",
         "rule_agents_semantic_merge_required",
         "rule_tdd_default",
+        "rule_debugging_methodology_required",
+        "rule_verification_evidence_required",
+        "rule_code_review_standards_required",
+        "rule_security_review_required",
+        "rule_pre_completion_checklist_required",
         "rule_coverage_default_100",
         "rule_scope_completeness_gate",
         "rule_release_notes_template_required",
@@ -1052,6 +1057,7 @@
           "must delegate discovery and implementation work to subagents whenever possible",
           "Subagent assignments must be strict and atomic with clear objective, context, acceptance criteria, and verification expectations.",
           "Release/close subagents immediately once they are complete or no longer actively executing delegated work.",
+          "Apply strict TDD gate from `### Testing and Quality Expectations` in `.agents-config/docs/AGENT_RULES.md`",
           "## Quick Reference (Startup)",
           "## Full Contract Reference"
         ]
@@ -1100,6 +1106,14 @@
           "- `- mNNN | .agents/memory/mNNN/_submemory.md | One sentence description.`",
           "### Post-Compaction Startup Checklist (Required)",
           "### Definition of Done",
+          "`rule_tdd_default`: Enforce strict tests-first TDD for new code and behavior changes",
+          "`rule_debugging_methodology_required`",
+          "`rule_verification_evidence_required`",
+          "`rule_code_review_standards_required`",
+          "`rule_security_review_required`",
+          "`rule_pre_completion_checklist_required`",
+          "If acceptance criteria are unclear or incomplete, pause and ask user clarifying questions; do not draft tests or implementation until criteria are confirmed.",
+          "Deviation from strict TDD is allowed only with explicit user approval; document the rationale and add focused regression coverage in the same change set.",
           "strict atomic subagent tasks with explicit objective, inputs, acceptance criteria, and verification",
           "Idle or completed subagents must be released/closed immediately",
           "Delegate discovery and implementation work to subagents whenever possible",
@@ -1145,6 +1159,8 @@
           "## Delivery Gates",
           "## Database",
           "## Testing",
+          "Clarify and confirm acceptance criteria before writing tests or implementation; if criteria are unclear, ask the user clarifying questions first.",
+          "Strict tests-first TDD for new code and behavior changes: write failing tests first, then implement only until tests pass.",
           "## Local Testing Bootstrap",
           "## Common Tasks",
           "Treat `CHANGELOG.md` as the release-notes source of truth."
