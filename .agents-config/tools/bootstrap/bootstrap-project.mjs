@@ -43,6 +43,16 @@ const CONTRACT_PROFILE_REQUIREMENTS = {
   openapiCoverage: ["typescript-openapi"],
   loggingStandards: ["typescript", "javascript"],
 };
+const PRESERVED_POLICY_TEMPLATE_CONTRACT_KEYS = [
+  "workspaceLayout",
+  "featureIndex",
+  "releaseNotes",
+  "releaseVersion",
+  "ruleCatalog",
+  "contextIndex",
+  "managedFilesCanonical",
+  "canonicalRules",
+];
 
 const FILES = {
   policy: ".agents-config/policies/agent-governance.json",
@@ -799,27 +809,37 @@ function setContractProfileState(policy, profiles, templateProfileContractDefaul
   }
 }
 
-function setContextIndexProfileState({ contextIndex, policy, profiles }) {
+function setContextIndexProfileState({ contextIndex, profiles }) {
   const existingProfiles = isPlainObject(contextIndex?.profiles) ? contextIndex.profiles : {};
-  const requiredRuleIdsByProfile = normalizeProfileKeyedStringArrayMap(
-    policy?.contracts?.ruleCatalog?.requiredIdsByProfile,
-  );
-  const requiredCommandKeysByProfile = normalizeProfileKeyedStringArrayMap(
-    policy?.contracts?.contextIndex?.requiredCommandKeysByProfile,
-  );
 
   contextIndex.profiles = {
     ...existingProfiles,
     availableProfiles: [...SUPPORTED_PROFILE_LIST],
     activeProfiles: [...profiles],
-    requiredRuleIdsByProfile,
-    requiredCommandKeysByProfile,
   };
+}
+
+function syncPreservedPolicyContractsFromTemplate({
+  targetPolicy,
+  rewrittenTemplatePolicy,
+}) {
+  if (!isPlainObject(targetPolicy?.contracts) || !isPlainObject(rewrittenTemplatePolicy?.contracts)) {
+    return;
+  }
+
+  for (const contractKey of PRESERVED_POLICY_TEMPLATE_CONTRACT_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(rewrittenTemplatePolicy.contracts, contractKey)) {
+      continue;
+    }
+    targetPolicy.contracts[contractKey] = cloneJsonValue(
+      rewrittenTemplatePolicy.contracts[contractKey],
+    );
+  }
 }
 
 function applyProfiles({ policy, contextIndex, profiles, templateProfileContractDefaults }) {
   setContractProfileState(policy, profiles, templateProfileContractDefaults);
-  setContextIndexProfileState({ contextIndex, policy, profiles });
+  setContextIndexProfileState({ contextIndex, profiles });
 }
 
 function runPreflight(repoRoot) {
@@ -993,16 +1013,6 @@ function main() {
     downstreamDocFileReplacements,
   );
   rewrittenContextIndex.metadata.id = `${projectId}-agent-context-index`;
-  rewrittenContextIndex.sessionArtifacts.workspaceLayout = {
-    ...rewrittenContextIndex.sessionArtifacts.workspaceLayout,
-    canonicalRepoRoot: ".",
-    canonicalAgentsRoot: canonicalAgentsRootRel,
-    worktreesRoot: canonicalWorktreesRootRel,
-    localAgentsPath: ".agents",
-    semanticMergeRequired: true,
-    semanticMergeOnAgentsEditRequired: true,
-    worktreeAgentsSymlinkRequired: true,
-  };
 
   const rewrittenFeatureIndex =
     featureIndex === null ? null : deepReplaceStrings(featureIndex, replacements);
@@ -1078,9 +1088,19 @@ function main() {
 
   const policyToWrite = preservePolicy ? cloneJsonValue(policy) : rewrittenPolicy;
   if (preservePolicy) {
+    if (isPlainObject(rewrittenPolicy?.metadata)) {
+      policyToWrite.metadata = {
+        ...(isPlainObject(policyToWrite?.metadata) ? policyToWrite.metadata : {}),
+        ...cloneJsonValue(rewrittenPolicy.metadata),
+      };
+    }
     if (templatePolicyChecks) {
       policyToWrite.checks = cloneJsonValue(templatePolicyChecks);
     }
+    syncPreservedPolicyContractsFromTemplate({
+      targetPolicy: policyToWrite,
+      rewrittenTemplatePolicy: rewrittenPolicy,
+    });
     setContractProfileState(policyToWrite, profiles, templateProfileContractDefaults);
     updateReleaseNotesRequiredTextSnippet(policyToWrite, {
       repoName,

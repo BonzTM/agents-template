@@ -11,6 +11,7 @@ const DEFAULT_RULES_FILE = ".agents-config/docs/AGENT_RULES.md";
 const DEFAULT_CANONICAL_FILE = ".agents-config/contracts/rules/canonical-ruleset.json";
 const DEFAULT_OVERRIDES_SCHEMA_FILE = ".agents-config/rule-overrides.schema.json";
 const DEFAULT_OVERRIDES_FILE = ".agents-config/rule-overrides.json";
+const DEFAULT_MANAGED_MANIFEST_FILE = ".agents-config/agent-managed.json";
 const CATEGORY_VALUES = new Set([
   "governance",
   "execution",
@@ -41,6 +42,51 @@ function toNonEmptyString(value) {
 
 function normalizePath(input) {
   return input.split(path.sep).join("/");
+}
+
+function deriveAdjacentOverridePath(filePath) {
+  const normalized = normalizePath(filePath);
+  const index = normalized.lastIndexOf(".");
+  if (index <= 0 || index === normalized.length - 1) {
+    return `${normalized}.override`;
+  }
+  return `${normalized.slice(0, index)}.override${normalized.slice(index)}`;
+}
+
+function resolveCanonicalManagedInfo(repoRoot, canonicalFile) {
+  const manifestPath = path.resolve(repoRoot, DEFAULT_MANAGED_MANIFEST_FILE);
+  if (!fs.existsSync(manifestPath)) {
+    return {
+      allowOverride: false,
+      authority: "template",
+      isTemplateSourceRepo: false,
+    };
+  }
+
+  try {
+    const manifest = readJson(manifestPath);
+    const managedFiles = Array.isArray(manifest?.managed_files) ? manifest.managed_files : [];
+    const canonicalEntry = managedFiles.find(
+      (entry) => normalizePath(toNonEmptyString(entry?.path) ?? "") === normalizePath(canonicalFile),
+    );
+    const defaultAuthority = toNonEmptyString(manifest?.canonical_contract?.default_authority) ?? "template";
+    const authority = toNonEmptyString(canonicalEntry?.authority) ?? defaultAuthority;
+    const allowOverride = canonicalEntry?.allow_override === true;
+    const localPath = normalizePath(toNonEmptyString(manifest?.template?.localPath) ?? "");
+    const isTemplateSourceRepo = localPath === ".";
+
+    return {
+      allowOverride,
+      authority,
+      isTemplateSourceRepo,
+    };
+  } catch (_error) {
+    return {
+      allowOverride: false,
+      authority: "template",
+      isTemplateSourceRepo: false,
+    };
+  }
 }
 
 function resolveRepoRoot() {
@@ -753,8 +799,15 @@ export function verifyCanonicalRuleset({
   const absolutePolicyFile = path.resolve(repoRoot, policyFile);
   const absoluteRulesFile = path.resolve(repoRoot, rulesFile);
   const absoluteCanonicalFile = path.resolve(repoRoot, canonicalFile);
+  const canonicalOverrideFile = deriveAdjacentOverridePath(canonicalFile);
+  const absoluteCanonicalOverrideFile = path.resolve(repoRoot, canonicalOverrideFile);
   const absoluteOverridesSchemaFile = path.resolve(repoRoot, overridesSchemaFile);
   const absoluteOverridesFile = path.resolve(repoRoot, overridesFile);
+  const managedInfo = resolveCanonicalManagedInfo(repoRoot, canonicalFile);
+  const useCanonicalOverride =
+    managedInfo.allowOverride === true &&
+    managedInfo.authority === "template" &&
+    managedInfo.isTemplateSourceRepo !== true;
 
   if (!fs.existsSync(absolutePolicyFile)) {
     errors.push(`Missing policy file: ${policyFile}`);
@@ -786,11 +839,15 @@ export function verifyCanonicalRuleset({
   const rulesMarkdown = fs.readFileSync(absoluteRulesFile, "utf8");
   const ruleCatalogStatements = parseRuleCatalogStatements(rulesMarkdown);
   const canonicalBaseline = readJsonIfPresent(absoluteCanonicalFile);
+  const canonicalOverrideBaseline = useCanonicalOverride
+    ? readJsonIfPresent(absoluteCanonicalOverrideFile)
+    : null;
+  const canonicalBaselineForMetadata = canonicalOverrideBaseline ?? canonicalBaseline;
 
   const expectedResult = buildExpectedCanonical({
     policy,
     ruleCatalogStatements,
-    canonicalBaseline,
+    canonicalBaseline: canonicalBaselineForMetadata,
   });
   errors.push(...expectedResult.errors);
   warnings.push(...expectedResult.warnings);
@@ -798,18 +855,27 @@ export function verifyCanonicalRuleset({
   const expectedCanonical = expectedResult.expectedCanonical;
   const requiredIds = expectedResult.requiredIds;
   const activeProfiles = expectedResult.activeProfiles;
-  let canonical = canonicalBaseline;
+  let canonical = canonicalOverrideBaseline ?? canonicalBaseline;
+  let generatedPath = null;
+  let effectiveCanonicalFile =
+    canonicalOverrideBaseline !== null ? canonicalOverrideFile : canonicalFile;
 
   if (mode === "write") {
-    ensureParentDir(absoluteCanonicalFile);
-    fs.writeFileSync(
-      absoluteCanonicalFile,
-      `${JSON.stringify(expectedCanonical, null, 2)}\n`,
-      "utf8",
-    );
-    canonical = readJson(absoluteCanonicalFile);
+    const writePathAbs = useCanonicalOverride ? absoluteCanonicalOverrideFile : absoluteCanonicalFile;
+    const writePathRel = useCanonicalOverride ? canonicalOverrideFile : canonicalFile;
+    ensureParentDir(writePathAbs);
+    fs.writeFileSync(writePathAbs, `${JSON.stringify(expectedCanonical, null, 2)}\n`, "utf8");
+    canonical = readJson(writePathAbs);
+    generatedPath = normalizePath(path.relative(repoRoot, writePathAbs));
+    effectiveCanonicalFile = writePathRel;
   } else if (!canonical) {
-    errors.push(`Missing canonical ruleset file: ${canonicalFile}`);
+    if (useCanonicalOverride) {
+      errors.push(
+        `Missing canonical ruleset file: expected ${canonicalFile} or ${canonicalOverrideFile}.`,
+      );
+    } else {
+      errors.push(`Missing canonical ruleset file: ${canonicalFile}`);
+    }
   }
 
   if (canonical) {
@@ -851,10 +917,13 @@ export function verifyCanonicalRuleset({
     errors,
     warnings,
     generated: mode === "write",
+    generatedPath,
     paths: {
       policyFile: normalizePath(path.relative(repoRoot, absolutePolicyFile)),
       rulesFile: normalizePath(path.relative(repoRoot, absoluteRulesFile)),
       canonicalFile: normalizePath(path.relative(repoRoot, absoluteCanonicalFile)),
+      canonicalOverrideFile: normalizePath(path.relative(repoRoot, absoluteCanonicalOverrideFile)),
+      effectiveCanonicalFile: normalizePath(effectiveCanonicalFile),
       overridesSchemaFile: normalizePath(path.relative(repoRoot, absoluteOverridesSchemaFile)),
       overridesFile: normalizePath(path.relative(repoRoot, absoluteOverridesFile)),
     },
@@ -874,10 +943,10 @@ function printResult(result, { json = false, quiet = false } = {}) {
 
   const prefix = result.ok ? "[PASS]" : "[FAIL]";
   console.log(
-    `${prefix} canonical ruleset verification (${result.mode}) :: ${result.paths.canonicalFile}`,
+    `${prefix} canonical ruleset verification (${result.mode}) :: ${result.paths.effectiveCanonicalFile}`,
   );
   if (result.generated) {
-    console.log(`Wrote canonical ruleset: ${result.paths.canonicalFile}`);
+    console.log(`Wrote canonical ruleset: ${result.generatedPath ?? result.paths.effectiveCanonicalFile}`);
   }
   if (!quiet) {
     console.log(

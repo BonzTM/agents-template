@@ -10,9 +10,11 @@ const DEFAULT_TEMPLATE_LOCAL_PATH = "../agents-template";
 const DEFAULT_PROFILES = ["base"];
 const MANIFEST_PATH = ".agents-config/agent-managed.json";
 const POLICY_PATH = ".agents-config/policies/agent-governance.json";
+const TOOLING_CONFIG_PATH = ".agents-config/config/project-tooling.json";
 const TEMPLATE_BOOTSTRAP_PATH = ".agents-config/tools/bootstrap/bootstrap.mjs";
 const LOCAL_BOOTSTRAP_PROJECT_PATH = ".agents-config/tools/bootstrap/bootstrap-project.mjs";
 const GOVERNANCE_ID_SUFFIX = "-agent-governance";
+const TOOLING_ID_SUFFIX = "-tooling-config";
 
 function fail(message) {
   console.error(message);
@@ -118,6 +120,15 @@ function deriveProjectId({ repoRoot, manifest }) {
   const explicit = toNonEmptyString(manifest?.projectId);
   if (explicit) {
     return slugifyProjectId(explicit);
+  }
+
+  const toolingConfigPath = path.resolve(repoRoot, TOOLING_CONFIG_PATH);
+  if (fs.existsSync(toolingConfigPath)) {
+    const toolingConfig = readJson(toolingConfigPath);
+    const metadataId = toNonEmptyString(toolingConfig?.metadata?.id);
+    if (metadataId && metadataId.endsWith(TOOLING_ID_SUFFIX)) {
+      return slugifyProjectId(metadataId.slice(0, -TOOLING_ID_SUFFIX.length));
+    }
   }
 
   const policyPath = path.resolve(repoRoot, POLICY_PATH);
@@ -234,6 +245,7 @@ function main() {
     managedFixArgs.push("--prefer-remote");
   }
   run("npm", managedFixArgs, repoRoot);
+  run("npm", ["run", "rules:canonical:sync"], repoRoot);
   run("npm", ["run", "policy:check"], repoRoot);
   run("npm", ["run", "agent:preflight"], repoRoot);
 }

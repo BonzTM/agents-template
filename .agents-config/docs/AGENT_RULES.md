@@ -201,6 +201,7 @@ At task start, explicitly determine:
 - Do not keep both override modes for one managed path (`.override` and `.append` simultaneously).
 - Unknown or non-allowlisted override payload files (adjacent `.override`/`.append`) must fail `npm run agent:managed -- --mode check`; deprecated `.replace` naming is rejected.
 - Structured markdown contracts can declare `placeholder_patterns` with `placeholder_failure_mode` (`warn` or `fail`) to detect unfilled template placeholders in required sections.
+- Structured JSON contracts can declare `forbidden_paths` so managed sync removes deprecated machine-only keys while keeping required project-local structure intact.
 
 ### Orchestrator/Subagent Instruction Contract (Required)
 
@@ -260,7 +261,7 @@ Critical agent/process rules are enforced by executable checks instead of prose-
 - Session preflight command: `npm run agent:preflight`
 - Canonical ruleset verify command: `npm run rules:canonical:verify`
 - Canonical ruleset sync command: `npm run rules:canonical:sync`
-- `.agents-config/contracts/rules/canonical-ruleset.json` is a project-owned generated artifact; refresh it with `rules:canonical:sync` when policy/rules/profile state changes.
+- `.agents-config/contracts/rules/canonical-ruleset.json` is template-managed; when local profile/policy derivation diverges, `rules:canonical:sync` refreshes adjacent override payload `.agents-config/contracts/rules/canonical-ruleset.override.json`.
 - Full downstream sync/fix/verify command: `npm run agent:sync`
 - Managed workflow command (check): `npm run agent:managed -- --mode check`
 - Managed workflow command (fix + recheck): `npm run agent:managed -- --fix --recheck`

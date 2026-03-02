@@ -114,7 +114,7 @@ Simplified plan architecture:
 - optional legacy historical artifact: `PLAN.md` (non-authoritative)
 - Optional when needed: `HANDOFF.md`, `PROMPT_HISTORY.md`, `EVIDENCE.md`
 - Legacy `*_PLAN.md` and `LLM_SESSION_HANDOFF.md` files are valid historical formats.
-- Treat `.agents-config/docs/CONTEXT_INDEX.json` `sessionArtifacts.planMachineContract` as the authoritative machine schema + status-gate contract.
+- Treat `.agents-config/policies/agent-governance.json` `contracts.sessionArtifacts` as the authoritative machine schema + status-gate contract.
 - Treat `.agents-config/docs/AGENT_RULES.md` `### Planning and Small-Batch Execution` as the authoritative human-readable planning contract.
 - `npm run agent:preflight` remains the canonical command that normalizes and enforces plan-machine contract shape before execution.
 
@@ -171,12 +171,13 @@ Default CLI routing is policy-defined in `contracts.orchestratorSubagent.default
 - Session preflight: `npm run agent:preflight`
 - Canonical rules verify: `npm run rules:canonical:verify`
 - Canonical rules sync: `npm run rules:canonical:sync`
-- Canonical ruleset artifact (`.agents-config/contracts/rules/canonical-ruleset.json`) is project-owned and regenerated via `rules:canonical:sync` (do not force-template-clobber it during managed sync).
+- Canonical ruleset artifact (`.agents-config/contracts/rules/canonical-ruleset.json`) is template-managed with optional adjacent override payload (`.agents-config/contracts/rules/canonical-ruleset.override.json`) when local profile/policy derivation diverges.
 - Full downstream sync/fix/verify: `npm run agent:sync`
 - Managed workflow check: `npm run agent:managed -- --mode check`
 - Managed workflow fix/recheck: `npm run agent:managed -- --fix --recheck`
 - Managed workflow canonical contract source: `.agents-config/agent-managed.json` + `.agents-config/tools/bootstrap/managed-files.template.json` (`canonical_contract`, per-entry `authority`, `allow_override`, and `structure_contract` fields).
 - Structured markdown contracts may include `placeholder_patterns` and `placeholder_failure_mode` to surface unfilled template placeholders by required section.
+- Structured JSON contracts may include `forbidden_paths` to prune deprecated machine-only keys during managed sync while preserving project-owned content.
 - Use `agent:sync` when pulling template updates, refreshing profiles/scripts, or switching template refs.
 - Use `agent:managed -- --fix --recheck` when manifest/template source settings are already correct and only managed-file drift needs repair.
 - `AGENTS.md` is template-managed. Do not hand-edit canonical `AGENTS.md`.

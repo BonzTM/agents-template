@@ -6,15 +6,16 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 ## Summary
 
 - Managed entries: 44
-- Template-owned managed entries: 30
+- Template-owned managed entries: 31
 - Structured managed entries: 11
-- Project-owned managed entries: 3
-- Overrideable managed entries: 2
+- Project-owned managed entries: 2
+- Overrideable managed entries: 3
 
 ## Overrideable Managed Files
 
 | Path | Profiles | Default Authority | Local Modes |
 | --- | --- | --- | --- |
+| `.agents-config/contracts/rules/canonical-ruleset.json` | `base` | `template` | adjacent `.override` or `.append` |
 | `AGENTS.md` | `base` | `template` | adjacent `.override` or `.append` |
 | `CLAUDE.md` | `base` | `template` | adjacent `.override` or `.append` |
 
@@ -23,7 +24,6 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 | Path | Profiles | Authority |
 | --- | --- | --- |
 | `.agents-config/config/project-tooling.json` | `base` | `project` |
-| `.agents-config/contracts/rules/canonical-ruleset.json` | `base` | `project` |
 | `.agents-config/policies/logging-compliance-baseline.json` | `typescript, javascript` | `project` |
 
 ## Structured Managed Files
@@ -46,6 +46,7 @@ Generated from `.agents-config/tools/bootstrap/managed-files.template.json`.
 
 | Path | Profiles | Authority |
 | --- | --- | --- |
+| `.agents-config/contracts/rules/canonical-ruleset.json` | `base` | `template` |
 | `.agents-config/OWNERSHIP.md` | `base` | `template` |
 | `.agents-config/rule-overrides.schema.json` | `base` | `template` |
 | `.agents-config/scripts/agent-queue-lifecycle.mjs` | `base` | `template` |

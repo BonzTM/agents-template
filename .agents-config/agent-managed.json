@@ -183,6 +183,10 @@
             "type": "string"
           },
           {
+            "path": "primaryContracts.policyFile",
+            "type": "string"
+          },
+          {
             "path": "primaryContracts.projectToolingConfigFile",
             "type": "string"
           },
@@ -191,30 +195,55 @@
             "type": "object"
           },
           {
-            "path": "sessionArtifacts.planMachineContract",
-            "type": "object"
-          },
-          {
-            "path": "sessionArtifacts.planMachineContract.enabled",
-            "type": "boolean"
-          },
-          {
-            "path": "sessionArtifacts.planMachineContract.planFileName",
+            "path": "sessionArtifacts.executionQueueFile",
             "type": "string"
           },
           {
-            "path": "sessionArtifacts.planMachineContract.requiredTopLevelFields",
+            "path": "sessionArtifacts.continuityFile",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.sessionBriefJsonFile",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.archiveRoot",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.archiveIndexFile",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.plansRoot",
+            "type": "string"
+          },
+          {
+            "path": "sessionArtifacts.planRoots",
             "type": "array",
             "min_items": 1
           },
           {
-            "path": "sessionArtifacts.planMachineContract.requiredPlanningStages",
-            "type": "array",
-            "min_items": 1
+            "path": "sessionArtifacts.policyContractPath",
+            "type": "string"
           },
           {
-            "path": "sessionArtifacts.workspaceLayout",
+            "path": "ruleCatalog",
             "type": "object"
+          },
+          {
+            "path": "canonicalRules",
+            "type": "object"
+          },
+          {
+            "path": "rulesSections",
+            "type": "array",
+            "min_items": 1
+          },
+          {
+            "path": "contextSections",
+            "type": "array",
+            "min_items": 1
           },
           {
             "path": "commands",
@@ -245,56 +274,22 @@
             "path": "profiles.activeProfiles",
             "type": "array",
             "min_items": 1
-          },
-          {
-            "path": "profiles.requiredRuleIdsByProfile",
-            "type": "object"
-          },
-          {
-            "path": "profiles.requiredCommandKeysByProfile",
-            "type": "object"
-          },
-          {
-            "path": "managedFilesCanonical",
-            "type": "object"
-          },
-          {
-            "path": "managedFilesCanonical.manifestFile",
-            "type": "string"
-          },
-          {
-            "path": "managedFilesCanonical.checkCommandKey",
-            "type": "string"
-          },
-          {
-            "path": "managedFilesCanonical.fixCommandKey",
-            "type": "string"
-          },
-          {
-            "path": "managedFilesCanonical.entryStructureContractField",
-            "type": "string"
-          },
-          {
-            "path": "managedFilesCanonical.markdownPlaceholderPatternsField",
-            "type": "string"
-          },
-          {
-            "path": "managedFilesCanonical.markdownPlaceholderFailureModeField",
-            "type": "string"
-          },
-          {
-            "path": "managedFilesCanonical.allowOverrideTemplateAuthorityOnly",
-            "type": "boolean"
-          },
-          {
-            "path": "managedFilesCanonical.overrideModeExclusivity",
-            "type": "string"
-          },
-          {
-            "path": "managedFilesCanonical.deprecatedOverrideSuffixes",
-            "type": "array",
-            "min_items": 1
           }
+        ],
+        "forbidden_paths": [
+          "orchestratorSubagent",
+          "managedFilesCanonical",
+          "profiles.requiredRuleIdsByProfile",
+          "profiles.requiredCommandKeysByProfile",
+          "sessionArtifacts.queueScopedRead",
+          "sessionArtifacts.archiveOnComplete",
+          "sessionArtifacts.planQueueSync",
+          "sessionArtifacts.planMachineContract",
+          "sessionArtifacts.archivedPlanSync",
+          "sessionArtifacts.stalePlanReferenceCheck",
+          "sessionArtifacts.queueQualityGate",
+          "sessionArtifacts.workspaceLayout",
+          "sessionArtifacts.sessionBriefContract"
         ]
       }
     },
@@ -303,7 +298,7 @@
       "profiles": [
         "base"
       ],
-      "authority": "project"
+      "allow_override": true
     },
     {
       "path": ".agents-config/rule-overrides.schema.json",

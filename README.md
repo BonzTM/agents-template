@@ -87,6 +87,7 @@ What `agent:sync` does:
 
 - runs existing-mode bootstrap against the current repo using profile/template settings from `.agents-config/agent-managed.json`
 - runs managed workflow fix/recheck
+- runs canonical rules sync (`npm run rules:canonical:sync`) to refresh local canonical override payloads when derivation drifts
 - runs policy check
 - runs session preflight
 
@@ -121,12 +122,13 @@ Common flags:
 - `authority: "project"` for seed-once project-local files.
 - `authority: "structured"` for template-defined section/key contracts where project content remains local.
 - Structured markdown contracts may add `placeholder_patterns` with `placeholder_failure_mode` (`warn` or `fail`) to surface unfilled template text in required sections.
+- Structured JSON contracts may add `forbidden_paths` to prune deprecated machine-only keys during sync while preserving project-local values for required paths.
 - Project-specific architecture and process details should be maintained in local docs/policy files, not hard-forked template scripts.
 
 ### Canonical Rule IDs
 
 - Canonical rule IDs/statements live in `.agents-config/contracts/rules/canonical-ruleset.json`.
-- `.agents-config/contracts/rules/canonical-ruleset.json` is project-owned/generated and should be refreshed with `npm run rules:canonical:sync` instead of template-clobbered.
+- `.agents-config/contracts/rules/canonical-ruleset.json` is template-managed; downstream local derivations are refreshed via adjacent override payload `.agents-config/contracts/rules/canonical-ruleset.override.json` when `npm run rules:canonical:sync` runs.
 - Required rule IDs and required context-index command keys are profile-scoped via `contracts.ruleCatalog.requiredIdsByProfile` and `contracts.contextIndex.requiredCommandKeysByProfile`.
 - Drift is checked by ID + hash lineage against policy/doc sources with `npm run rules:canonical:verify`.
 - Template maintainers can regenerate canonical lineage after intentional policy/rule changes with `npm run rules:canonical:sync`.

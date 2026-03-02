@@ -210,14 +210,16 @@ function summarizePlaceholderMatches(matches) {
   return parts.join("; ");
 }
 
-function normalizeJsonPath(pathText, entryLabel) {
+function normalizeJsonPath(pathText, entryLabel, fieldName = "required_paths") {
   const value = toNonEmptyString(pathText);
   if (!value) {
-    fail(`${entryLabel} structure_contract.required_paths entries must define a non-empty path.`);
+    fail(
+      `${entryLabel} structure_contract.${fieldName} entries must define a non-empty path.`,
+    );
   }
   const segments = value.split(".").map((segment) => segment.trim());
   if (segments.length === 0 || segments.some((segment) => segment.length === 0)) {
-    fail(`${entryLabel} structure_contract.required_paths path "${pathText}" is invalid.`);
+    fail(`${entryLabel} structure_contract.${fieldName} path "${pathText}" is invalid.`);
   }
   return segments;
 }
@@ -250,6 +252,44 @@ function setValueAtJsonPath(rootValue, pathSegments, value) {
   }
   const leafKey = pathSegments[pathSegments.length - 1];
   current[leafKey] = value;
+}
+
+function removeValueAtJsonPath(rootValue, pathSegments) {
+  let current = rootValue;
+  for (let index = 0; index < pathSegments.length - 1; index += 1) {
+    const segment = pathSegments[index];
+    if (!isPlainObject(current) || !Object.prototype.hasOwnProperty.call(current, segment)) {
+      return false;
+    }
+    current = current[segment];
+  }
+
+  if (!isPlainObject(current)) {
+    return false;
+  }
+
+  const leafKey = pathSegments[pathSegments.length - 1];
+  if (!Object.prototype.hasOwnProperty.call(current, leafKey)) {
+    return false;
+  }
+
+  delete current[leafKey];
+  return true;
+}
+
+function isJsonPathPrefix(prefixSegments, targetSegments) {
+  if (!Array.isArray(prefixSegments) || !Array.isArray(targetSegments)) {
+    return false;
+  }
+  if (prefixSegments.length > targetSegments.length) {
+    return false;
+  }
+  for (let index = 0; index < prefixSegments.length; index += 1) {
+    if (prefixSegments[index] !== targetSegments[index]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function valueMatchesDeclaredType(value, declaredType) {
@@ -848,16 +888,57 @@ function resolveStructuredContract(entry, normalizedTargetPath) {
 
       requiredPaths.push({
         path: pathValue,
-        segments: normalizeJsonPath(pathValue, entryLabel),
+        segments: normalizeJsonPath(pathValue, entryLabel, "required_paths"),
         type,
         minItems,
       });
+    }
+
+    const forbiddenPathsRaw = Object.prototype.hasOwnProperty.call(raw, "forbidden_paths")
+      ? raw.forbidden_paths
+      : null;
+    if (forbiddenPathsRaw !== null && !Array.isArray(forbiddenPathsRaw)) {
+      fail(`${entryLabel} structure_contract.forbidden_paths must be an array when set.`);
+    }
+
+    const forbiddenPaths = [];
+    if (Array.isArray(forbiddenPathsRaw)) {
+      const seenForbidden = new Set();
+      for (const forbiddenPathRaw of forbiddenPathsRaw) {
+        const forbiddenPath = toNonEmptyString(forbiddenPathRaw);
+        if (!forbiddenPath) {
+          fail(
+            `${entryLabel} structure_contract.forbidden_paths entries must be non-empty strings.`,
+          );
+        }
+        if (seenForbidden.has(forbiddenPath)) {
+          fail(
+            `${entryLabel} structure_contract.forbidden_paths duplicates path: ${forbiddenPath}.`,
+          );
+        }
+        seenForbidden.add(forbiddenPath);
+        const segments = normalizeJsonPath(forbiddenPath, entryLabel, "forbidden_paths");
+
+        for (const requiredPathRule of requiredPaths) {
+          if (isJsonPathPrefix(segments, requiredPathRule.segments)) {
+            fail(
+              `${entryLabel} structure_contract.forbidden_paths path ${forbiddenPath} conflicts with required path ${requiredPathRule.path}.`,
+            );
+          }
+        }
+
+        forbiddenPaths.push({
+          path: forbiddenPath,
+          segments,
+        });
+      }
     }
 
     return {
       kind,
       seedMissingPathsFromTemplate: raw.seed_missing_paths_from_template !== false,
       requiredPaths,
+      forbiddenPaths,
     };
   }
 
@@ -989,6 +1070,14 @@ function buildStructuredJsonContent({
 
   const missingPaths = [];
   const typeViolations = [];
+  const removedForbiddenPaths = [];
+
+  for (const forbiddenPathRule of contract.forbiddenPaths ?? []) {
+    if (removeValueAtJsonPath(mergedJson, forbiddenPathRule.segments)) {
+      removedForbiddenPaths.push(forbiddenPathRule.path);
+    }
+  }
+
   for (const pathRule of contract.requiredPaths) {
     const mergedLookup = getValueAtJsonPath(mergedJson, pathRule.segments);
     if (!mergedLookup.exists) {
@@ -1028,6 +1117,7 @@ function buildStructuredJsonContent({
   return {
     mergedContent: ensureTrailingNewline(JSON.stringify(mergedJson, null, 2)),
     missingPaths,
+    removedForbiddenPaths,
     typeViolations,
     syncable: typeViolations.length === 0,
   };
@@ -1602,6 +1692,14 @@ async function run() {
       if (Array.isArray(structuredResult.missingPaths) && structuredResult.missingPaths.length > 0) {
         reasonParts.push(
           `missing required path(s): ${structuredResult.missingPaths.join(", ")}`,
+        );
+      }
+      if (
+        Array.isArray(structuredResult.removedForbiddenPaths) &&
+        structuredResult.removedForbiddenPaths.length > 0
+      ) {
+        reasonParts.push(
+          `removed forbidden path(s): ${structuredResult.removedForbiddenPaths.join(", ")}`,
         );
       }
       if (Array.isArray(structuredResult.typeViolations) && structuredResult.typeViolations.length > 0) {

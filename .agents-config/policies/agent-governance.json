@@ -38,8 +38,6 @@
         "sessionArtifacts",
         "ruleCatalog",
         "canonicalRules",
-        "managedFilesCanonical",
-        "orchestratorSubagent",
         "rulesSections",
         "contextSections",
         "profiles",
