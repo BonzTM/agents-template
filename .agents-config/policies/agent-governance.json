@@ -1118,7 +1118,7 @@
           ".agents-config/docs/ROUTE_MAP.md",
           ".agents-config/docs/JSDOC_COVERAGE.md",
           ".agents-config/docs/LOGGING_STANDARDS.md",
-          "Profile-scoped for `typescript` and `javascript`: `npm run feature-index:verify`, `npm run route-map:verify`, `npm run domain-readmes:verify`, `npm run jsdoc-coverage:verify`, and `npm run logging:compliance:verify`."
+          "Profile-scoped for `typescript` and `javascript`: `npm run feature-index:verify`, `npm run route-map:verify`, `npm run domain-readmes:verify`, `npm run jsdoc-coverage:verify`, `npm run logging:compliance:verify`, and `npm run test-coverage:verify`."
         ]
       },
       {

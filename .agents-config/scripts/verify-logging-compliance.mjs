@@ -156,6 +156,12 @@ function collectFindings() {
       continue;
     }
 
+    // Tracked files can be deleted in the working tree during in-flight refactors.
+    // Skip missing paths so compliance checks report findings instead of crashing.
+    if (!fs.existsSync(filePath)) {
+      continue;
+    }
+
     const content = fs.readFileSync(filePath, "utf8");
     if (content.includes("\u0000")) {
       continue;
